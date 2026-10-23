@@ -6,6 +6,7 @@ import {
   clearRateLimit, createSession, destroySession, getUser, hashPassword, rateLimit, requireUser, signFileUrl,
   validatePassword, verifyFileSignature, verifyPassword,
 } from "../lib/auth";
+import { deleteFiles, getFile, putFile } from "../lib/storage";
 import { activeSubscriptionEnd, getSettings, publicSettings, referralCodeFor, serializeProfile, type UserRow } from "../lib/domain";
 
 const DOC_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "application/pdf": "pdf" };
@@ -21,7 +22,7 @@ export async function saveProviderDoc(c: Ctx, userId: string, kind: "id" | "cert
   validateDoc(file);
   const ext = DOC_TYPES[file.type];
   const key = `docs/${userId}/${kind}-${Date.now()}.${ext}`;
-  await c.env.FILES.put(key, file.stream(), { httpMetadata: { contentType: file.type } });
+  await putFile(c.env, key, file);
   await run(c.env.DB, "INSERT INTO provider_documents (id, user_id, kind, r2_key, content_type, size) VALUES (?,?,?,?,?,?)", uid(), userId, kind, key, file.type, file.size);
 }
 
@@ -30,7 +31,7 @@ export async function savePublicImage(c: Ctx, file: File, maxBytes = 3 * 1024 * 
   if (!ext) fail(400, "invalid_file", "الصورة يجب أن تكون PNG أو JPG أو WEBP أو SVG");
   if (file.size > maxBytes) fail(400, "invalid_file", `حجم الصورة الأقصى ${Math.round(maxBytes / 1048576)}MB`);
   const name = `${uid()}.${ext}`;
-  await c.env.FILES.put(`public/${name}`, file.stream(), { httpMetadata: { contentType: file.type, cacheControl: "public, max-age=31536000, immutable" } });
+  await putFile(c.env, `public/${name}`, file);
   return `${c.url.origin}/api/files/public/${name}`;
 }
 
@@ -305,7 +306,7 @@ export function registerAccountRoutes(r: Router) {
     const active = await first<{ n: number }>(c.env.DB, "SELECT COUNT(*) AS n FROM orders WHERE (customer_id = ?1 OR provider_id = ?1) AND status IN ('accepted','arrived','in_progress')", u.id);
     if (active?.n) fail(409, "active_orders", "أكمل أو ألغِ طلباتك الجارية قبل حذف الحساب");
     const docs = await all<{ r2_key: string }>(c.env.DB, "SELECT r2_key FROM provider_documents WHERE user_id = ?", u.id);
-    if (docs.length) await c.env.FILES.delete(docs.map((d) => d.r2_key));
+    await deleteFiles(c.env, docs.map((d) => d.r2_key));
     const t = now();
     await c.env.DB.batch([
       stmt(c.env.DB, "UPDATE orders SET status = 'cancelled', cancelled_by = 'customer', cancel_reason = 'حذف الحساب', cancelled_at = ? WHERE customer_id = ? AND status = 'pending'", t, u.id),
@@ -436,10 +437,9 @@ export function registerAccountRoutes(r: Router) {
   /* ---------- Files ---------- */
   r.get("/api/files/public/:name", async (c) => {
     if (!/^[\w-]+\.(png|jpg|webp|svg)$/.test(c.params.name)) fail(404, "not_found");
-    const obj = await c.env.FILES.get(`public/${c.params.name}`);
+    const obj = await getFile(c.env, `public/${c.params.name}`);
     if (!obj) return fail(404, "not_found");
-    const h = new Headers();
-    obj.writeHttpMetadata(h);
+    const h = new Headers({ "content-type": obj.contentType });
     h.set("cache-control", "public, max-age=31536000, immutable");
     if (c.params.name.endsWith(".svg")) h.set("content-security-policy", "default-src 'none'; style-src 'unsafe-inline'");
     return new Response(obj.body, { headers: h });
@@ -447,10 +447,9 @@ export function registerAccountRoutes(r: Router) {
   r.get("/api/files/doc", async (c) => {
     const k = c.url.searchParams.get("k") ?? "";
     if (!k.startsWith("docs/") || !(await verifyFileSignature(c.env, k, c.url.searchParams.get("e") ?? "", c.url.searchParams.get("s") ?? ""))) fail(403, "forbidden", "الرابط منتهي أو غير صالح");
-    const obj = await c.env.FILES.get(k);
+    const obj = await getFile(c.env, k);
     if (!obj) return fail(404, "not_found");
-    const h = new Headers();
-    obj.writeHttpMetadata(h);
+    const h = new Headers({ "content-type": obj.contentType });
     h.set("cache-control", "private, no-store");
     h.set("content-disposition", "inline");
     return new Response(obj.body, { headers: h });

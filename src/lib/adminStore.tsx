@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, ReactNode, useCallback } from "react";
 import { api, errMsg } from "@/lib/api";
+import { compressImage } from "@/lib/imageCompress";
 import { useAuth } from "@/lib/AuthContext";
 import { toast } from "sonner";
 
@@ -301,7 +302,7 @@ function subPatch(patch: Partial<SubService>) {
 /** Uploads an image (logo, ad banner) and returns its public URL. */
 export async function uploadAdminImage(file: File) {
   const form = new FormData();
-  form.set("file", file);
+  form.set("file", await compressImage(file, 1600, 0.85));
   return (await adm<{ url: string }>("/api/admin/upload", { form })).url;
 }
 

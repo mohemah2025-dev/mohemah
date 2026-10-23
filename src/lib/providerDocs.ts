@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import { compressImage } from "@/lib/imageCompress";
 
 export const DOC_ACCEPT = "image/jpeg,image/png,image/webp,application/pdf";
 export const DOC_MAX_BYTES = 5 * 1024 * 1024;
@@ -16,8 +17,8 @@ export const docKindLabel = (k: string) => (k === "id" ? "الهوية / الإ�
 /** Re-uploads documents for a pending or rejected application (provider app). */
 export async function uploadProviderDocs(idFile: File | null, certFile: File | null) {
   const form = new FormData();
-  if (idFile) form.set("id_file", idFile);
-  if (certFile) form.set("cert_file", certFile);
+  if (idFile) form.set("id_file", await compressImage(idFile));
+  if (certFile) form.set("cert_file", await compressImage(certFile));
   return api("/api/provider/documents", { form });
 }
 

@@ -5,6 +5,7 @@ import { api, errMsg } from "@/lib/api";
 import { useAuth, type MePayload } from "@/lib/AuthContext";
 import { usePublicData } from "@/lib/publicData";
 import { DOC_ACCEPT, validateDoc } from "@/lib/providerDocs";
+import { compressImage } from "@/lib/imageCompress";
 
 export const inputCls = "w-full px-4 py-3 rounded-xl border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring";
 const NATIONALITIES = ["سعودي", "مصري", "يمني", "سوداني", "أردني", "سوري", "باكستاني", "هندي", "بنغلاديشي", "فلبيني", "أخرى"];
@@ -209,8 +210,8 @@ function ProviderSignup({ onDone }: { onDone: () => void }) {
     form.set("full_name", f.name.trim()); form.set("national_id", f.nationalId); form.set("phone", f.phone);
     form.set("nationality", f.nationality); form.set("gender", f.gender); form.set("region", f.region);
     form.set("email", f.email.trim()); form.set("password", f.password); form.set("services", JSON.stringify(picked));
-    form.set("id_file", idFile!); form.set("cert_file", certFile!);
     setBusy(true);
+    form.set("id_file", await compressImage(idFile!)); form.set("cert_file", await compressImage(certFile!));
     try {
       const p = await api<MePayload>("/api/auth/register/provider", { app: "provider", form });
       acceptSession(p);
@@ -270,8 +271,8 @@ export function ProviderApplyForm() {
     if (docError) return toast.error(docError);
     const form = new FormData();
     form.set("national_id", f.nationalId); form.set("nationality", f.nationality); form.set("gender", f.gender); form.set("region", f.region);
-    form.set("services", JSON.stringify(picked)); form.set("id_file", idFile!); form.set("cert_file", certFile!);
     setBusy(true);
+    form.set("services", JSON.stringify(picked)); form.set("id_file", await compressImage(idFile!)); form.set("cert_file", await compressImage(certFile!));
     try {
       acceptSession(await api<MePayload>("/api/provider/apply", { form }));
       toast.success("تم إرسال طلب التسجيل للمراجعة");

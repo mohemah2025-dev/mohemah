@@ -1,6 +1,7 @@
 export interface Env {
   DB: D1Database;
-  FILES: R2Bucket;
+  /** Optional: when no R2 bucket is bound, files are stored in D1. */
+  FILES?: R2Bucket;
   ASSETS: Fetcher;
   ALLOWED_ORIGINS?: string;
   FILE_SIGNING_SECRET?: string;

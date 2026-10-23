@@ -1,0 +1,3 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { AdminProvidersPage } from "@/components/admin/AdminPages";
+export const Route = createFileRoute("/admin/providers")({ head: () => ({ meta: [{"title": "مقدمو الخدمات | إدارة مهمة"}, {"name": "description", "content": "إدارة مقدمي الخدمات وحالاتهم في مهمة."}, {"property": "og:title", "content": "مقدمو الخدمات | إدارة مهمة"}, {"property": "og:description", "content": "إدارة مقدمي الخدمات وحالاتهم في مهمة."}, {"property": "og:type", "content": "website"}, {"name": "twitter:card", "content": "summary"}] }), component: AdminProvidersPage });

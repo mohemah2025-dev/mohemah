@@ -1,0 +1,3 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { AdminServicesPage } from "@/components/admin/AdminServices";
+export const Route = createFileRoute("/admin/services/")({ head: () => ({ meta: [{ title: "الخدمات الرئيسية | إدارة مهمة" }, { name: "description", content: "إدارة الخدمات الرئيسية وأيقوناتها وألوانها في مهمة." }, { property: "og:title", content: "الخدمات الرئيسية | إدارة مهمة" }, { property: "og:description", content: "إدارة الخدمات الرئيسية وأيقوناتها وألوانها في مهمة." }, { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" }] }), component: AdminServicesPage });

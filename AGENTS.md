@@ -1,0 +1,13 @@
+# Architecture rules
+- Stack: React SPA (TanStack Router, file routes) served as static assets + one Cloudflare Worker (`worker/`) for `/api/*`, D1 for data (`migrations/`), R2 for files. No Supabase.
+- Three apps share the codebase by path: customer `/`, provider `/provider`, administration `/admin`. Each app keeps its own bearer session (`mohemah.session.<app>` in localStorage); the Worker scopes every session to its app.
+- Customer registration lives only in the customer app (`/auth`); provider registration (with ID and certificate uploads) lives only in the provider app (`/provider/auth`).
+- All business rules are enforced in the Worker, never in the client: order cost is computed from the sub-service price (parent price as fallback); accept/advance/cancel/release go through dedicated endpoints with conditional updates inside D1 batches; coins are refunded when a customer cancels an accepted order; an active subscription always covers acceptance.
+- Providers see only pending orders in services they offer (and their city when both are set); addresses and phone numbers are revealed only after acceptance.
+- Provider registrations stay pending until an administrator approves them; the provider role is never self-assigned. Applicant documents are private in R2 and opened through short-lived signed URLs.
+- The first administration visit creates the owner account (username `admin`) once; later owners/staff are created by the owner. Staff cannot change settings, gateways or roles.
+- Payments are test-only while `test_payments_enabled` is on; real gateway confirmation (webhook) is required before disabling it.
+- Use explicit Latin numbering in locale formatters and English digits in static numeric text; retain Arabic labels.
+- Store service icon keys and semantic palette keys in service records; resolve them through the shared registry and global CSS tokens.
+- Never fabricate activity: charts and stats read real orders and transactions.
+- Customer and provider apps poll for updates (orders, notifications); native push arrives with the mobile apps.

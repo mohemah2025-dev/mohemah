@@ -1,3 +1,4 @@
+import { audienceUserIds } from "../lib/push";
 import {
   addDays, all, bool, fail, first, inList, json, normalizePhone, now, num, oneOf, readJson, REGIONS, run, stmt, str, strArray,
   uid, validEmail, validSaudiPhone, type Ctx, type Router,
@@ -187,32 +188,53 @@ export function registerAdminRoutes(r: Router) {
     const rows = await all<Record<string, unknown> & { requested_services: string }>(c.env.DB,
       `SELECT id, full_name, phone, email, national_id, nationality, gender, region, verification_status, review_note, requested_services, created_at, reviewed_at
          FROM users WHERE verification_status = ? ORDER BY created_at DESC LIMIT 200`, status);
-    return json(rows.map((x) => ({ ...x, requested_services: safeJson<string[]>(x.requested_services, []) })));
+    // Names come from all services (also inactive ones) so the admin always sees what was requested.
+    const names = Object.fromEntries((await all<{ id: string; name: string }>(c.env.DB, "SELECT id, name FROM services")).map((s) => [s.id, s.name]));
+    return json(rows.map((x) => {
+      const ids = safeJson<string[]>(x.requested_services, []);
+      return { ...x, requested_services: ids, requested_service_names: ids.map((id) => names[id]).filter(Boolean) };
+    }));
   });
 
   r.get("/api/admin/applications/:id/documents", async (c) => {
     await requireAdmin(c);
-    const docs = await all<{ id: string; kind: string; r2_key: string; created_at: string }>(c.env.DB, "SELECT id, kind, r2_key, created_at FROM provider_documents WHERE user_id = ? ORDER BY created_at DESC", c.params.id);
-    return json(await Promise.all(docs.map(async (d) => ({ id: d.id, kind: d.kind, created_at: d.created_at, url: `${c.url.origin}${await signFileUrl(c.env, d.r2_key)}` }))));
+    const docs = await all<{ id: string; kind: string; r2_key: string; created_at: string; status: string; note: string | null }>(c.env.DB, "SELECT id, kind, r2_key, created_at, status, note FROM provider_documents WHERE user_id = ? ORDER BY created_at DESC", c.params.id);
+    return json(await Promise.all(docs.map(async (d) => ({ id: d.id, kind: d.kind, created_at: d.created_at, status: d.status, note: d.note, url: `${c.url.origin}${await signFileUrl(c.env, d.r2_key)}` }))));
   });
 
   r.post("/api/admin/applications/:id/review", async (c) => {
     const admin = await requireAdmin(c);
     const b = await readJson(c.req);
     const approve = bool(b, "approve") ?? false;
-    const note = str(b, "note", { max: 500 });
-    if (!approve && !note) fail(400, "missing_note", "اكتب سبب الرفض");
+    let note = str(b, "note", { max: 500 });
+    // Per-document decision: "ok" or "rejected" for the latest ID and certificate, each with an optional reason.
+    const docDecision = (kind: "id" | "certificate") => {
+      const v = str(b, kind === "id" ? "id_status" : "cert_status", { max: 10 });
+      return v === "ok" || v === "rejected" ? v : approve ? "ok" : null;
+    };
+    const idStatus = docDecision("id");
+    const certStatus = docDecision("certificate");
+    const idNote = str(b, "id_note", { max: 300 });
+    const certNote = str(b, "cert_note", { max: 300 });
+    if (!approve && !note && idStatus !== "rejected" && certStatus !== "rejected") fail(400, "missing_note", "حدد المستند غير المقبول أو اكتب سبب الرفض");
+    if (!approve && !note) note = [idStatus === "rejected" ? `الهوية: ${idNote ?? "غير واضحة"}` : null, certStatus === "rejected" ? `الشهادة: ${certNote ?? "غير مقبولة"}` : null].filter(Boolean).join(" — ");
+    const latest = (kind: string) => `id = (SELECT id FROM provider_documents WHERE user_id = ? AND kind = '${kind}' ORDER BY created_at DESC LIMIT 1)`;
+    const docStmts = [
+      ...(idStatus ? [stmt(c.env.DB, `UPDATE provider_documents SET status = ?, note = ? WHERE ${latest("id")}`, idStatus === "ok" ? "approved" : "rejected", idStatus === "rejected" ? idNote : null, c.params.id)] : []),
+      ...(certStatus ? [stmt(c.env.DB, `UPDATE provider_documents SET status = ?, note = ? WHERE ${latest("certificate")}`, certStatus === "ok" ? "approved" : "rejected", certStatus === "rejected" ? certNote : null, c.params.id)] : []),
+    ];
     const u = await first<{ requested_services: string }>(c.env.DB, "SELECT requested_services FROM users WHERE id = ?", c.params.id);
     if (!u) fail(404, "not_found", "الطلب غير موجود");
     const t = now();
     const services = safeJson<string[]>(u!.requested_services, []);
     await c.env.DB.batch([
+      ...docStmts,
       stmt(c.env.DB, "UPDATE users SET verification_status = ?, review_note = ?, reviewed_at = ?, reviewed_by = ?, updated_at = ? WHERE id = ?", approve ? "approved" : "rejected", note, t, admin.id, t, c.params.id),
       ...(approve ? [
         stmt(c.env.DB, "INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, 'provider')", c.params.id),
         ...services.map((sid) => stmt(c.env.DB, "INSERT OR IGNORE INTO provider_services (provider_id, service_id) SELECT ?, id FROM services WHERE id = ?", c.params.id, sid)),
       ] : []),
-      ...notifyStmts(c.env, [c.params.id], approve
+      ...notifyStmts(c, [c.params.id], approve
         ? { title: "تمت الموافقة على حسابك", body: "تم قبولك كمقدم خدمة في مهمة، فعّل الاتصال من الرئيسية لاستقبال الطلبات.", link: "/provider", category: "general", created_by: admin.id }
         : { title: "تحديث طلب التسجيل", body: `لم تتم الموافقة على طلبك${note ? `: ${note}` : "."}`, link: "/provider/account", category: "general", created_by: admin.id }),
     ]);
@@ -337,7 +359,7 @@ export function registerAdminRoutes(r: Router) {
         batch.push(stmt(c.env.DB, "UPDATE users SET coin_balance = coin_balance + ? WHERE id = ?", coins, p.id));
         batch.push(stmt(c.env.DB, `INSERT INTO coin_transactions (id, provider_id, amount, tx_type, balance_after, description, method) SELECT ?, id, ?, 'bonus', coin_balance, ?, 'هدية الإدارة' FROM users WHERE id = ?`, uid(), coins, `كوينز هدية: ${note}`.trim(), p.id));
       }
-      batch.push(...notifyStmts(c.env, providers.map((p) => p.id), { title: "كوينز هدية", body: `تمت إضافة ${coins} كوين إلى رصيدك. ${note}`.trim(), category: "general", created_by: admin.id, link: "/provider/coins" }));
+      batch.push(...notifyStmts(c, providers.map((p) => p.id), { title: "كوينز هدية", body: `تمت إضافة ${coins} كوين إلى رصيدك. ${note}`.trim(), category: "general", created_by: admin.id, link: "/provider/coins" }));
     } else {
       if (!s.billing_subscription_enabled) fail(409, "subscription_disabled", "فعّل الاشتراك الدوري واحفظ الإعدادات أولاً");
       const startRaw = str(b, "starts_at", { max: 40 });
@@ -352,9 +374,9 @@ export function registerAdminRoutes(r: Router) {
         batch.push(stmt(c.env.DB, "UPDATE users SET billing_mode = 'subscription' WHERE id = ?", p.id));
       }
       const ids = providers.map((p) => p.id);
-      batch.push(...notifyStmts(c.env, ids, { title: "اشتراك مجاني", body: `تم منحك اشتراكاً مجانياً حتى ${end.slice(0, 16).replace("T", " ")}. ${note}`.trim(), category: "general", created_by: admin.id, link: "/provider/billing" }));
+      batch.push(...notifyStmts(c, ids, { title: "اشتراك مجاني", body: `تم منحك اشتراكاً مجانياً حتى ${end.slice(0, 16).replace("T", " ")}. ${note}`.trim(), category: "general", created_by: admin.id, link: "/provider/billing" }));
       const remind = new Date(Math.max(Date.parse(start), Date.parse(end) - 86400000)).toISOString();
-      batch.push(...notifyStmts(c.env, ids, { title: "تذكير بانتهاء الاشتراك المجاني", body: `ينتهي اشتراكك المجاني في ${end.slice(0, 16).replace("T", " ")}`, category: "general", created_by: admin.id, scheduled_at: remind, link: "/provider/billing" }));
+      batch.push(...notifyStmts(c, ids, { title: "تذكير بانتهاء الاشتراك المجاني", body: `ينتهي اشتراكك المجاني في ${end.slice(0, 16).replace("T", " ")}`, category: "general", created_by: admin.id, scheduled_at: remind, link: "/provider/billing" }));
     }
     // D1 batches are limited in size; split large grants.
     for (let i = 0; i < batch.length; i += 90) await c.env.DB.batch(batch.slice(i, i + 90));
@@ -389,6 +411,11 @@ export function registerAdminRoutes(r: Router) {
       ...(audience === "specific" ? targets.map((t) => stmt(c.env.DB, "INSERT OR IGNORE INTO notification_targets (notification_id, user_id) SELECT ?, id FROM users WHERE id = ?", id, t)) : []),
     ];
     for (let i = 0; i < batch.length; i += 90) await c.env.DB.batch(batch.slice(i, i + 90));
+    if (!scheduled_at || scheduled_at <= now()) {
+      const ids = audience === "specific" ? targets : await audienceUserIds(c.env, audience);
+      const app = audience === "customers" ? "customer" : audience === "providers" ? "provider" : undefined;
+      if (ids.length) c.push.push({ userIds: ids, app, message: { title, body, data: { link: str(b, "link", { max: 200 }) ?? "", notification_id: id } } });
+    }
     return json({ id }, 201);
   });
   r.delete("/api/admin/notifications/:id", async (c) => {
@@ -516,7 +543,7 @@ export function registerAdminRoutes(r: Router) {
     const id = uid();
     await c.env.DB.batch([
       stmt(c.env.DB, "INSERT INTO messages (id, sender_id, recipient_id, subject, body) VALUES (?,?,?,?,?)", id, admin.id, recipient, str(b, "subject", { max: 200 }), str(b, "body", { required: true, max: 2000, label: "الرسالة" })),
-      ...notifyStmts(c.env, [recipient], { title: "رسالة جديدة من الإدارة", body: str(b, "subject", { max: 200 }) ?? "لديك رسالة جديدة", category: "general", created_by: admin.id }),
+      ...notifyStmts(c, [recipient], { title: "رسالة جديدة من الإدارة", body: str(b, "subject", { max: 200 }) ?? "لديك رسالة جديدة", category: "general", created_by: admin.id }),
     ]);
     return json({ id }, 201);
   });

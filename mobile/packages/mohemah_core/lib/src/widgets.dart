@@ -379,3 +379,28 @@ class MenuGroup extends StatelessWidget {
         ]),
       );
 }
+
+/// Round profile photo with the first letter of the name as a fallback.
+class Avatar extends StatelessWidget {
+  const Avatar({super.key, required this.name, this.url, this.radius = 24, this.color = Brand.primary, this.onLight = true});
+  final String name;
+  final String? url;
+  final double radius;
+  final Color color;
+
+  /// true: tinted circle with a colored letter; false: solid circle with a white letter.
+  final bool onLight;
+
+  @override
+  Widget build(BuildContext context) {
+    final letter = Text(name.isEmpty ? '؟' : name.characters.first,
+        style: TextStyle(color: onLight ? color : Colors.white, fontWeight: FontWeight.w800, fontSize: radius * 0.8));
+    final u = url;
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: onLight ? color.withValues(alpha: 0.12) : color,
+      foregroundImage: (u != null && u.isNotEmpty) ? NetworkImage(u) : null,
+      child: letter,
+    );
+  }
+}

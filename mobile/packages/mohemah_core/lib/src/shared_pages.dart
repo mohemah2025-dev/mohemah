@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'api.dart';
 import 'auth_ui.dart';
 import 'format.dart';
+import 'location.dart';
 import 'models.dart';
 import 'public_data.dart';
 import 'session.dart';
@@ -401,6 +402,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
   late final _email = TextEditingController(text: _p?.email ?? '');
   late final _bio = TextEditingController(text: _p?.bio ?? '');
   late String? _region = _p?.region;
+  PickedLocation? _loc;
 
   Future<void> _save() async {
     if (!_form.currentState!.validate()) return;
@@ -434,6 +436,13 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
           Field(controller: _phone, label: 'رقم الجوال', icon: Icons.phone_iphone_rounded, keyboard: TextInputType.phone, ltr: true, validator: (v) => v.isEmpty ? null : validatePhone(v)),
           Field(controller: _email, label: 'البريد الإلكتروني', icon: Icons.alternate_email_rounded, keyboard: TextInputType.emailAddress, ltr: true, validator: validateEmail),
           RegionField(value: _region, required: false, onChanged: (v) => setState(() => _region = v)),
+          LocationPicker(
+            picked: _loc,
+            onPicked: (l) => setState(() {
+              _loc = l;
+              if (l.region != null) _region = l.region;
+            }),
+          ),
           if (widget.showBio) Field(controller: _bio, label: 'نبذة عنك', icon: Icons.info_outline_rounded, maxLines: 4, maxLength: 500),
           const SizedBox(height: 8),
           BusyButton(label: 'حفظ', icon: Icons.check_rounded, onPressed: _save),

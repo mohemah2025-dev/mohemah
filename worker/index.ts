@@ -3,6 +3,7 @@ import { registerAccountRoutes } from "./routes/account";
 import { registerOrderRoutes } from "./routes/orders";
 import { registerAdminRoutes } from "./routes/admin";
 import { ensureSchema } from "./lib/migrate";
+import { flushPush, type PushJob } from "./lib/push";
 
 const router = new Router();
 registerAccountRoutes(router);
@@ -24,20 +25,21 @@ function corsHeaders(req: Request, env: Env, url: URL): Record<string, string> {
 }
 
 export default {
-  async fetch(req: Request, env: Env): Promise<Response> {
+  async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
     if (!url.pathname.startsWith("/api/")) return env.ASSETS.fetch(req);
     const cors = corsHeaders(req, env, url);
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
 
     let res: Response;
+    const push: PushJob[] = [];
     try {
       await ensureSchema(env);
       const m = router.match(req.method, url.pathname);
       if (!m) {
         res = json({ error: "not_found", message: "المسار غير موجود" }, 404);
       } else {
-        res = await m.handler({ req, env, url, params: m.params, ip: req.headers.get("cf-connecting-ip") ?? "local" });
+        res = await m.handler({ req, env, url, params: m.params, ip: req.headers.get("cf-connecting-ip") ?? "local", push });
       }
     } catch (e) {
       if (e instanceof ApiError) {
@@ -50,6 +52,7 @@ export default {
           : json({ error: "server_error", message: "حدث خطأ غير متوقع، حاول مجدداً" }, 500);
       }
     }
+    if (push.length && res.status < 400) ctx.waitUntil(flushPush(env, push));
     const h = new Headers(res.headers);
     for (const [k, v] of Object.entries(cors)) h.set(k, v);
     h.set("x-content-type-options", "nosniff");

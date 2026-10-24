@@ -9,9 +9,13 @@ const incomingTtl = Duration(seconds: 60);
 /// Live state of an approved provider: feed (available + active jobs), stats and actions.
 class ProviderStore extends ChangeNotifier {
   ProviderStore(this.session) {
+    instance = this;
     session.addListener(_sessionChanged);
     _sessionChanged();
   }
+
+  /// The live store (used by push notification handlers).
+  static ProviderStore? instance;
 
   final Session session;
   ProviderFeed? feed;

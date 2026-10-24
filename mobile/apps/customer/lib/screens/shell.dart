@@ -31,6 +31,8 @@ class _CustomerShellState extends State<CustomerShell> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       OrdersScope.read(context).onStatusChange = (o) {
+        // With push enabled the notification itself announces the change.
+        if (Push.configured) return;
         HapticFeedback.mediumImpact();
         SystemSound.play(SystemSoundType.alert);
         final msg = switch (o.status) {

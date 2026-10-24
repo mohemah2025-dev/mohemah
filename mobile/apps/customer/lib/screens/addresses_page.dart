@@ -110,6 +110,7 @@ class _AddAddressSheetState extends State<_AddAddressSheet> {
   final _address = TextEditingController();
   String? _region;
   bool _default = false;
+  PickedLocation? _gps;
 
   @override
   void initState() {
@@ -125,6 +126,8 @@ class _AddAddressSheetState extends State<_AddAddressSheet> {
         'address': _address.text.trim(),
         'region': _region,
         'is_default': _default,
+        if (_gps != null) 'lat': _gps!.lat,
+        if (_gps != null) 'lng': _gps!.lng,
       });
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
@@ -145,6 +148,14 @@ class _AddAddressSheetState extends State<_AddAddressSheet> {
               const Text('عنوان جديد', textAlign: TextAlign.center, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
               const SizedBox(height: 14),
               Field(controller: _label, label: 'اسم العنوان', hint: 'المنزل، العمل…', icon: Icons.bookmark_rounded, maxLength: 60, validator: (v) => requiredField(v, 'اسم العنوان')),
+              LocationPicker(
+                picked: _gps,
+                onPicked: (l) => setState(() {
+                  _gps = l;
+                  _address.text = l.address;
+                  if (l.region != null) _region = l.region;
+                }),
+              ),
               RegionField(value: _region, onChanged: (v) => setState(() => _region = v)),
               Field(controller: _address, label: 'تفاصيل العنوان', hint: 'الحي، الشارع، رقم المبنى', icon: Icons.place_rounded, maxLines: 3, maxLength: 300, validator: (v) => requiredField(v, 'تفاصيل العنوان')),
               SwitchListTile(contentPadding: EdgeInsets.zero, value: _default, onChanged: (v) => setState(() => _default = v), title: const Text('جعله العنوان الافتراضي')),

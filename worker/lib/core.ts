@@ -6,6 +6,8 @@ export interface Env {
   ALLOWED_ORIGINS?: string;
   FILE_SIGNING_SECRET?: string;
   PBKDF2_ITERATIONS?: string;
+  /** Firebase service account JSON (secret) used to send push notifications. */
+  FCM_SERVICE_ACCOUNT?: string;
 }
 
 export type App = "customer" | "provider" | "admin";
@@ -122,7 +124,11 @@ export const validSaudiPhone = (p: string) => /^\+9665\d{8}$/.test(p);
 export const REGIONS = ["الرياض", "جدة", "مكة", "المدينة", "بريدة", "الدمام", "الخبر", "أبها", "تبوك", "حائل", "جازان", "نجران", "الطائف", "الأحساء", "الجوف", "عرعر", "الباحة"] as const;
 
 /* ---------- Router ---------- */
-export type Ctx = { req: Request; env: Env; url: URL; params: Record<string, string>; ip: string };
+export type Ctx = {
+  req: Request; env: Env; url: URL; params: Record<string, string>; ip: string;
+  /** Push notifications to send after a successful response. */
+  push: import("./push").PushJob[];
+};
 type Handler = (c: Ctx) => Promise<Response>;
 
 export class Router {

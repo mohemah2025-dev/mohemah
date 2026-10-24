@@ -7,6 +7,7 @@ Sets the store identifiers, the Arabic app names, the internet permission for
 release builds and (provider app) the camera / photo permissions used to attach
 ID and certificate documents.
 """
+import os
 import pathlib
 import plistlib
 import re
@@ -34,28 +35,65 @@ def main():
     cfg = APPS[sys.argv[2]]
 
     # ---------- Android ----------
+    def gradle_fix(s: str) -> str:
+        s = re.sub(r'applicationId\s*=?\s*"[^"]+"', lambda m: m.group(0).split('"')[0] + f'"{cfg["id"]}"', s)
+        # Firebase Messaging needs Android 6.0+ (API 23).
+        s = s.replace("minSdk = flutter.minSdkVersion", "minSdk = maxOf(flutter.minSdkVersion, 23)")
+        s = s.replace("minSdkVersion flutter.minSdkVersion", "minSdkVersion Math.max(flutter.minSdkVersion, 23)")
+        return s
+
     for gradle in [app_dir / "android/app/build.gradle.kts", app_dir / "android/app/build.gradle"]:
-        patch(gradle, lambda s: re.sub(r'applicationId\s*=?\s*"[^"]+"', lambda m: m.group(0).split('"')[0] + f'"{cfg["id"]}"', s))
+        patch(gradle, gradle_fix)
 
     def manifest(s: str) -> str:
         s = re.sub(r'android:label="[^"]*"', f'android:label="{cfg["name"]}"', s, count=1)
-        perms = ['<uses-permission android:name="android.permission.INTERNET"/>']
+        perms = [
+            '<uses-permission android:name="android.permission.INTERNET"/>',
+            '<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>',
+            '<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>',
+        ]
         if cfg["camera"]:
             perms.append('<uses-feature android:name="android.hardware.camera" android:required="false"/>')
         for p in perms:
             if p.split('"')[1] not in s:
                 s = s.replace("<application", p + "\n    <application", 1)
+        key = os.environ.get("GOOGLE_MAPS_API_KEY", "").strip()
+        if key and "com.google.android.geo.API_KEY" not in s:
+            s = s.replace("<activity", f'<meta-data android:name="com.google.android.geo.API_KEY" android:value="{key}"/>\n        <activity', 1)
         return s
 
     patch(app_dir / "android/app/src/main/AndroidManifest.xml", manifest)
 
     # ---------- iOS ----------
-    pbx = app_dir / "ios/Runner.xcodeproj/project.pbxproj"
-    patch(pbx, lambda s: re.sub(
-        r"PRODUCT_BUNDLE_IDENTIFIER = ([^;]+);",
-        lambda m: f"PRODUCT_BUNDLE_IDENTIFIER = {cfg['id']}.RunnerTests;" if "RunnerTests" in m.group(1) else f"PRODUCT_BUNDLE_IDENTIFIER = {cfg['id']};",
-        s,
-    ))
+    def pbx_fix(s: str) -> str:
+        s = re.sub(
+            r"PRODUCT_BUNDLE_IDENTIFIER = ([^;]+);",
+            lambda m: f"PRODUCT_BUNDLE_IDENTIFIER = {cfg['id']}.RunnerTests;" if "RunnerTests" in m.group(1)
+            else f"CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;\n\t\t\t\tPRODUCT_BUNDLE_IDENTIFIER = {cfg['id']};",
+            s,
+        )
+        s = s.replace("CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;\n\t\t\t\tCODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;", "CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;")
+        # Firebase requires iOS 15+.
+        s = re.sub(r"IPHONEOS_DEPLOYMENT_TARGET = 1[0-4]\.0;", "IPHONEOS_DEPLOYMENT_TARGET = 15.0;", s)
+        return s
+
+    patch(app_dir / "ios/Runner.xcodeproj/project.pbxproj", pbx_fix)
+    patch(app_dir / "ios/Podfile", lambda s: re.sub(r"^#?\s*platform :ios, '[\d.]+'", "platform :ios, '15.0'", s, flags=re.M))
+    ent = app_dir / "ios/Runner/Runner.entitlements"
+    if ent.parent.exists():
+        with ent.open("wb") as f:
+            plistlib.dump({"aps-environment": "development"}, f)
+        print(f"written: {ent}")
+
+    maps_key = os.environ.get("GOOGLE_MAPS_API_KEY", "").strip()
+
+    def app_delegate(s: str) -> str:
+        if not maps_key or "GMSServices" in s:
+            return s
+        s = s.replace("import Flutter", "import Flutter\nimport GoogleMaps", 1)
+        return re.sub(r"(\n(\s*)return super\.application\()", lambda m: f'\n{m.group(2)}GMSServices.provideAPIKey("{maps_key}"){m.group(1)}', s, count=1)
+
+    patch(app_dir / "ios/Runner/AppDelegate.swift", app_delegate)
 
     plist_path = app_dir / "ios/Runner/Info.plist"
     if plist_path.exists():
@@ -67,9 +105,13 @@ def main():
         plist["CFBundleLocalizations"] = ["ar"]
         plist["UISupportedInterfaceOrientations"] = ["UIInterfaceOrientationPortrait"]
         plist["ITSAppUsesNonExemptEncryption"] = False
+        modes = plist.get("UIBackgroundModes", [])
+        if "remote-notification" not in modes:
+            plist["UIBackgroundModes"] = modes + ["remote-notification"]
+        plist["NSLocationWhenInUseUsageDescription"] = "نستخدم موقعك لتعبئة العنوان والمدينة تلقائياً."
         if cfg["camera"]:
-            plist["NSCameraUsageDescription"] = "نحتاج الكاميرا لتصوير الهوية أو الشهادة عند التسجيل كمقدم خدمة."
-            plist["NSPhotoLibraryUsageDescription"] = "نحتاج الوصول للصور لإرفاق الهوية أو الشهادة عند التسجيل كمقدم خدمة."
+            plist["NSCameraUsageDescription"] = "نحتاج الكاميرا لتصوير الهوية أو الشهادة أو صورتك الشخصية."
+            plist["NSPhotoLibraryUsageDescription"] = "نحتاج الوصول للصور لإرفاق الهوية أو الشهادة أو صورتك الشخصية."
         with plist_path.open("wb") as f:
             plistlib.dump(plist, f)
         print(f"patched: {plist_path}")

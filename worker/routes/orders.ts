@@ -64,13 +64,25 @@ export function registerOrderRoutes(r: Router) {
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       id, u.id, sub!.service_id, sub!.id, sub!.service_name, sub!.name, mode, description, address, region, lat, lng, scheduled_at, cost);
     const o = await getOrder(c, id);
+    // Push "new order" to providers who are online, offer this service and work in this city.
+    const providers = await all<{ id: string }>(c.env.DB,
+      `SELECT u.id FROM users u JOIN provider_services ps ON ps.provider_id = u.id
+        WHERE ps.service_id = ? AND u.is_online = 1 AND u.is_active = 1 AND u.id <> ? AND (u.region IS NULL OR u.region = ?)
+          AND EXISTS (SELECT 1 FROM user_roles r WHERE r.user_id = u.id AND r.role = 'provider') LIMIT 500`,
+      sub!.service_id, u.id, region);
+    if (providers.length) {
+      c.push.push({
+        userIds: providers.map((p) => p.id), app: "provider",
+        message: { title: "طلب جديد", body: `${sub!.name}${region ? ` • ${region}` : ""} — افتح التطبيق لقبول الطلب`, data: { link: "/provider/orders", order_id: id } },
+      });
+    }
     return json({ id, order_no: orderNo(o.order_no) }, 201);
   });
 
   r.get("/api/orders/mine", async (c) => {
     const u = await requireUser(c, { app: "customer" });
-    const rows = await all<OrderRow & { p_name: string | null; p_phone: string | null; p_rating: number | null; p_nationality: string | null; p_rating_count: number | null; unread: number }>(c.env.DB,
-      `SELECT o.*, p.full_name AS p_name, p.phone AS p_phone, p.rating AS p_rating, p.rating_count AS p_rating_count, p.nationality AS p_nationality,
+    const rows = await all<OrderRow & { p_name: string | null; p_phone: string | null; p_rating: number | null; p_nationality: string | null; p_rating_count: number | null; p_avatar: string | null; unread: number }>(c.env.DB,
+      `SELECT o.*, p.full_name AS p_name, p.phone AS p_phone, p.rating AS p_rating, p.rating_count AS p_rating_count, p.nationality AS p_nationality, p.avatar_url AS p_avatar,
               (SELECT COUNT(*) FROM messages m WHERE m.order_id = o.id AND m.recipient_id = ?1 AND m.read_at IS NULL) AS unread
          FROM orders o LEFT JOIN users p ON p.id = o.provider_id
         WHERE o.customer_id = ?1 ORDER BY o.created_at DESC LIMIT 100`, u.id);
@@ -82,7 +94,7 @@ export function registerOrderRoutes(r: Router) {
         scheduled_at: o.scheduled_at, status: o.status, rating: o.rating, review: o.review, cancelled_by: o.cancelled_by, cancel_reason: o.cancel_reason,
         created_at: o.created_at, accepted_at: o.accepted_at, arrived_at: o.arrived_at, started_at: o.started_at, completed_at: o.completed_at, cancelled_at: o.cancelled_at,
         unread: o.unread,
-        provider: o.provider_id ? { id: o.provider_id, name: o.p_name, rating: o.p_rating, rating_count: o.p_rating_count, nationality: o.p_nationality, phone: showContact ? o.p_phone : null } : null,
+        provider: o.provider_id ? { id: o.provider_id, name: o.p_name, rating: o.p_rating, rating_count: o.p_rating_count, nationality: o.p_nationality, avatar_url: o.p_avatar, phone: showContact ? o.p_phone : null } : null,
       };
     }));
   });
@@ -106,7 +118,7 @@ export function registerOrderRoutes(r: Router) {
            SELECT ?5, ?1, ?2, ?4, 'refund', (SELECT coin_balance FROM users WHERE id = ?1), 'استرجاع: ألغى العميل الطلب' WHERE ${guard}`,
           o.provider_id, o.id, t, o.charged_coins, uid()));
       }
-      batch.push(...notifyStmts(c.env, [o.provider_id], { title: "تم إلغاء طلب", body: `ألغى العميل طلب ${orderLabel(o)}${o.charged_coins ? ` وأُعيدت ${o.charged_coins} كوين لرصيدك` : ""}.`, link: "/provider/orders", icon: "XCircle" }));
+      batch.push(...notifyStmts(c, [o.provider_id], { title: "تم إلغاء طلب", body: `ألغى العميل طلب ${orderLabel(o)}${o.charged_coins ? ` وأُعيدت ${o.charged_coins} كوين لرصيدك` : ""}.`, link: "/provider/orders", icon: "XCircle" }));
     }
     await c.env.DB.batch(batch);
     const after = await getOrder(c, o.id);
@@ -126,7 +138,7 @@ export function registerOrderRoutes(r: Router) {
     if (rating <= 2 && !review) fail(400, "missing_reason", "اكتب سبب التقييم المنخفض");
     await c.env.DB.batch([
       stmt(c.env.DB, "UPDATE orders SET rating = ?, review = ?, updated_at = ? WHERE id = ? AND rating IS NULL", rating, review, now(), o.id),
-      ...(o.provider_id ? [recomputeProviderRating(c.env, o.provider_id), ...notifyStmts(c.env, [o.provider_id], {
+      ...(o.provider_id ? [recomputeProviderRating(c.env, o.provider_id), ...notifyStmts(c, [o.provider_id], {
         title: "تقييم جديد", body: `حصلت على تقييم ${rating} من 5${review ? " مع ملاحظة من العميل" : ""}`, link: "/provider/account/ratings", icon: "Star",
       })] : []),
     ]);
@@ -154,6 +166,10 @@ export function registerOrderRoutes(r: Router) {
     const body = str(await readJson(c.req), "body", { required: true, max: 1000, label: "الرسالة" })!;
     const id = uid();
     await run(c.env.DB, "INSERT INTO messages (id, sender_id, recipient_id, order_id, body) VALUES (?,?,?,?,?)", id, u.id, other, o.id, body);
+    c.push.push({
+      userIds: [other!], app: u.app === "customer" ? "provider" : "customer",
+      message: { title: u.app === "customer" ? "رسالة من العميل" : "رسالة من مقدم الخدمة", body: body.slice(0, 180), data: { link: u.app === "customer" ? "/provider/orders" : "/orders", order_id: o.id, chat: "1" } },
+    });
     return json({ id, sender_id: u.id, body, created_at: now() }, 201);
   });
 
@@ -225,7 +241,7 @@ export function registerOrderRoutes(r: Router) {
     const subEnd = await activeSubscriptionEnd(c.env, u.id);
     const t = now();
     const label = orderLabel(o);
-    const notifyCustomer = o.customer_id ? notifyStmts(c.env, [o.customer_id], { title: "تم قبول طلبك", body: `قبل مقدم الخدمة طلب ${label}، تابع الحالة من صفحة الطلبات.`, link: "/orders", icon: "CheckCircle2" }) : [];
+    const notifyCustomer = o.customer_id ? notifyStmts(c, [o.customer_id], { title: "تم قبول طلبك", body: `قبل مقدم الخدمة طلب ${label}، تابع الحالة من صفحة الطلبات.`, link: "/orders", icon: "CheckCircle2" }) : [];
 
     // An active subscription (paid or gifted) always covers the order; otherwise coins are charged when enabled.
     if (subEnd) {
@@ -283,7 +299,7 @@ export function registerOrderRoutes(r: Router) {
     else return fail(409, "invalid_status", "لا يمكن تحديث حالة هذا الطلب");
     const res = await run(c.env.DB, `UPDATE orders SET status = ?, ${col} = ?, updated_at = ? WHERE id = ? AND provider_id = ? AND status = ?`, next, t, t, o.id, u.id, o.status);
     if (!res.meta.changes) fail(409, "status_changed", "تغيّرت حالة الطلب، حدّث الصفحة");
-    if (o.customer_id) await c.env.DB.batch(notifyStmts(c.env, [o.customer_id], { ...note, link: "/orders" }));
+    if (o.customer_id) await c.env.DB.batch(notifyStmts(c, [o.customer_id], { ...note, link: "/orders" }));
     return json({ status: next });
   });
 
@@ -297,7 +313,7 @@ export function registerOrderRoutes(r: Router) {
     await c.env.DB.batch([
       stmt(c.env.DB, "UPDATE orders SET status = 'pending', provider_id = NULL, accepted_at = NULL, arrived_at = NULL, billing_mode = NULL, charged_coins = 0, cancel_reason = ?, updated_at = ? WHERE id = ? AND provider_id = ? AND status IN ('accepted','arrived')", reason, t, o.id, u.id),
       stmt(c.env.DB, "INSERT OR IGNORE INTO order_rejections (order_id, provider_id) VALUES (?,?)", o.id, u.id),
-      ...(o.customer_id ? notifyStmts(c.env, [o.customer_id], { title: "جارٍ البحث عن مقدم خدمة آخر", body: `اعتذر مقدم الخدمة عن طلب ${orderLabel(o)}، وطلبك متاح الآن لمقدمي الخدمة الآخرين.`, link: "/orders", icon: "RefreshCw" }) : []),
+      ...(o.customer_id ? notifyStmts(c, [o.customer_id], { title: "جارٍ البحث عن مقدم خدمة آخر", body: `اعتذر مقدم الخدمة عن طلب ${orderLabel(o)}، وطلبك متاح الآن لمقدمي الخدمة الآخرين.`, link: "/orders", icon: "RefreshCw" }) : []),
     ]);
     return json({ ok: true });
   });
@@ -432,7 +448,7 @@ export function registerOrderRoutes(r: Router) {
     await c.env.DB.batch([
       stmt(c.env.DB, "INSERT INTO provider_subscriptions (id, provider_id, months, amount, method, starts_at, ends_at) VALUES (?,?,?,?,?,?,?)", uid(), u.id, months, price, gw.name, start, end),
       stmt(c.env.DB, "UPDATE users SET billing_mode = 'subscription' WHERE id = ?", u.id),
-      ...notifyStmts(c.env, [u.id], { title: "تم تفعيل اشتراكك", body: `اشتراكك فعّال حتى ${end.slice(0, 10)}`, category: "general", link: "/provider/billing" }),
+      ...notifyStmts(c, [u.id], { title: "تم تفعيل اشتراكك", body: `اشتراكك فعّال حتى ${end.slice(0, 10)}`, category: "general", link: "/provider/billing" }),
     ]);
     return json({ success: true, ends_at: end });
   });

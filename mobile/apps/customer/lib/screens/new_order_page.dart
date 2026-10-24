@@ -27,7 +27,12 @@ class _NewOrderPageState extends State<NewOrderPage> {
   String? _region;
   Address? _picked;
   List<Address> _addresses = const [];
-  DateTime? _when;
+  bool _scheduled = false;
+  DateTime? _date;
+  TimeOfDay? _time;
+  PickedLocation? _gps;
+
+  DateTime? get _when => !_scheduled || _date == null || _time == null ? null : DateTime(_date!.year, _date!.month, _date!.day, _time!.hour, _time!.minute);
 
   @override
   void initState() {
@@ -67,28 +72,33 @@ class _NewOrderPageState extends State<NewOrderPage> {
     }
   }
 
-  Future<void> _pickTime() async {
+  Future<void> _pickDate() async {
     final now = DateTime.now();
     final date = await showDatePicker(
       context: context,
-      initialDate: _when ?? now,
-      firstDate: now,
+      initialDate: _date ?? now,
+      firstDate: DateTime(now.year, now.month, now.day),
       lastDate: now.add(const Duration(days: 59)),
       helpText: 'تاريخ التنفيذ',
     );
-    if (date == null || !mounted) return;
-    final time = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(_when ?? now.add(const Duration(hours: 1))), helpText: 'وقت التنفيذ');
-    if (time == null) return;
-    final picked = DateTime(date.year, date.month, date.day, time.hour, time.minute);
-    if (picked.isBefore(now)) {
-      if (mounted) showSnack(context, 'اختر وقتاً لاحقاً', error: true);
-      return;
-    }
-    setState(() => _when = picked);
+    if (date != null) setState(() => _date = date);
+  }
+
+  Future<void> _pickTimeOnly() async {
+    final t = await showTimePicker(context: context, initialTime: _time ?? TimeOfDay.fromDateTime(DateTime.now().add(const Duration(hours: 1))), helpText: 'وقت التنفيذ');
+    if (t != null) setState(() => _time = t);
   }
 
   Future<void> _submit() async {
     if (!_form.currentState!.validate()) return;
+    if (_scheduled && (_date == null || _time == null)) {
+      showSnack(context, 'حدد تاريخ ووقت التنفيذ', error: true);
+      return;
+    }
+    if (_when != null && _when!.isBefore(DateTime.now())) {
+      showSnack(context, 'اختر موعداً لاحقاً', error: true);
+      return;
+    }
     if (!await ensureSignedIn(context, reason: 'سجّل دخولك لإرسال طلبك') || !mounted) return;
     final s = SessionScope.read(context);
     final store = OrdersScope.read(context);
@@ -99,8 +109,8 @@ class _NewOrderPageState extends State<NewOrderPage> {
         'description': _desc.text.trim(),
         'region': _region,
         if (_mode == 'in_person') 'address': _address.text.trim(),
-        if (_mode == 'in_person' && _picked?.lat != null) 'lat': _picked!.lat,
-        if (_mode == 'in_person' && _picked?.lng != null) 'lng': _picked!.lng,
+        if (_mode == 'in_person' && (_picked?.lat ?? _gps?.lat) != null) 'lat': _picked?.lat ?? _gps!.lat,
+        if (_mode == 'in_person' && (_picked?.lng ?? _gps?.lng) != null) 'lng': _picked?.lng ?? _gps!.lng,
         if (_when != null) 'scheduled_at': _when!.toUtc().toIso8601String(),
       }));
       unawaited(store.refresh());
@@ -164,6 +174,15 @@ class _NewOrderPageState extends State<NewOrderPage> {
           RegionField(value: _region, onChanged: (v) => setState(() => _region = v)),
           if (_mode == 'in_person') ...[
             const _Label('عنوان تنفيذ الخدمة'),
+            LocationPicker(
+              picked: _gps,
+              onPicked: (l) => setState(() {
+                _gps = l;
+                _picked = null;
+                _address.text = l.address;
+                if (l.region != null) _region = l.region;
+              }),
+            ),
             if (_addresses.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(bottom: 10),
@@ -208,19 +227,34 @@ class _NewOrderPageState extends State<NewOrderPage> {
             Expanded(
               child: ChoiceChip(
                 label: const SizedBox(width: double.infinity, child: Text('في أقرب وقت', textAlign: TextAlign.center)),
-                selected: _when == null,
-                onSelected: (_) => setState(() => _when = null),
+                selected: !_scheduled,
+                onSelected: (_) => setState(() => _scheduled = false),
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: ChoiceChip(
-                label: SizedBox(width: double.infinity, child: Text(_when == null ? 'تحديد موعد' : fmtDateTime(_when), textAlign: TextAlign.center, overflow: TextOverflow.ellipsis)),
-                selected: _when != null,
-                onSelected: (_) => _pickTime(),
+                label: const SizedBox(width: double.infinity, child: Text('تحديد موعد', textAlign: TextAlign.center)),
+                selected: _scheduled,
+                onSelected: (_) => setState(() => _scheduled = true),
               ),
             ),
           ]),
+          if (_scheduled) ...[
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(child: _PickBox(icon: Icons.event_rounded, label: 'التاريخ', value: _date == null ? null : fmtDate(_date), onTap: _pickDate)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _PickBox(
+                  icon: Icons.schedule_rounded,
+                  label: 'الوقت',
+                  value: _time == null ? null : fmtTime(DateTime(2000, 1, 1, _time!.hour, _time!.minute)),
+                  onTap: _pickTimeOnly,
+                ),
+              ),
+            ]),
+          ],
           const SizedBox(height: 18),
           Container(
             padding: const EdgeInsets.all(12),
@@ -237,6 +271,25 @@ class _NewOrderPageState extends State<NewOrderPage> {
       ),
     );
   }
+}
+
+/// A tappable field showing a chosen date or time.
+class _PickBox extends StatelessWidget {
+  const _PickBox({required this.icon, required this.label, required this.value, required this.onTap});
+  final IconData icon;
+  final String label;
+  final String? value;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: InputDecorator(
+          decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon, color: Brand.mutedFg)),
+          child: Text(value ?? 'اختر', style: TextStyle(color: value == null ? Brand.mutedFg : Brand.foreground, fontWeight: FontWeight.w600)),
+        ),
+      );
 }
 
 class _Label extends StatelessWidget {

@@ -1,4 +1,4 @@
-import { all, first, now, stmt, uid, type Env } from "./core";
+import { all, first, now, stmt, uid, type Ctx, type Env } from "./core";
 
 export type Settings = {
   app_name: string; logo_url: string | null; currency_label: string; primary_color: string | null;
@@ -36,14 +36,22 @@ export async function latestSubscriptionEnd(env: Env, providerId: string) {
   return r?.ends_at ?? null;
 }
 
-/** Statements that create a personal notification for one or more users. */
-export function notifyStmts(env: Env, userIds: string[], n: { title: string; body: string; link?: string | null; icon?: string | null; category?: string; created_by?: string | null; scheduled_at?: string | null }) {
+/**
+ * Statements that create a personal notification for one or more users.
+ * Also queues a push to their phones (sent after the response, unless scheduled for later).
+ */
+export function notifyStmts(c: Ctx, userIds: string[], n: { title: string; body: string; link?: string | null; icon?: string | null; category?: string; created_by?: string | null; scheduled_at?: string | null }) {
   const id = uid();
   const sent = n.scheduled_at ?? now();
+  if (!n.scheduled_at || n.scheduled_at <= now()) {
+    const link = n.link ?? "";
+    const app = link.startsWith("/provider") ? "provider" : link.startsWith("/orders") ? "customer" : undefined;
+    c.push.push({ userIds, app, message: { title: n.title, body: n.body, data: { link, notification_id: id } } });
+  }
   return [
-    stmt(env.DB, "INSERT INTO notifications (id, title, body, audience, category, icon, link, scheduled_at, sent_at, created_by) VALUES (?,?,?,?,?,?,?,?,?,?)",
+    stmt(c.env.DB, "INSERT INTO notifications (id, title, body, audience, category, icon, link, scheduled_at, sent_at, created_by) VALUES (?,?,?,?,?,?,?,?,?,?)",
       id, n.title.slice(0, 200), n.body.slice(0, 1000), "specific", n.category ?? "order", n.icon ?? null, n.link ?? null, n.scheduled_at ?? null, sent, n.created_by ?? null),
-    ...userIds.map((u) => stmt(env.DB, "INSERT OR IGNORE INTO notification_targets (notification_id, user_id) VALUES (?,?)", id, u)),
+    ...userIds.map((u) => stmt(c.env.DB, "INSERT OR IGNORE INTO notification_targets (notification_id, user_id) VALUES (?,?)", id, u)),
   ];
 }
 

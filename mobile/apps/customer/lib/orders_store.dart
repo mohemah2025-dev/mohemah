@@ -7,9 +7,13 @@ import 'package:mohemah_core/mohemah_core.dart';
 /// Reports status changes (accepted, arrived, completed...) through [onStatusChange].
 class OrdersStore extends ChangeNotifier {
   OrdersStore(this.session) {
+    instance = this;
     session.addListener(_sessionChanged);
     _sessionChanged();
   }
+
+  /// The live store (used by push notification handlers).
+  static OrdersStore? instance;
 
   final Session session;
   List<CustomerOrder>? orders;

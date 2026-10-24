@@ -16,6 +16,9 @@ class Session extends ChangeNotifier {
 
   final AppKind app;
   final Api api;
+
+  /// Runs before signing out while the token is still valid (e.g. to unregister this device from push).
+  static Future<void> Function(Api api)? beforeSignOut;
   Profile? profile;
   List<String> roles = const [];
   DateTime? subscriptionEnd;
@@ -86,6 +89,9 @@ class Session extends ChangeNotifier {
   }
 
   Future<void> signOut() async {
+    try {
+      await beforeSignOut?.call(api);
+    } catch (_) {}
     try {
       await api.post('/api/auth/logout');
     } catch (_) {}

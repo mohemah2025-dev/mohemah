@@ -6,6 +6,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'config.dart';
 import 'public_data.dart';
+import 'push.dart';
 import 'session.dart';
 import 'splash.dart';
 import 'theme.dart';
@@ -25,6 +26,8 @@ class MohemahApp extends StatefulWidget {
     this.seed = Brand.primary,
     this.palette = SplashPalette.customer,
     this.scope,
+    this.onPushOpen,
+    this.onPushMessage,
   });
 
   final AppKind kind;
@@ -36,6 +39,13 @@ class MohemahApp extends StatefulWidget {
 
   /// Wraps the app (below the session/data scopes, above the navigator) with app-specific state.
   final Widget Function(BuildContext context, Widget child)? scope;
+
+  /// The user tapped a push notification (data: `link`, optional `order_id`).
+  final void Function(Map<String, dynamic> data)? onPushOpen;
+
+  /// A push notification arrived while the app is open (refresh lists, etc.).
+  /// Return true when the app shows it itself, so no banner is added.
+  final bool Function(Map<String, dynamic> data)? onPushMessage;
 
   @override
   State<MohemahApp> createState() => _MohemahAppState();
@@ -52,7 +62,15 @@ class _MohemahAppState extends State<MohemahApp> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    Push.onOpen = (d) => widget.onPushOpen?.call(d);
+    Push.onForeground = (title, body, d) {
+      final handled = widget.onPushMessage?.call(d) ?? false;
+      if (!handled && title.isNotEmpty) {
+        rootMessenger.currentState?.showSnackBar(SnackBar(content: Text(body.isEmpty ? title : '$title\n$body')));
+      }
+    };
     _init = Future.wait([session.restore(), data.load()]).timeout(const Duration(seconds: 8), onTimeout: () => const []);
+    unawaited(_init.then((_) => Push.init(session)));
   }
 
   @override

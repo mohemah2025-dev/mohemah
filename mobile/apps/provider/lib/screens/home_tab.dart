@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:mohemah_core/mohemah_core.dart';
 
 import '../provider_store.dart';
-import 'auth_page.dart';
 import 'billing_page.dart';
 import 'shell.dart';
 
@@ -28,11 +27,7 @@ class ProviderHomeTab extends StatelessWidget {
         GradientHeader(
           gradient: Brand.providerGradient,
           child: Row(children: [
-            CircleAvatar(
-              radius: 24,
-              backgroundColor: Colors.white24,
-              child: Text(p.fullName.characters.first, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
-            ),
+            Avatar(name: p.fullName, url: p.avatarUrl, radius: 24, color: Colors.white),
             const SizedBox(width: 12),
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -127,81 +122,84 @@ class _ConnectionCardState extends State<_ConnectionCard> with SingleTickerProvi
     return AppCard(
       padding: EdgeInsets.zero,
       child: Column(children: [
+        // The connection switch: a wide rectangle.
         Padding(
-          padding: const EdgeInsets.fromLTRB(10, 26, 10, 14),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-            Expanded(
-              child: _SideIcon(
-                icon: Icons.build_circle_rounded,
-                label: 'الخدمات المتاحة',
-                sub: '${feed?.servicesCount ?? 0} مختارة',
-                color: Brand.primary,
-                active: _panel == 'services',
-                onTap: () => setState(() => _panel = _panel == 'services' ? null : 'services'),
-              ),
-            ),
-            GestureDetector(
-              onTap: feed == null ? null : () => _toggle(online),
-              child: SizedBox(
-                width: 176,
-                height: 176,
-                child: AnimatedBuilder(
-                  animation: _pulse,
-                  builder: (_, __) => CustomPaint(
-                    painter: _RingPainter(online: online, t: _pulse.value),
-                    child: Center(
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        width: 138,
-                        height: 138,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: online ? Brand.providerGradient : null,
-                          color: online ? null : Brand.muted,
-                          border: online ? null : Border.all(color: Brand.border),
-                          boxShadow: [
-                            BoxShadow(
-                              color: (online ? Brand.primaryDeep : Colors.black).withValues(alpha: online ? 0.35 : 0.08),
-                              blurRadius: 24,
-                              offset: const Offset(0, 10),
-                            ),
-                          ],
+          padding: const EdgeInsets.fromLTRB(14, 16, 14, 6),
+          child: GestureDetector(
+            onTap: feed == null ? null : () => _toggle(online),
+            child: AnimatedBuilder(
+              animation: _pulse,
+              builder: (_, __) => CustomPaint(
+                painter: _RectPainter(online: online, t: _pulse.value),
+                child: Padding(
+                  padding: const EdgeInsets.all(7),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    height: 132,
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(24),
+                      gradient: online ? Brand.providerGradient : null,
+                      color: online ? null : Brand.muted,
+                      boxShadow: [
+                        BoxShadow(
+                          color: (online ? Brand.primaryDeep : Colors.black).withValues(alpha: online ? 0.3 : 0.05),
+                          blurRadius: 22,
+                          offset: const Offset(0, 10),
                         ),
-                        child: _toggling
-                            ? Center(child: CircularProgressIndicator(color: online ? Colors.white : Brand.primaryDeep))
-                            : Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                                Icon(online ? Icons.wifi_tethering_rounded : Icons.portable_wifi_off_rounded, size: 40, color: online ? Colors.white : Brand.mutedFg),
-                                const SizedBox(height: 4),
-                                Text(online ? 'متصل' : 'غير متصل',
-                                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: online ? Colors.white : Brand.mutedFg)),
-                              ]),
-                      ),
+                      ],
                     ),
+                    child: _toggling
+                        ? Center(child: CircularProgressIndicator(color: online ? Colors.white : Brand.primaryDeep))
+                        : Row(children: [
+                            Container(
+                              width: 64,
+                              height: 64,
+                              decoration: BoxDecoration(color: online ? Colors.white24 : Colors.white, shape: BoxShape.circle),
+                              child: Icon(online ? Icons.wifi_tethering_rounded : Icons.portable_wifi_off_rounded, size: 34, color: online ? Colors.white : Brand.mutedFg),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                Text(online ? 'متصل' : 'غير متصل',
+                                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: online ? Colors.white : Brand.foreground)),
+                                const SizedBox(height: 2),
+                                Text(online ? 'أنت متاح لاستقبال الطلبات الآن' : 'اضغط هنا لبدء استقبال الطلبات',
+                                    style: TextStyle(fontSize: 12.5, color: online ? Colors.white70 : Brand.mutedFg)),
+                              ]),
+                            ),
+                            Switch(value: online, onChanged: feed == null ? null : (_) => _toggle(online)),
+                          ]),
                   ),
                 ),
               ),
             ),
-            Expanded(
-              child: _SideIcon(
-                icon: tierIcon(tierIdx),
-                label: 'برنامج الولاء',
-                sub: loyaltyTiers[tierIdx].name,
-                color: Brand.coral,
-                active: _panel == 'loyalty',
-                onTap: () => setState(() => _panel = _panel == 'loyalty' ? null : 'loyalty'),
-              ),
+          ),
+        ),
+        // Services and loyalty as plain icons in the bottom corners.
+        Padding(
+          padding: const EdgeInsets.fromLTRB(10, 4, 10, 10),
+          child: Row(children: [
+            _CornerIcon(
+              icon: Icons.build_circle_rounded,
+              label: 'الخدمات المتاحة',
+              sub: '${feed?.servicesCount ?? 0} مختارة',
+              color: Brand.primary,
+              active: _panel == 'services',
+              onTap: () => setState(() => _panel = _panel == 'services' ? null : 'services'),
+            ),
+            const Spacer(),
+            _CornerIcon(
+              icon: tierIcon(tierIdx),
+              label: 'برنامج الولاء',
+              sub: loyaltyTiers[tierIdx].name,
+              color: Brand.coral,
+              active: _panel == 'loyalty',
+              onTap: () => setState(() => _panel = _panel == 'loyalty' ? null : 'loyalty'),
             ),
           ]),
         ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Text(
-            online ? 'أنت متاح لاستقبال الطلبات الآن' : 'اضغط على الدائرة لبدء استقبال الطلبات',
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Brand.mutedFg, fontSize: 12.5),
-          ),
-        ),
-        const SizedBox(height: 14),
         const Divider(),
         IntrinsicHeight(
           child: Row(children: [
@@ -244,43 +242,47 @@ class _ConnectionCardState extends State<_ConnectionCard> with SingleTickerProvi
 
 IconData tierIcon(int i) => const [Icons.verified_rounded, Icons.military_tech_rounded, Icons.workspace_premium_rounded, Icons.emoji_events_rounded][math.min(math.max(i, 0), 3)];
 
-class _RingPainter extends CustomPainter {
-  _RingPainter({required this.online, required this.t});
+/// Dashed outline while offline ("not connected"), a soft pulse while online.
+class _RectPainter extends CustomPainter {
+  _RectPainter({required this.online, required this.t});
   final bool online;
   final double t;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final c = size.center(Offset.zero);
-    final r = size.width / 2 - 2;
+    final rect = Offset.zero & size;
     if (online) {
-      // Pulsing rings while receiving orders.
-      for (var i = 0; i < 2; i++) {
-        final p = (t + i / 2) % 1;
-        canvas.drawCircle(c, 69 + (r - 69) * p, Paint()..color = Brand.primaryDeep.withValues(alpha: 0.25 * (1 - p)));
-      }
-    } else {
-      // A broken (dashed) ring: the "not connected" circle.
-      final paint = Paint()
+      final grow = 6 * t;
+      final r = RRect.fromRectAndRadius(rect.deflate(6 - grow), Radius.circular(28 + grow));
+      canvas.drawRRect(r, Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 3
+        ..color = Brand.primaryDeep.withValues(alpha: 0.35 * (1 - t)));
+    } else {
+      final path = Path()..addRRect(RRect.fromRectAndRadius(rect.deflate(1.5), const Radius.circular(30)));
+      final paint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.2
         ..strokeCap = StrokeCap.round
         ..color = Brand.mutedFg.withValues(alpha: 0.45);
-      const dashes = 18;
-      const sweep = 2 * math.pi / dashes;
-      final rot = t * 2 * math.pi / dashes;
-      for (var i = 0; i < dashes; i++) {
-        canvas.drawArc(Rect.fromCircle(center: c, radius: r - 4), i * sweep + rot, sweep * 0.55, false, paint);
+      for (final m in path.computeMetrics()) {
+        const dash = 10.0, gap = 8.0;
+        var d = (t * (dash + gap)) % (dash + gap);
+        while (d < m.length) {
+          canvas.drawPath(m.extractPath(d, math.min(d + dash, m.length)), paint);
+          d += dash + gap;
+        }
       }
     }
   }
 
   @override
-  bool shouldRepaint(_RingPainter old) => old.online != online || old.t != t;
+  bool shouldRepaint(_RectPainter old) => old.online != online || old.t != t;
 }
 
-class _SideIcon extends StatelessWidget {
-  const _SideIcon({required this.icon, required this.label, required this.sub, required this.color, required this.active, required this.onTap});
+/// An icon without a box, used in the card corners.
+class _CornerIcon extends StatelessWidget {
+  const _CornerIcon({required this.icon, required this.label, required this.sub, required this.color, required this.active, required this.onTap});
   final IconData icon;
   final String label;
   final String sub;
@@ -291,25 +293,18 @@ class _SideIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(14),
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 2),
-        decoration: BoxDecoration(color: active ? Brand.accent : null, borderRadius: BorderRadius.circular(18)),
-        child: Column(children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(16),
-              border: active ? Border.all(color: color, width: 2) : null,
-            ),
-            child: Icon(icon, color: color, size: 27),
-          ),
-          const SizedBox(height: 6),
-          Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, height: 1.25)),
-          Text(sub, textAlign: TextAlign.center, style: const TextStyle(fontSize: 10.5, color: Brand.mutedFg)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, color: color, size: 30),
+          const SizedBox(width: 6),
+          Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+            Text(label, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: active ? color : Brand.foreground)),
+            Text(sub, style: const TextStyle(fontSize: 11, color: Brand.mutedFg)),
+          ]),
+          Icon(active ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded, size: 18, color: Brand.mutedFg),
         ]),
       ),
     );
@@ -393,7 +388,7 @@ class _MyServicesPanelState extends State<MyServicesPanel> {
     final services = PublicScope.of(context).services;
     final mine = _mine;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Text('اختر الخدمات التي تكون متاحاً لأداء مهامها، وستصلك طلباتها فقط${_saving ? ' — جارٍ الحفظ…' : ''}',
+      Text('اضغط على الخدمة لتفعيلها أو إيقافها${_saving ? ' — جارٍ الحفظ…' : ''}',
           style: const TextStyle(fontSize: 12, color: Brand.mutedFg)),
       const SizedBox(height: 10),
       if (mine == null)
@@ -401,8 +396,47 @@ class _MyServicesPanelState extends State<MyServicesPanel> {
       else if (services.isEmpty)
         const Text('لا توجد خدمات بعد.', style: TextStyle(color: Brand.mutedFg))
       else
-        ServicesGrid(services: services, selected: mine, onToggle: _toggle, showPrice: true),
+        Wrap(
+          spacing: 14,
+          runSpacing: 14,
+          alignment: WrapAlignment.center,
+          children: [for (final sv in services) _ServiceCheck(service: sv, on: mine.contains(sv.id), onTap: () => _toggle(sv.id))],
+        ),
     ]);
+  }
+}
+
+/// A service icon with a check mark when selected.
+class _ServiceCheck extends StatelessWidget {
+  const _ServiceCheck({required this.service, required this.on, required this.onTap});
+  final Service service;
+  final bool on;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: service.name,
+      child: GestureDetector(
+        onTap: onTap,
+        child: SizedBox(
+          width: 64,
+          child: Column(children: [
+            Stack(clipBehavior: Clip.none, children: [
+              AnimatedOpacity(duration: const Duration(milliseconds: 200), opacity: on ? 1 : 0.4, child: ServiceIcon(icon: service.icon, color: service.color, size: 54)),
+              if (on)
+                const Positioned(
+                  top: -4,
+                  left: -4,
+                  child: CircleAvatar(radius: 11, backgroundColor: Brand.success, child: Icon(Icons.check_rounded, size: 15, color: Colors.white)),
+                ),
+            ]),
+            const SizedBox(height: 4),
+            Text(service.name, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(fontSize: 10.5)),
+          ]),
+        ),
+      ),
+    );
   }
 }
 

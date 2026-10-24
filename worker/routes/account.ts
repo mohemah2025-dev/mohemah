@@ -208,7 +208,11 @@ export function registerAccountRoutes(r: Router) {
     if (idFile) { await saveProviderDoc(c, u.id, "id", idFile); n++; }
     if (certFile) { await saveProviderDoc(c, u.id, "certificate", certFile); n++; }
     if (!n) fail(400, "no_files", "أرفق ملفاً واحداً على الأقل");
-    if (u.verification_status === "rejected") await run(c.env.DB, "UPDATE users SET verification_status = 'pending', updated_at = ? WHERE id = ?", now(), u.id);
+    // Back to review once no latest document is still marked as rejected.
+    const stillRejected = await first(c.env.DB,
+      `SELECT 1 FROM provider_documents d WHERE d.user_id = ?1 AND d.status = 'rejected'
+         AND d.created_at = (SELECT MAX(created_at) FROM provider_documents x WHERE x.user_id = ?1 AND x.kind = d.kind)`, u.id);
+    if (u.verification_status === "rejected" && !stillRejected) await run(c.env.DB, "UPDATE users SET verification_status = 'pending', updated_at = ? WHERE id = ?", now(), u.id);
     return json(await mePayload(c, u.id, "provider"));
   });
 
@@ -395,6 +399,37 @@ export function registerAccountRoutes(r: Router) {
     return json({ ok: true });
   });
 
+  /* ---------- Profile photo ---------- */
+  r.post("/api/me/avatar", async (c) => {
+    const u = await requireUser(c);
+    let form: FormData;
+    try { form = await c.req.formData(); } catch { return fail(400, "invalid_form", "بيانات النموذج غير صالحة"); }
+    const file = formFile(form, "file");
+    if (!file) fail(400, "no_file", "اختر صورة");
+    if (file!.type === "image/svg+xml") fail(400, "invalid_file", "الصورة يجب أن تكون PNG أو JPG أو WEBP");
+    const url = await savePublicImage(c, file!, 3 * 1024 * 1024);
+    await run(c.env.DB, "UPDATE users SET avatar_url = ?, updated_at = ? WHERE id = ?", url, now(), u.id);
+    return json(await mePayload(c, u.id, u.app));
+  });
+
+  /* ---------- Push notification devices ---------- */
+  r.post("/api/me/push-token", async (c) => {
+    const u = await requireUser(c, { app: ["customer", "provider"] });
+    const b = await readJson(c.req);
+    const token = str(b, "token", { required: true, max: 4096, label: "token" })!;
+    const platform = oneOf(b, "platform", ["android", "ios"] as const) ?? "android";
+    await run(c.env.DB,
+      `INSERT INTO push_tokens (token, user_id, app, platform) VALUES (?,?,?,?)
+       ON CONFLICT(token) DO UPDATE SET user_id = excluded.user_id, app = excluded.app, platform = excluded.platform, updated_at = ?`,
+      token, u.id, u.app, platform, now());
+    return json({ ok: true });
+  });
+  r.post("/api/me/push-token/delete", async (c) => {
+    const token = str(await readJson(c.req), "token", { max: 4096 });
+    if (token) await run(c.env.DB, "DELETE FROM push_tokens WHERE token = ?", token);
+    return json({ ok: true });
+  });
+
   /* ---------- Messages with administration (not order chat) ---------- */
   r.get("/api/me/messages", async (c) => {
     const u = await requireUser(c);
@@ -430,8 +465,8 @@ export function registerAccountRoutes(r: Router) {
   /* ---------- Applicant documents (own) ---------- */
   r.get("/api/me/documents", async (c) => {
     const u = await requireUser(c);
-    const docs = await all<{ id: string; kind: string; r2_key: string; created_at: string }>(c.env.DB, "SELECT id, kind, r2_key, created_at FROM provider_documents WHERE user_id = ? ORDER BY created_at DESC", u.id);
-    return json(await Promise.all(docs.map(async (d) => ({ id: d.id, kind: d.kind, created_at: d.created_at, url: `${c.url.origin}${await signFileUrl(c.env, d.r2_key)}` }))));
+    const docs = await all<{ id: string; kind: string; r2_key: string; created_at: string; status: string; note: string | null }>(c.env.DB, "SELECT id, kind, r2_key, created_at, status, note FROM provider_documents WHERE user_id = ? ORDER BY created_at DESC", u.id);
+    return json(await Promise.all(docs.map(async (d) => ({ id: d.id, kind: d.kind, created_at: d.created_at, status: d.status, note: d.note, url: `${c.url.origin}${await signFileUrl(c.env, d.r2_key)}` }))));
   });
 
   /* ---------- Files ---------- */

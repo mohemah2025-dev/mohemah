@@ -11,7 +11,7 @@ export function validateDoc(file: File | null, label: string): string | null {
   return null;
 }
 
-export type DocLink = { id: string; kind: "id" | "certificate"; created_at: string; url: string };
+export type DocLink = { id: string; kind: "id" | "certificate"; created_at: string; url: string; status?: "pending" | "approved" | "rejected"; note?: string | null };
 export const docKindLabel = (k: string) => (k === "id" ? "الهوية / الإقامة" : "الشهادة");
 
 /** Re-uploads documents for a pending or rejected application (provider app). */

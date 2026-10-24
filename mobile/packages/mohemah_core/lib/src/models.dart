@@ -24,6 +24,7 @@ class Profile {
   String? get region => jStr(raw['region']);
   String? get gender => jStr(raw['gender']);
   String? get bio => jStr(raw['bio']);
+  String? get avatarUrl => jStr(raw['avatar_url']);
   int get coinBalance => jInt(raw['coin_balance']);
   double get rating => jDouble(raw['rating']);
   int get ratingCount => jInt(raw['rating_count']);
@@ -171,6 +172,7 @@ class CustomerOrder {
   String? get providerPhone => jStr(provider?['phone']);
   double get providerRating => jDouble(provider?['rating']);
   int get providerRatingCount => jInt(provider?['rating_count']);
+  String? get providerAvatar => jStr(provider?['avatar_url']);
   bool get isActive => const ['accepted', 'arrived', 'in_progress'].contains(status);
   bool get isOpen => status == 'pending' || isActive;
 }

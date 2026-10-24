@@ -25,12 +25,16 @@ def call(method, path, body=None, token=None, form=None, expect=None):
     elif body is not None:
         data = json.dumps(body).encode()
         headers["content-type"] = "application/json"
-    req = urllib.request.Request(BASE + path, data=data, method=method, headers=headers)
-    try:
-        with urllib.request.urlopen(req) as r:
-            status, raw = r.status, r.read()
-    except urllib.error.HTTPError as e:
-        status, raw = e.code, e.read()
+    for attempt in range(3):
+        req = urllib.request.Request(BASE + path, data=data, method=method, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=300) as r:
+                status, raw = r.status, r.read()
+        except urllib.error.HTTPError as e:
+            status, raw = e.code, e.read()
+        # Local `wrangler dev` sometimes restarts the isolate mid-request; retry like the platform would.
+        if not (status == 503 and b"restarted mid-request" in raw):
+            break
     try: payload = json.loads(raw)
     except Exception: payload = raw
     if expect is not None:

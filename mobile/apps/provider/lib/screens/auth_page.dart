@@ -57,6 +57,7 @@ class _ProviderRegisterFormState extends State<ProviderRegisterForm> {
   final _pw = TextEditingController();
   String? _gender;
   String? _region;
+  PickedLocation? _loc;
   final Set<String> _services = {};
   PickedDoc? _idDoc;
   PickedDoc? _certDoc;
@@ -191,6 +192,17 @@ class _ProviderRegisterFormState extends State<ProviderRegisterForm> {
           onChanged: (v) => setState(() => _gender = v),
         ),
         RegionField(value: _region, label: 'مدينة العمل', onChanged: (v) => setState(() => _region = v)),
+        LocationPicker(
+          picked: _loc,
+          onPicked: (l) {
+            setState(() => _loc = l);
+            if (l.region != null) {
+              setState(() => _region = l.region);
+            } else {
+              showSnack(context, 'موقعك خارج المدن المتاحة، اختر المدينة يدوياً', error: true);
+            }
+          },
+        ),
         if (!widget.applyExisting) ...[
           Field(controller: _phone, label: 'رقم الجوال', hint: '05XXXXXXXX', icon: Icons.phone_iphone_rounded, keyboard: TextInputType.phone, ltr: true, validator: validatePhone),
           Field(controller: _email, label: 'البريد الإلكتروني', hint: 'name@example.com', icon: Icons.alternate_email_rounded, keyboard: TextInputType.emailAddress, ltr: true, validator: validateEmail),

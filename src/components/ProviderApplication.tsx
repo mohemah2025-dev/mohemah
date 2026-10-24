@@ -55,7 +55,7 @@ export function ProviderApplicationStatus() {
 
 type Applicant = {
   id: string; full_name: string | null; phone: string | null; email: string | null; national_id: string | null; nationality: string | null;
-  gender: string | null; region: string | null; verification_status: string; review_note: string | null; requested_services: string[]; created_at: string;
+  gender: string | null; region: string | null; verification_status: string; review_note: string | null; requested_services: string[]; requested_service_names?: string[]; created_at: string;
 };
 
 const STATUS_TABS = [
@@ -74,6 +74,10 @@ export function AdminProviderApplications({ onChanged }: { onChanged?: () => voi
   const [docs, setDocs] = useState<DocLink[]>([]);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  // Per-document decision for the latest ID and certificate.
+  const [docDecision, setDocDecision] = useState<Record<"id" | "certificate", { status: "ok" | "rejected" | null; note: string }>>({ id: { status: null, note: "" }, certificate: { status: null, note: "" } });
+  const setDoc = (kind: "id" | "certificate", patch: Partial<{ status: "ok" | "rejected" | null; note: string }>) =>
+    setDocDecision((d) => ({ ...d, [kind]: { ...d[kind], ...patch } }));
 
   const load = useCallback(async () => {
     try { setRows(await api<Applicant[]>(`/api/admin/applications?status=${tab}`)); } catch { setRows([]); }
@@ -83,14 +87,21 @@ export function AdminProviderApplications({ onChanged }: { onChanged?: () => voi
   const open = async (id: string) => {
     if (openId === id) { setOpenId(null); return; }
     setOpenId(id); setNote(""); setDocs([]);
+    setDocDecision({ id: { status: null, note: "" }, certificate: { status: null, note: "" } });
     try { setDocs(await listProviderDocs(id)); } catch { setDocs([]); }
   };
 
   const review = async (id: string, approve: boolean) => {
-    if (!approve && !note.trim()) return toast.error("اكتب سبب الرفض");
+    const rejectedDoc = docDecision.id.status === "rejected" || docDecision.certificate.status === "rejected";
+    if (!approve && !note.trim() && !rejectedDoc) return toast.error("حدد المستند غير المقبول أو اكتب سبب الرفض");
+    if (approve && rejectedDoc) return toast.error("لا يمكن الموافقة مع وجود مستند غير مقبول");
     setBusy(true);
     try {
-      await api(`/api/admin/applications/${id}/review`, { body: { approve, note: note.trim() || null } });
+      await api(`/api/admin/applications/${id}/review`, { body: {
+        approve, note: note.trim() || null,
+        id_status: docDecision.id.status, id_note: docDecision.id.note.trim() || null,
+        cert_status: docDecision.certificate.status, cert_note: docDecision.certificate.note.trim() || null,
+      } });
       toast.success(approve ? "تمت الموافقة وتفعيل مقدم الخدمة" : "تم رفض الطلب");
       setOpenId(null); load(); onChanged?.();
     } catch (e) { toast.error(errMsg(e, "تعذّر حفظ القرار")); }
@@ -128,15 +139,38 @@ export function AdminProviderApplications({ onChanged }: { onChanged?: () => voi
                   <div><span className="text-muted-foreground block">الجنسية</span>{r.nationality || "-"}</div>
                   <div><span className="text-muted-foreground block">الجنس</span>{r.gender === "female" ? "أنثى" : r.gender === "male" ? "ذكر" : "-"}</div>
                   <div><span className="text-muted-foreground block">المدينة</span>{r.region || "-"}</div>
-                  <div className="min-w-0"><span className="text-muted-foreground block">الخدمات</span>{r.requested_services.map((s) => serviceNames[s]).filter(Boolean).join("، ") || "-"}</div>
+                  <div className="min-w-0 col-span-2 sm:col-span-1"><span className="text-muted-foreground block">الخدمات</span>{(r.requested_service_names?.length ? r.requested_service_names : r.requested_services.map((s) => serviceNames[s]).filter(Boolean)).join("، ") || "لم يحدد خدمات"}</div>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {docs.map((d) => (
-                    <a key={d.id} href={d.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-accent text-accent-foreground text-xs">
-                      <FileText className="w-3.5 h-3.5" /> {docKindLabel(d.kind)}
-                    </a>
-                  ))}
-                  {!docs.length && <span className="text-xs text-muted-foreground">لا توجد مرفقات مرفوعة</span>}
+                <div className="space-y-2">
+                  {(["id", "certificate"] as const).map((kind) => {
+                    const d = docs.find((x) => x.kind === kind);
+                    const dec = docDecision[kind];
+                    return (
+                      <div key={kind} className="rounded-xl border border-border p-2.5 space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {d ? (
+                            <a href={d.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-accent text-accent-foreground text-xs">
+                              <FileText className="w-3.5 h-3.5" /> {docKindLabel(kind)}
+                            </a>
+                          ) : <span className="text-xs text-muted-foreground">{docKindLabel(kind)}: غير مرفوع</span>}
+                          {d?.status === "approved" && <span className="text-[11px] text-success">✓ مقبول سابقاً</span>}
+                          {d?.status === "rejected" && <span className="text-[11px] text-destructive">✗ مرفوض سابقاً{d.note ? `: ${d.note}` : ""}</span>}
+                          {tab !== "approved" && d && (
+                            <div className="ms-auto flex gap-1">
+                              <button type="button" onClick={() => setDoc(kind, { status: dec.status === "ok" ? null : "ok" })}
+                                className={`px-2.5 py-1 rounded-lg text-xs inline-flex items-center gap-1 ${dec.status === "ok" ? "bg-success text-white" : "bg-muted"}`}><Check className="w-3.5 h-3.5" /> سليم</button>
+                              <button type="button" onClick={() => setDoc(kind, { status: dec.status === "rejected" ? null : "rejected" })}
+                                className={`px-2.5 py-1 rounded-lg text-xs inline-flex items-center gap-1 ${dec.status === "rejected" ? "bg-destructive text-white" : "bg-muted"}`}><X className="w-3.5 h-3.5" /> غير مقبول</button>
+                            </div>
+                          )}
+                        </div>
+                        {dec.status === "rejected" && (
+                          <input value={dec.note} onChange={(e) => setDoc(kind, { note: e.target.value })} maxLength={300}
+                            placeholder={kind === "id" ? "سبب رفض الهوية (مثال: الصورة غير واضحة)" : "سبب رفض الشهادة (مثال: الشهادة منتهية)"} className="admin-input text-xs" />
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
                 {r.review_note && <p className="text-xs text-muted-foreground">ملاحظة سابقة: {r.review_note}</p>}
                 {tab !== "approved" && (

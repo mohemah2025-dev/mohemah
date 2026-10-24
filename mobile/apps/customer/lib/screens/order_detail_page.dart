@@ -171,11 +171,7 @@ class _ProviderCard extends StatelessWidget {
     return AppCard(
       child: Column(children: [
         Row(children: [
-          CircleAvatar(
-            radius: 24,
-            backgroundColor: Brand.primary.withValues(alpha: 0.12),
-            child: Text(name.isEmpty ? '؟' : name.characters.first, style: const TextStyle(fontWeight: FontWeight.w800, color: Brand.primary, fontSize: 18)),
-          ),
+          Avatar(name: name, url: order.providerAvatar, radius: 26),
           const SizedBox(width: 12),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

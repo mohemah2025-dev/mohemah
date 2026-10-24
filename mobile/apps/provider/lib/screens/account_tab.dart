@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:mohemah_core/mohemah_core.dart';
 
 import '../provider_store.dart';
@@ -22,10 +23,16 @@ class ProviderAccountTab extends StatelessWidget {
       body: ListView(padding: const EdgeInsets.fromLTRB(16, 4, 16, 30), children: [
         AppCard(
           child: Row(children: [
-            CircleAvatar(
-              radius: 30,
-              backgroundColor: Brand.primaryDeep,
-              child: Text(p.fullName.characters.first, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w800)),
+            GestureDetector(
+              onTap: () => _changePhoto(context),
+              child: Stack(clipBehavior: Clip.none, children: [
+                Avatar(name: p.fullName, url: p.avatarUrl, radius: 32, color: Brand.primaryDeep, onLight: false),
+                const Positioned(
+                  bottom: -2,
+                  left: -2,
+                  child: CircleAvatar(radius: 12, backgroundColor: Colors.white, child: Icon(Icons.photo_camera_rounded, size: 15, color: Brand.primaryDeep)),
+                ),
+              ]),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -53,13 +60,11 @@ class ProviderAccountTab extends StatelessWidget {
             onTap: () => push(const BillingPage()),
           ),
           MenuTile(icon: Icons.receipt_long_rounded, title: 'سجل العمليات', onTap: () => push(const TransactionsPage())),
-          MenuTile(icon: Icons.build_circle_rounded, title: 'خدماتي', subtitle: 'الخدمات التي تستقبل طلباتها', onTap: () => push(const MyServicesPage())),
           MenuTile(icon: Icons.star_rounded, title: 'تقييماتي', onTap: () => push(const RatingsPage())),
         ]),
         const SizedBox(height: 16),
         MenuGroup(children: [
           MenuTile(icon: Icons.notifications_rounded, title: 'الإشعارات', onTap: () => push(const NotificationsPage())),
-          MenuTile(icon: Icons.support_agent_rounded, title: 'مراسلة الإدارة', onTap: () => push(const SupportMessagesPage())),
           MenuTile(icon: Icons.policy_rounded, title: 'شروط مقدمي الخدمة', onTap: () => push(const PoliciesPage(audience: 'providers'))),
         ]),
         const SizedBox(height: 16),
@@ -83,6 +88,35 @@ class ProviderAccountTab extends StatelessWidget {
         const Center(child: Text('مهمة شريك • الإصدار 1.0.0', style: TextStyle(color: Brand.mutedFg, fontSize: 12))),
       ]),
     );
+  }
+}
+
+/// Picks a photo (camera or gallery, compressed on the device) and uploads it as the profile photo.
+Future<void> _changePhoto(BuildContext context) async {
+  final source = await showModalBottomSheet<ImageSource>(
+    context: context,
+    builder: (c) => SafeArea(
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const Text('الصورة الشخصية', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+        ListTile(leading: const Icon(Icons.photo_camera_rounded), title: const Text('التقاط صورة'), onTap: () => Navigator.pop(c, ImageSource.camera)),
+        ListTile(leading: const Icon(Icons.photo_library_rounded), title: const Text('اختيار من الصور'), onTap: () => Navigator.pop(c, ImageSource.gallery)),
+        const SizedBox(height: 8),
+      ]),
+    ),
+  );
+  if (source == null || !context.mounted) return;
+  final s = SessionScope.read(context);
+  try {
+    final x = await ImagePicker().pickImage(source: source, maxWidth: 800, maxHeight: 800, imageQuality: 85, preferredCameraDevice: CameraDevice.front);
+    if (x == null) return;
+    final bytes = await x.readAsBytes();
+    final png = x.name.toLowerCase().endsWith('.png');
+    s.applyMe(await s.api.multipart('/api/me/avatar', const {}, [
+      UploadFile(field: 'file', filename: png ? 'avatar.png' : 'avatar.jpg', bytes: bytes, contentType: png ? 'image/png' : 'image/jpeg'),
+    ]));
+    if (context.mounted) showSnack(context, 'تم تحديث صورتك');
+  } catch (e) {
+    if (context.mounted) showError(context, e);
   }
 }
 

@@ -1,0 +1,77 @@
+# iOS builds for TestFlight on Codemagic (cloud Macs — no Mac needed).
+#
+# One-time setup (see mobile/TESTFLIGHT.md):
+#  1. codemagic.io → sign in with GitHub → add the repository mohemah2025-dev/mohemah.
+#  2. Team settings → Integrations → Developer Portal → connect an App Store Connect API key
+#     and name it exactly:  Mohemah ASC
+#  3. App settings → Environment variables → group "mohemah" → API_BASE = https://app.<account>.workers.dev
+#     (optional) GOOGLE_MAPS_API_KEY = Google Maps key for the map picker
+#  4. Start a build: "iOS • مهمة" or "iOS • مهمة شريك". The app appears in TestFlight after Apple's processing.
+
+definitions:
+  build_scripts: &build_scripts
+    - name: Generate the iOS project
+      script: |
+        cd mobile/apps/$APP
+        flutter create --platforms=android,ios --org sa.mohemah --project-name mohemah_$APP .
+        rm -rf test
+        python3 ../../tool/configure_platforms.py . $APP
+        flutter pub get
+        dart run flutter_launcher_icons
+        dart run flutter_native_splash:create
+    - name: Code signing
+      script: xcode-project use-profiles --project "mobile/apps/$APP/ios/Runner.xcodeproj"
+    - name: Build IPA
+      script: |
+        cd mobile/apps/$APP
+        flutter build ipa --release \
+          --dart-define=API_BASE="$API_BASE" --dart-define=GOOGLE_MAPS_KEY="$GOOGLE_MAPS_API_KEY" $(python3 ../../tool/firebase_defines.py $APP ios) \
+          --build-name=1.0.0 --build-number=$BUILD_NUMBER \
+          --export-options-plist=/Users/builder/export_options.plist
+  publishing: &publishing
+    app_store_connect:
+      auth: integration
+      submit_to_testflight: true
+
+workflows:
+  ios-customer:
+    name: iOS • مهمة
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      app_store_connect: Mohemah ASC
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      groups: [mohemah]
+      vars:
+        APP: customer
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: sa.mohemah.app
+    scripts: *build_scripts
+    artifacts:
+      - mobile/apps/customer/build/ios/ipa/*.ipa
+    publishing: *publishing
+
+  ios-provider:
+    name: iOS • مهمة شريك
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      app_store_connect: Mohemah ASC
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      groups: [mohemah]
+      vars:
+        APP: provider
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: sa.mohemah.partner
+    scripts: *build_scripts
+    artifacts:
+      - mobile/apps/provider/build/ios/ipa/*.ipa
+    publishing: *publishing

@@ -1,6 +1,5 @@
 import 'dart:typed_data';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mohemah_core/mohemah_core.dart';
@@ -26,7 +25,7 @@ String _typeFor(String name) {
   return 'image/jpeg';
 }
 
-/// Camera, gallery (both compressed on the device) or a PDF file.
+/// Camera or photo library (compressed on the device).
 Future<PickedDoc?> pickDocument(BuildContext context, String label) async {
   final source = await showModalBottomSheet<String>(
     context: context,
@@ -36,31 +35,22 @@ Future<PickedDoc?> pickDocument(BuildContext context, String label) async {
         const SizedBox(height: 6),
         ListTile(leading: const Icon(Icons.photo_camera_rounded), title: const Text('التقاط صورة'), onTap: () => Navigator.pop(c, 'camera')),
         ListTile(leading: const Icon(Icons.photo_library_rounded), title: const Text('اختيار من الصور'), onTap: () => Navigator.pop(c, 'gallery')),
-        ListTile(leading: const Icon(Icons.picture_as_pdf_rounded), title: const Text('ملف PDF'), onTap: () => Navigator.pop(c, 'pdf')),
         const SizedBox(height: 8),
       ]),
     ),
   );
   if (source == null) return null;
   try {
-    PickedDoc? doc;
-    if (source == 'pdf') {
-      final r = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: const ['pdf'], withData: true);
-      final f = r?.files.single;
-      if (f == null || f.bytes == null) return null;
-      doc = PickedDoc(f.name, f.bytes!, 'application/pdf');
-    } else {
-      final x = await ImagePicker().pickImage(
-        source: source == 'camera' ? ImageSource.camera : ImageSource.gallery,
-        maxWidth: 1800,
-        maxHeight: 1800,
-        imageQuality: 82,
-      );
-      if (x == null) return null;
-      final type = _typeFor(x.name);
-      final name = type == 'image/jpeg' && !x.name.toLowerCase().endsWith('.jpg') && !x.name.toLowerCase().endsWith('.jpeg') ? '${x.name}.jpg' : x.name;
-      doc = PickedDoc(name, await x.readAsBytes(), type);
-    }
+    final x = await ImagePicker().pickImage(
+      source: source == 'camera' ? ImageSource.camera : ImageSource.gallery,
+      maxWidth: 1800,
+      maxHeight: 1800,
+      imageQuality: 82,
+    );
+    if (x == null) return null;
+    final type = _typeFor(x.name);
+    final name = type == 'image/jpeg' && !x.name.toLowerCase().endsWith('.jpg') && !x.name.toLowerCase().endsWith('.jpeg') ? '${x.name}.jpg' : x.name;
+    final doc = PickedDoc(name, await x.readAsBytes(), type);
     if (doc.bytes.length > docMaxBytes) {
       if (context.mounted) showSnack(context, '$label: الحجم الأقصى 5MB', error: true);
       return null;
@@ -104,7 +94,7 @@ class DocSlot extends StatelessWidget {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
-              Text(d == null ? 'صورة واضحة أو ملف PDF (5MB كحد أقصى)' : '${d.name} • ${(d.bytes.length / 1024).round()}KB',
+              Text(d == null ? 'صورة واضحة (5MB كحد أقصى)' : '${d.name} • ${(d.bytes.length / 1024).round()}KB',
                   maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Brand.mutedFg, fontSize: 12)),
             ]),
           ),

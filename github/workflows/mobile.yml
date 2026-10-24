@@ -1,0 +1,154 @@
+# Builds the two Flutter apps (مهمة / مهمة شريك) and publishes test APKs.
+#
+# Before the first run: Settings → Secrets and variables → Actions → Variables →
+#   New repository variable  API_BASE = https://app.<your-account>.workers.dev
+#
+# Output: a release named "mobile-test" with mohemah-customer.apk and mohemah-partner.apk,
+# installable directly on Android phones. iOS is compiled (unsigned) only when requested.
+name: Mobile apps
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "mobile/**"
+      - ".github/workflows/mobile.yml"
+  workflow_dispatch:
+    inputs:
+      ios:
+        description: "Also compile the iOS apps (unsigned check, uses macOS minutes)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mobile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Android • ${{ matrix.app }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [customer, provider]
+    env:
+      API_BASE: ${{ vars.API_BASE }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check API_BASE
+        run: |
+          if [ -z "$API_BASE" ]; then
+            echo "::error::Set the repository variable API_BASE (Settings → Secrets and variables → Actions → Variables) to your Worker URL, e.g. https://app.<account>.workers.dev"
+            exit 1
+          fi
+          echo "API_BASE=$API_BASE"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate platform folders
+        working-directory: mobile/apps/${{ matrix.app }}
+        run: |
+          flutter --version
+          if [ ! -d android ]; then
+            flutter create --platforms=android,ios --org sa.mohemah --project-name mohemah_${{ matrix.app }} .
+            rm -rf test
+          fi
+          python3 ../../tool/configure_platforms.py . ${{ matrix.app }}
+
+      - name: Dependencies, icon and launch screen
+        working-directory: mobile/apps/${{ matrix.app }}
+        run: |
+          flutter pub get
+          dart run flutter_launcher_icons
+          dart run flutter_native_splash:create
+
+      - name: Analyze (report only; the build below is the gate)
+        continue-on-error: true
+        run: |
+          (cd mobile/packages/mohemah_core && flutter pub get && flutter analyze --no-fatal-infos --no-fatal-warnings)
+          (cd mobile/apps/${{ matrix.app }} && flutter analyze --no-fatal-infos --no-fatal-warnings lib)
+
+      - name: Build APK
+        working-directory: mobile/apps/${{ matrix.app }}
+        run: flutter build apk --release --dart-define=API_BASE="$API_BASE" --build-number=${{ github.run_number }}
+
+      - name: Rename
+        run: |
+          name=${{ matrix.app == 'customer' && 'mohemah-customer' || 'mohemah-partner' }}
+          mkdir -p out
+          cp mobile/apps/${{ matrix.app }}/build/app/outputs/flutter-apk/app-release.apk out/$name.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk-${{ matrix.app }}
+          path: out/*.apk
+          retention-days: 30
+
+  publish:
+    name: Publish test APKs
+    needs: android
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: apk-*
+          merge-multiple: true
+          path: out
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: mobile-test
+          name: "نسخ تجريبية — مهمة ومهمة شريك"
+          prerelease: true
+          make_latest: false
+          body: |
+            نسخ تجريبية لأجهزة أندرويد (رقم البناء ${{ github.run_number }}).
+            - mohemah-customer.apk — تطبيق «مهمة» لطالب الخدمة
+            - mohemah-partner.apk — تطبيق «مهمة شريك» لمقدم الخدمة
+            حمّل الملف على الجوال واسمح بالتثبيت من مصادر غير معروفة عند الطلب.
+          files: out/*.apk
+
+  ios:
+    name: iOS • ${{ matrix.app }} (unsigned check)
+    if: github.event_name == 'workflow_dispatch' && inputs.ios
+    runs-on: macos-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [customer, provider]
+    env:
+      API_BASE: ${{ vars.API_BASE }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Generate platform folders
+        working-directory: mobile/apps/${{ matrix.app }}
+        run: |
+          if [ ! -d ios ]; then
+            flutter create --platforms=android,ios --org sa.mohemah --project-name mohemah_${{ matrix.app }} .
+            rm -rf test
+          fi
+          python3 ../../tool/configure_platforms.py . ${{ matrix.app }}
+          flutter pub get
+          dart run flutter_launcher_icons
+          dart run flutter_native_splash:create
+      - name: Build (no code signing)
+        working-directory: mobile/apps/${{ matrix.app }}
+        run: flutter build ios --release --no-codesign --dart-define=API_BASE="$API_BASE"

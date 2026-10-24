@@ -1,0 +1,166 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:mohemah_core/mohemah_core.dart';
+
+import '../orders_store.dart';
+import 'addresses_page.dart';
+import 'auth_page.dart';
+
+class AccountTab extends StatelessWidget {
+  const AccountTab({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final session = SessionScope.of(context);
+    final settings = PublicScope.of(context).settings;
+    final p = session.profile;
+    void push(Widget page) => Navigator.push(context, MaterialPageRoute(builder: (_) => page));
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('حسابي')),
+      body: ListView(padding: const EdgeInsets.fromLTRB(16, 4, 16, 30), children: [
+        if (p == null)
+          AppCard(
+            child: Column(children: [
+              const Icon(Icons.account_circle_rounded, size: 64, color: Brand.primary),
+              const SizedBox(height: 8),
+              const Text('سجّل دخولك لإدارة حسابك وعناوينك وطلباتك', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 14),
+              FilledButton(onPressed: () => ensureSignedIn(context), child: const Text('تسجيل الدخول / حساب جديد')),
+            ]),
+          )
+        else ...[
+          AppCard(
+            child: Row(children: [
+              CircleAvatar(
+                radius: 30,
+                backgroundColor: Brand.primary,
+                child: Text(p.fullName.characters.first, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w800)),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(p.fullName, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                  if (p.email != null) Text(p.email!, textDirection: TextDirection.ltr, style: const TextStyle(color: Brand.mutedFg, fontSize: 12.5)),
+                  if (p.phone != null) Text(p.phone!, textDirection: TextDirection.ltr, style: const TextStyle(color: Brand.mutedFg, fontSize: 12.5)),
+                ]),
+              ),
+              IconButton(onPressed: () => push(const ProfileEditPage()), icon: const Icon(Icons.edit_rounded, color: Brand.primary)),
+            ]),
+          ),
+          if (p.referralCode != null) ...[
+            const SizedBox(height: 10),
+            AppCard(
+              color: Brand.accent,
+              child: Row(children: [
+                const Icon(Icons.card_giftcard_rounded, color: Brand.accentFg),
+                const SizedBox(width: 10),
+                const Expanded(child: Text('رمز الإحالة', style: TextStyle(fontWeight: FontWeight.w700, color: Brand.accentFg))),
+                SelectableText(p.referralCode!, style: const TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1.5)),
+                IconButton(
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: p.referralCode!));
+                    showSnack(context, 'تم نسخ رمز الإحالة');
+                  },
+                  icon: const Icon(Icons.copy_rounded, size: 20, color: Brand.accentFg),
+                ),
+              ]),
+            ),
+          ],
+          const SizedBox(height: 16),
+          MenuGroup(children: [
+            MenuTile(icon: Icons.place_rounded, title: 'عناويني', subtitle: 'العناوين المحفوظة للطلبات الحضورية', onTap: () => push(const AddressesPage())),
+            MenuTile(
+              icon: Icons.notifications_rounded,
+              title: 'الإشعارات',
+              onTap: () {
+                OrdersScope.read(context).markNotificationsSeen();
+                push(const NotificationsPage());
+              },
+            ),
+            MenuTile(icon: Icons.support_agent_rounded, title: 'الرسائل مع الإدارة', onTap: () => push(const SupportMessagesPage())),
+          ]),
+        ],
+        const SizedBox(height: 16),
+        MenuGroup(children: [
+          MenuTile(icon: Icons.policy_rounded, title: 'السياسات والشروط', onTap: () => push(const PoliciesPage(audience: 'customers'))),
+          MenuTile(icon: Icons.info_rounded, title: 'عن مهمة', onTap: () => push(const _AboutPage())),
+          if (settings.supportPhone != null || settings.supportEmail != null)
+            MenuTile(
+              icon: Icons.call_rounded,
+              title: 'اتصل بنا',
+              subtitle: settings.supportPhone ?? settings.supportEmail,
+              onTap: () => settings.supportPhone != null ? callPhone(context, settings.supportPhone!) : openUrl(context, 'mailto:${settings.supportEmail}'),
+            ),
+          MenuTile(
+            icon: Icons.engineering_rounded,
+            title: 'هل لديك مهارة أو خبرة؟',
+            subtitle: 'سجّل في تطبيق «مهمة شريك» وابدأ استقبال الطلبات',
+            color: Brand.accentFg,
+            onTap: () => push(const _JoinProvidersPage()),
+          ),
+        ]),
+        if (p != null) ...[
+          const SizedBox(height: 16),
+          MenuGroup(children: [
+            MenuTile(icon: Icons.lock_rounded, title: 'تغيير كلمة المرور', onTap: () => push(const ChangePasswordPage())),
+            MenuTile(icon: Icons.logout_rounded, title: 'تسجيل خروج', onTap: () => signOutFlow(context)),
+            MenuTile(icon: Icons.delete_forever_rounded, title: 'حذف الحساب', color: Brand.danger, onTap: () => deleteAccountFlow(context)),
+          ]),
+        ],
+        const SizedBox(height: 20),
+        const Center(child: Text('مهمة • الإصدار 1.0.0', style: TextStyle(color: Brand.mutedFg, fontSize: 12))),
+      ]),
+    );
+  }
+}
+
+class _AboutPage extends StatelessWidget {
+  const _AboutPage();
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: const Text('عن مهمة')),
+        body: ListView(padding: const EdgeInsets.all(20), children: [
+          Center(
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(gradient: Brand.gradient, borderRadius: BorderRadius.circular(28)),
+              child: Image.asset('assets/logo.png', package: 'mohemah_core', height: 70),
+            ),
+          ),
+          const SizedBox(height: 18),
+          const Text('مهمة', textAlign: TextAlign.center, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 10),
+          const Text(
+            'منصة رقمية تربط الأفراد الباحثين عن خدمات يومية بمقدمي الخدمات المحترفين، بطريقة سريعة وسهلة تعتمد على الموقع والاحتياج الفعلي.',
+            textAlign: TextAlign.center,
+            style: TextStyle(height: 1.8),
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            'تختار نوع الخدمة وتحدد إن كانت حضورية أو عن بُعد، ثم يصل طلبك لمقدمي الخدمة في مدينتك، وتتابع التنفيذ حتى اكتماله.',
+            textAlign: TextAlign.center,
+            style: TextStyle(height: 1.8, color: Brand.mutedFg),
+          ),
+        ]),
+      );
+}
+
+class _JoinProvidersPage extends StatelessWidget {
+  const _JoinProvidersPage();
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: const Text('انضم كمقدم خدمة')),
+        body: ListView(padding: const EdgeInsets.all(20), children: const [
+          Icon(Icons.engineering_rounded, size: 72, color: Brand.primary),
+          SizedBox(height: 14),
+          Text('هل لديك مهارة أو خبرة؟', textAlign: TextAlign.center, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+          SizedBox(height: 10),
+          Text(
+            'حمّل تطبيق «مهمة شريك»، سجّل بياناتك وأرفق هويتك وشهادتك، وابدأ استقبال الطلبات بعد موافقة الإدارة.',
+            textAlign: TextAlign.center,
+            style: TextStyle(height: 1.8),
+          ),
+        ]),
+      );
+}

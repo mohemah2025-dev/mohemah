@@ -33,12 +33,12 @@ class ProviderHomeTab extends StatelessWidget {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('مرحباً، ${p.firstName}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
                 Row(children: [
-                  const Icon(Icons.workspace_premium_rounded, size: 15, color: Brand.mint),
+                  const Icon(Icons.workspace_premium_outlined, size: 15, color: Brand.mint),
                   const SizedBox(width: 3),
                   Text('مستوى ${tier.name}', style: TextStyle(fontSize: 12.5, color: Colors.white.withValues(alpha: 0.88))),
                   if (p.region != null) ...[
                     const SizedBox(width: 10),
-                    const Icon(Icons.location_on_rounded, size: 15),
+                    const Icon(Icons.location_on_outlined, size: 15),
                     Text(p.region!, style: TextStyle(fontSize: 12.5, color: Colors.white.withValues(alpha: 0.88))),
                   ],
                 ]),
@@ -46,7 +46,7 @@ class ProviderHomeTab extends StatelessWidget {
             ),
             IconButton(
               onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsPage())),
-              icon: const Icon(Icons.notifications_rounded, size: 27),
+              icon: const Icon(Icons.notifications_outlined, size: 27),
             ),
           ]),
         ),
@@ -61,13 +61,13 @@ class ProviderHomeTab extends StatelessWidget {
                 color: const Color(0xFFEAF1FF),
                 onTap: () => ProviderShell.goTo(1, section: 1),
                 child: Row(children: [
-                  const Icon(Icons.handyman_rounded, color: Brand.primaryDeep),
+                  const Icon(Icons.handyman_outlined, color: Brand.primaryDeep),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text('لديك ${store.feed!.active.length} طلب جارٍ — تابع التنفيذ',
                         style: const TextStyle(fontWeight: FontWeight.w800, color: Brand.primaryDeep)),
                   ),
-                  const Icon(Icons.chevron_left_rounded, color: Brand.primaryDeep),
+                  const Icon(Icons.chevron_left_outlined, color: Brand.primaryDeep),
                 ]),
               ),
             if (stats != null) ...[const SizedBox(height: 14), DemandChart(data: stats.demandByHour)],
@@ -85,9 +85,16 @@ class _ConnectionCard extends StatefulWidget {
   State<_ConnectionCard> createState() => _ConnectionCardState();
 }
 
-class _ConnectionCardState extends State<_ConnectionCard> {
+class _ConnectionCardState extends State<_ConnectionCard> with SingleTickerProviderStateMixin {
   String? _panel;
   bool _toggling = false;
+  late final AnimationController _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 2200))..repeat();
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
 
   Future<void> _toggle(bool online) async {
     if (_toggling) return;
@@ -125,7 +132,13 @@ class _ConnectionCardState extends State<_ConnectionCard> {
             // The connection circle in the middle.
             Expanded(
               child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                GestureDetector(
+                SizedBox(
+                  width: 230,
+                  height: 230,
+                  child: AnimatedBuilder(
+                    animation: _pulse,
+                    builder: (context, child) => CustomPaint(painter: _PulsePainter(online ? _pulse.value : null), child: Center(child: child)),
+                    child: GestureDetector(
                   onTap: feed == null ? null : () => _toggle(online),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 300),
@@ -146,14 +159,16 @@ class _ConnectionCardState extends State<_ConnectionCard> {
                     child: _toggling
                         ? Center(child: CircularProgressIndicator(color: online ? Colors.white : Brand.primaryDeep))
                         : Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                            Icon(Icons.power_settings_new_rounded, size: 54, color: online ? Colors.white : Brand.mutedFg),
+                            Icon(Icons.power_settings_new_outlined, size: 54, color: online ? Colors.white : Brand.mutedFg),
                             const SizedBox(height: 6),
                             Text(online ? 'متصل' : 'غير متصل',
                                 style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800, color: online ? Colors.white : Brand.mutedFg)),
                           ]),
                   ),
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 4),
                 Text(
                   online ? 'أنت متاح لاستقبال الطلبات الآن' : 'اضغط على الدائرة لبدء استقبال الطلبات',
                   textAlign: TextAlign.center,
@@ -166,7 +181,7 @@ class _ConnectionCardState extends State<_ConnectionCard> {
               padding: const EdgeInsets.fromLTRB(10, 4, 10, 10),
               child: Row(children: [
                 _CornerIcon(
-                  icon: Icons.home_repair_service_rounded,
+                  icon: Icons.home_repair_service_outlined,
                   label: 'الخدمات المتاحة',
                   sub: '${feed?.servicesCount ?? 0} مختارة',
                   color: const Color(0xFF2B6CD9),
@@ -175,7 +190,7 @@ class _ConnectionCardState extends State<_ConnectionCard> {
                 ),
                 const Spacer(),
                 _CornerIcon(
-                  icon: Icons.workspace_premium_rounded,
+                  icon: Icons.workspace_premium_outlined,
                   label: 'برنامج الولاء',
                   sub: loyaltyTiers[tierIdx].name,
                   color: const Color(0xFFD99A0B),
@@ -187,19 +202,19 @@ class _ConnectionCardState extends State<_ConnectionCard> {
             const Divider(),
             IntrinsicHeight(
               child: Row(children: [
-                _MiniStat(icon: Icons.assignment_rounded, value: '${feed?.available.length ?? 0}', label: 'طلبات متاحة', onTap: () => ProviderShell.goTo(1, section: 0)),
+                _MiniStat(icon: Icons.assignment_outlined, value: '${feed?.available.length ?? 0}', label: 'طلبات متاحة', onTap: () => ProviderShell.goTo(1, section: 0)),
                 const VerticalDivider(width: 1),
-                _MiniStat(icon: Icons.handyman_rounded, value: '${feed?.active.length ?? 0}', label: 'طلبات جارية', onTap: () => ProviderShell.goTo(1, section: 1)),
+                _MiniStat(icon: Icons.handyman_outlined, value: '${feed?.active.length ?? 0}', label: 'طلبات جارية', onTap: () => ProviderShell.goTo(1, section: 1)),
                 const VerticalDivider(width: 1),
                 subActive
                     ? _MiniStat(
-                        icon: Icons.event_available_rounded,
+                        icon: Icons.event_available_outlined,
                         value: '${math.max(0, (subEnd!.difference(DateTime.now()).inHours / 24).ceil())}',
                         label: 'يوم اشتراك',
                         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BillingPage())),
                       )
                     : _MiniStat(
-                        icon: Icons.toll_rounded,
+                        icon: Icons.toll_outlined,
                         value: '${feed?.balance ?? 0}',
                         label: 'كوينز',
                         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BillingPage())),
@@ -226,9 +241,30 @@ class _ConnectionCardState extends State<_ConnectionCard> {
   }
 }
 
-IconData tierIcon(int i) => const [Icons.verified_rounded, Icons.military_tech_rounded, Icons.workspace_premium_rounded, Icons.emoji_events_rounded][math.min(math.max(i, 0), 3)];
+IconData tierIcon(int i) => const [Icons.verified_outlined, Icons.military_tech_outlined, Icons.workspace_premium_outlined, Icons.emoji_events_outlined][math.min(math.max(i, 0), 3)];
 
 /// An icon without a box, used in the card corners.
+/// Soft rings that spread out from the circle while the provider is online (nothing when offline).
+class _PulsePainter extends CustomPainter {
+  _PulsePainter(this.t);
+  final double? t;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final t = this.t;
+    if (t == null) return;
+    final c = size.center(Offset.zero);
+    final r = size.shortestSide / 2;
+    for (var i = 0; i < 2; i++) {
+      final p = (t + i / 2) % 1;
+      canvas.drawCircle(c, 89 + (r - 89) * p, Paint()..color = Brand.primaryDeep.withValues(alpha: 0.22 * (1 - p)));
+    }
+  }
+
+  @override
+  bool shouldRepaint(_PulsePainter old) => old.t != t;
+}
+
 class _CornerIcon extends StatelessWidget {
   const _CornerIcon({required this.icon, required this.label, required this.sub, required this.color, required this.active, required this.onTap});
   final IconData icon;
@@ -252,7 +288,7 @@ class _CornerIcon extends StatelessWidget {
             Text(label, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: active ? color : Brand.foreground)),
             Text(sub, style: const TextStyle(fontSize: 11, color: Brand.mutedFg)),
           ]),
-          Icon(active ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded, size: 18, color: Brand.mutedFg),
+          Icon(active ? Icons.keyboard_arrow_up_outlined : Icons.keyboard_arrow_down_outlined, size: 18, color: Brand.mutedFg),
         ]),
       ),
     );
@@ -376,7 +412,7 @@ class _ServiceCheck extends StatelessWidget {
                 const Positioned(
                   top: -4,
                   left: -4,
-                  child: CircleAvatar(radius: 11, backgroundColor: Brand.success, child: Icon(Icons.check_rounded, size: 15, color: Colors.white)),
+                  child: CircleAvatar(radius: 11, backgroundColor: Brand.success, child: Icon(Icons.check_outlined, size: 15, color: Colors.white)),
                 ),
             ]),
             const SizedBox(height: 4),

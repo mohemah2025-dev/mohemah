@@ -94,11 +94,11 @@ class _ProviderShellState extends State<ProviderShell> {
             const NavigationDestination(icon: Icon(Icons.radio_button_checked_outlined), selectedIcon: Icon(Icons.radio_button_checked_rounded), label: 'الرئيسية'),
             NavigationDestination(
               icon: Badge(isLabelVisible: available + active > 0, label: Text('${available + active}'), child: const Icon(Icons.assignment_outlined)),
-              selectedIcon: Badge(isLabelVisible: available + active > 0, label: Text('${available + active}'), child: const Icon(Icons.assignment_rounded)),
+              selectedIcon: Badge(isLabelVisible: available + active > 0, label: Text('${available + active}'), child: const Icon(Icons.assignment_outlined)),
               label: 'الطلبات',
             ),
-            const NavigationDestination(icon: Icon(Icons.insights_outlined), selectedIcon: Icon(Icons.insights_rounded), label: 'نشاطي'),
-            const NavigationDestination(icon: Icon(Icons.person_outline_rounded), selectedIcon: Icon(Icons.person_rounded), label: 'حسابي'),
+            const NavigationDestination(icon: Icon(Icons.insights_outlined), selectedIcon: Icon(Icons.insights_outlined), label: 'نشاطي'),
+            const NavigationDestination(icon: Icon(Icons.person_outline_rounded), selectedIcon: Icon(Icons.person_outlined), label: 'حسابي'),
           ],
         ),
       ),
@@ -195,14 +195,14 @@ class _IncomingOrderDialogState extends State<IncomingOrderDialog> {
                 decoration: const BoxDecoration(gradient: Brand.providerGradient),
                 padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
                 child: Row(children: [
-                  const Icon(Icons.notifications_active_rounded, color: Colors.white, size: 28),
+                  const Icon(Icons.notifications_active_outlined, color: Colors.white, size: 28),
                   const SizedBox(width: 10),
                   const Expanded(child: Text('طلب جديد', style: TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w800))),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(20)),
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      const Icon(Icons.timer_rounded, color: Colors.white, size: 16),
+                      const Icon(Icons.timer_outlined, color: Colors.white, size: 16),
                       const SizedBox(width: 4),
                       Text('${secs}ث', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
                     ]),
@@ -217,10 +217,10 @@ class _IncomingOrderDialogState extends State<IncomingOrderDialog> {
                   if (o.subServiceName != null) Text(o.serviceName, style: const TextStyle(color: Brand.mutedFg)),
                   const SizedBox(height: 8),
                   Wrap(spacing: 6, runSpacing: 6, children: [
-                    Pill(modeLabel(o.mode), icon: o.mode == 'remote' ? Icons.videocam_rounded : Icons.home_work_rounded),
-                    if (o.region != null) Pill(o.region!, icon: Icons.location_on_rounded),
-                    Pill(o.scheduledAt == null ? 'في أقرب وقت' : fmtDateTime(o.scheduledAt), icon: Icons.schedule_rounded),
-                    Pill('${o.customerName} • ${o.customerRating.toStringAsFixed(1)}', icon: Icons.person_rounded),
+                    Pill(modeLabel(o.mode), icon: o.mode == 'remote' ? Icons.videocam_outlined : Icons.home_work_outlined),
+                    if (o.region != null) Pill(o.region!, icon: Icons.location_on_outlined),
+                    Pill(o.scheduledAt == null ? 'في أقرب وقت' : fmtDateTime(o.scheduledAt), icon: Icons.schedule_outlined),
+                    Pill('${o.customerName} • ${o.customerRating.toStringAsFixed(1)}', icon: Icons.person_outlined),
                   ]),
                   if ((o.description ?? '').isNotEmpty) ...[
                     const SizedBox(height: 10),
@@ -246,7 +246,7 @@ class _IncomingOrderDialogState extends State<IncomingOrderDialog> {
                       onPressed: _busy ? null : _accept,
                       icon: _busy
                           ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : const Icon(Icons.check_rounded),
+                          : const Icon(Icons.check_outlined),
                       label: Text(widget.store.feed?.subscriptionEnd != null ? 'قبول' : 'قبول (${o.coinCost} كوين)'),
                     ),
                   ),

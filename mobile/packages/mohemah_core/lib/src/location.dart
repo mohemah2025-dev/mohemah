@@ -131,20 +131,20 @@ class _LocationPickerState extends State<LocationPicker> {
           Expanded(
             child: OutlinedButton.icon(
               onPressed: _busy ? null : _useGps,
-              icon: _busy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.my_location_rounded),
+              icon: _busy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.my_location_outlined),
               label: const Text('تحديد موقعي'),
             ),
           ),
           if (mapsEnabled) ...[
             const SizedBox(width: 8),
-            Expanded(child: OutlinedButton.icon(onPressed: _useMap, icon: const Icon(Icons.map_rounded), label: const Text('من الخريطة'))),
+            Expanded(child: OutlinedButton.icon(onPressed: _useMap, icon: const Icon(Icons.map_outlined), label: const Text('من الخريطة'))),
           ],
         ]),
         if (p != null)
           Padding(
             padding: const EdgeInsets.only(top: 6),
             child: Row(children: [
-              const Icon(Icons.check_circle_rounded, color: Brand.success, size: 16),
+              const Icon(Icons.check_circle_outlined, color: Brand.success, size: 16),
               const SizedBox(width: 4),
               Expanded(child: Text('تم تحديد الموقع${p.region != null ? ' • ${p.region}' : ''}', style: const TextStyle(fontSize: 12, color: Brand.success))),
             ]),
@@ -206,14 +206,14 @@ class _MapPickerPageState extends State<MapPickerPage> {
           child: Center(
             child: Padding(
               padding: EdgeInsets.only(bottom: 44),
-              child: Icon(Icons.location_on_rounded, size: 52, color: Brand.danger),
+              child: Icon(Icons.location_on_outlined, size: 52, color: Brand.danger),
             ),
           ),
         ),
         Positioned(
           left: 16,
           bottom: 100,
-          child: FloatingActionButton.small(heroTag: 'me', onPressed: _goToMe, backgroundColor: Colors.white, child: const Icon(Icons.my_location_rounded, color: Brand.primary)),
+          child: FloatingActionButton.small(heroTag: 'me', onPressed: _goToMe, backgroundColor: Colors.white, child: const Icon(Icons.my_location_outlined, color: Brand.primary)),
         ),
         Positioned(
           left: 16,
@@ -223,7 +223,7 @@ class _MapPickerPageState extends State<MapPickerPage> {
             top: false,
             child: FilledButton.icon(
               onPressed: _busy ? null : _confirm,
-              icon: _busy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.check_rounded),
+              icon: _busy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.check_outlined),
               label: const Text('تأكيد هذا الموقع'),
             ),
           ),

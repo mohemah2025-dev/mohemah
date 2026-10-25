@@ -44,7 +44,7 @@ class _BillingPageState extends State<BillingPage> {
           const Text('وسيلة الدفع', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
           for (final g in gws)
             ListTile(
-              leading: const Icon(Icons.credit_card_rounded),
+              leading: const Icon(Icons.credit_card_outlined),
               title: Text(g.name),
               trailing: g.testMode ? const Pill('تجريبي') : null,
               onTap: () => Navigator.pop(c, g.id),
@@ -104,7 +104,7 @@ class _BillingPageState extends State<BillingPage> {
           IconButton(
             tooltip: 'سجل العمليات',
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TransactionsPage())),
-            icon: const Icon(Icons.receipt_long_rounded),
+            icon: const Icon(Icons.receipt_long_outlined),
           ),
         ],
       ),
@@ -129,7 +129,7 @@ class _BillingPageState extends State<BillingPage> {
                             ),
                           ]),
                         ),
-                        const Icon(Icons.toll_rounded, color: Colors.white, size: 54),
+                        const Icon(Icons.toll_outlined, color: Colors.white, size: 54),
                       ]),
                     ),
                     if (b.testPayments) ...[
@@ -138,7 +138,7 @@ class _BillingPageState extends State<BillingPage> {
                         color: Color(0xFFFBF1DA),
                         padding: EdgeInsets.all(12),
                         child: Row(children: [
-                          Icon(Icons.science_rounded, color: Brand.warning),
+                          Icon(Icons.science_outlined, color: Brand.warning),
                           SizedBox(width: 8),
                           Expanded(child: Text('وضع الدفع التجريبي: لا يتم خصم أي مبلغ حقيقي.', style: TextStyle(fontSize: 12.5))),
                         ]),
@@ -149,8 +149,8 @@ class _BillingPageState extends State<BillingPage> {
                       SegmentedButton<String>(
                         showSelectedIcon: false,
                         segments: const [
-                          ButtonSegment(value: 'coins', label: Text('الكوينز'), icon: Icon(Icons.toll_rounded)),
-                          ButtonSegment(value: 'subscription', label: Text('الاشتراك'), icon: Icon(Icons.event_available_rounded)),
+                          ButtonSegment(value: 'coins', label: Text('الكوينز'), icon: Icon(Icons.toll_outlined)),
+                          ButtonSegment(value: 'subscription', label: Text('الاشتراك'), icon: Icon(Icons.event_available_outlined)),
                         ],
                         selected: {b.mode},
                         onSelectionChanged: (v) => _setMode(v.first),
@@ -175,7 +175,7 @@ class _BillingPageState extends State<BillingPage> {
                               onTap: () => _topup(b, c),
                               padding: const EdgeInsets.all(12),
                               child: Row(children: [
-                                const Icon(Icons.add_circle_rounded, color: Brand.primaryDeep),
+                                const Icon(Icons.add_circle_outlined, color: Brand.primaryDeep),
                                 const SizedBox(width: 8),
                                 Text('$c كوين', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
                               ]),
@@ -210,7 +210,7 @@ class _BillingPageState extends State<BillingPage> {
                         ),
                     ],
                     if (!b.coinsEnabled && !b.subscriptionEnabled)
-                      const EmptyState(icon: Icons.money_off_rounded, title: 'قبول الطلبات مجاني حالياً'),
+                      const EmptyState(icon: Icons.money_off_outlined, title: 'قبول الطلبات مجاني حالياً'),
                   ]),
                 ),
     );

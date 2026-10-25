@@ -53,7 +53,7 @@ class _AddressesPageState extends State<AddressesPage> {
     final items = _items;
     return Scaffold(
       appBar: AppBar(title: const Text('عناويني')),
-      floatingActionButton: FloatingActionButton.extended(onPressed: _add, icon: const Icon(Icons.add_location_alt_rounded), label: const Text('إضافة عنوان')),
+      floatingActionButton: FloatingActionButton.extended(onPressed: _add, icon: const Icon(Icons.add_location_alt_outlined), label: const Text('إضافة عنوان')),
       body: _error != null && items == null
           ? ErrorRetry(message: _error!, onRetry: _load)
           : items == null
@@ -69,7 +69,7 @@ class _AddressesPageState extends State<AddressesPage> {
                         return AppCard(
                           padding: const EdgeInsets.fromLTRB(14, 12, 4, 12),
                           child: Row(children: [
-                            Icon(a.isDefault ? Icons.home_rounded : Icons.place_rounded, color: Brand.primary),
+                            Icon(a.isDefault ? Icons.home_outlined : Icons.place_outlined, color: Brand.primary),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -147,7 +147,7 @@ class _AddAddressSheetState extends State<_AddAddressSheet> {
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               const Text('عنوان جديد', textAlign: TextAlign.center, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
               const SizedBox(height: 14),
-              Field(controller: _label, label: 'اسم العنوان', hint: 'المنزل، العمل…', icon: Icons.bookmark_rounded, maxLength: 60, validator: (v) => requiredField(v, 'اسم العنوان')),
+              Field(controller: _label, label: 'اسم العنوان', hint: 'المنزل، العمل…', icon: Icons.bookmark_outlined, maxLength: 60, validator: (v) => requiredField(v, 'اسم العنوان')),
               LocationPicker(
                 picked: _gps,
                 onPicked: (l) => setState(() {
@@ -157,10 +157,10 @@ class _AddAddressSheetState extends State<_AddAddressSheet> {
                 }),
               ),
               RegionField(value: _region, onChanged: (v) => setState(() => _region = v)),
-              Field(controller: _address, label: 'تفاصيل العنوان', hint: 'الحي، الشارع، رقم المبنى', icon: Icons.place_rounded, maxLines: 3, maxLength: 300, validator: (v) => requiredField(v, 'تفاصيل العنوان')),
+              Field(controller: _address, label: 'تفاصيل العنوان', hint: 'الحي، الشارع، رقم المبنى', icon: Icons.place_outlined, maxLines: 3, maxLength: 300, validator: (v) => requiredField(v, 'تفاصيل العنوان')),
               SwitchListTile(contentPadding: EdgeInsets.zero, value: _default, onChanged: (v) => setState(() => _default = v), title: const Text('جعله العنوان الافتراضي')),
               const SizedBox(height: 8),
-              BusyButton(label: 'حفظ العنوان', icon: Icons.check_rounded, onPressed: _save),
+              BusyButton(label: 'حفظ العنوان', icon: Icons.check_outlined, onPressed: _save),
             ]),
           ),
         ),

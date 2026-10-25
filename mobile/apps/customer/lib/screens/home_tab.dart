@@ -33,44 +33,20 @@ class HomeTab extends StatelessWidget {
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
           sliver: SliverList.list(children: [
-            if (ads.isNotEmpty) ...[_AdsCarousel(ads: ads), const SizedBox(height: 6)],
-            if (open.isNotEmpty) ...[
-              const SectionTitle('طلبك الجاري', padding: EdgeInsets.fromLTRB(4, 10, 4, 10)),
-              for (final o in open.take(2)) Padding(padding: const EdgeInsets.only(bottom: 10), child: _ActiveOrderCard(order: o)),
-            ],
-            SectionTitle(
-              'تصفّح الخدمات',
-              trailing: TextButton(onPressed: () => CustomerShell.goTo(1), child: const Text('عرض الكل')),
-            ),
-            if (!data.loaded)
-              const Loading()
-            else if (services.isEmpty)
-              const EmptyState(icon: Icons.design_services_outlined, title: 'لا توجد خدمات متاحة حالياً', message: 'عُد قريباً، نضيف خدمات جديدة باستمرار.')
+            // 1) Favorites (search is in the header above).
+            const SectionTitle('خدماتي المفضلة', padding: EdgeInsets.fromLTRB(4, 0, 4, 10)),
+            if (favs.isEmpty)
+              AppCard(
+                padding: const EdgeInsets.all(14),
+                child: Row(children: const [
+                  Icon(Icons.star_outline_rounded, color: Color(0xFFF2B01E)),
+                  SizedBox(width: 10),
+                  Expanded(child: Text('اضغط النجمة بجانب أي مهمة لتظهر هنا وتطلبها بسرعة', style: TextStyle(fontSize: 12.5, color: Brand.mutedFg))),
+                ]),
+              )
             else
-              GridView.count(
-                crossAxisCount: 4,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                mainAxisSpacing: 14,
-                crossAxisSpacing: 8,
-                childAspectRatio: 0.78,
-                children: [
-                  for (final s in services.take(8))
-                    InkWell(
-                      borderRadius: BorderRadius.circular(16),
-                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ServiceDetailPage(service: s))),
-                      child: Column(children: [
-                        ServiceIcon(icon: s.icon, color: s.color, size: 58),
-                        const SizedBox(height: 6),
-                        Text(s.name, maxLines: 2, textAlign: TextAlign.center, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, height: 1.3)),
-                      ]),
-                    ),
-                ],
-              ),
-            if (favs.isNotEmpty) ...[
-              const SectionTitle('خدماتي المفضلة'),
               SizedBox(
-                height: 92,
+                height: 76,
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   itemCount: favs.length,
@@ -78,9 +54,9 @@ class HomeTab extends StatelessWidget {
                   itemBuilder: (_, i) {
                     final sub = favs[i];
                     return SizedBox(
-                      width: 150,
+                      width: 160,
                       child: AppCard(
-                        padding: const EdgeInsets.all(12),
+                        padding: const EdgeInsets.all(10),
                         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => NewOrderPage(sub: sub))),
                         child: Row(children: [
                           ServiceIcon(icon: sub.icon ?? data.serviceById(sub.serviceId)?.icon, color: sub.color ?? data.serviceById(sub.serviceId)?.color, size: 40),
@@ -92,6 +68,37 @@ class HomeTab extends StatelessWidget {
                   },
                 ),
               ),
+            // 2) Ads (several, auto-sliding).
+            if (ads.isNotEmpty) ...[const SizedBox(height: 18), _AdsCarousel(ads: ads)],
+            // 3) Services: rectangles side by side, scrolling sideways, up to 6.
+            SectionTitle(
+              'عرض الخدمات',
+              trailing: TextButton(onPressed: () => CustomerShell.goTo(1), child: const Text('عرض الكل')),
+            ),
+            if (!data.loaded)
+              const Loading()
+            else if (services.isEmpty)
+              const EmptyState(icon: Icons.design_services_outlined, title: 'لا توجد خدمات متاحة حالياً', message: 'عُد قريباً، نضيف خدمات جديدة باستمرار.')
+            else
+              SizedBox(
+                height: 112,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: services.take(6).length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 10),
+                  itemBuilder: (_, i) {
+                    final s = services[i];
+                    return ServiceBox(
+                      service: s,
+                      width: 104,
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ServiceDetailPage(service: s))),
+                    );
+                  },
+                ),
+              ),
+            if (open.isNotEmpty) ...[
+              const SectionTitle('طلبك الجاري'),
+              for (final o in open.take(2)) Padding(padding: const EdgeInsets.only(bottom: 10), child: _ActiveOrderCard(order: o)),
             ],
             const SizedBox(height: 18),
             const _HowItWorks(),
@@ -119,7 +126,7 @@ class _Header extends StatelessWidget {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(p == null ? 'أهلاً بك في مهمة' : 'مرحباً، ${p.firstName}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
               Row(children: [
-                const Icon(Icons.location_on_rounded, size: 15),
+                const Icon(Icons.location_on_outlined, size: 15),
                 const SizedBox(width: 3),
                 Text(p?.region ?? 'المملكة العربية السعودية', style: TextStyle(fontSize: 12.5, color: Colors.white.withValues(alpha: 0.88))),
               ]),
@@ -131,7 +138,7 @@ class _Header extends StatelessWidget {
               OrdersScope.read(context).markNotificationsSeen();
               await Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsPage()));
             },
-            icon: Badge(isLabelVisible: unread > 0, label: Text('$unread'), child: const Icon(Icons.notifications_rounded, size: 27)),
+            icon: Badge(isLabelVisible: unread > 0, label: Text('$unread'), child: const Icon(Icons.notifications_outlined, size: 27)),
           ),
         ]),
         const SizedBox(height: 16),
@@ -144,7 +151,7 @@ class _Header extends StatelessWidget {
             child: const Padding(
               padding: EdgeInsets.symmetric(horizontal: 14, vertical: 13),
               child: Row(children: [
-                Icon(Icons.search_rounded, color: Brand.mutedFg),
+                Icon(Icons.search_outlined, color: Brand.mutedFg),
                 SizedBox(width: 8),
                 Text('ابحث عن خدمة… سباكة، كهرباء، تدريس', style: TextStyle(color: Brand.mutedFg, fontSize: 13.5)),
               ]),
@@ -261,9 +268,9 @@ class _ActiveOrderCard extends StatelessWidget {
             if (order.providerName != null) Text(order.providerName!, style: const TextStyle(color: Brand.mutedFg, fontSize: 12)),
           ]),
         ),
-        if (order.unread > 0) Badge(label: Text('${order.unread}'), child: const Icon(Icons.chat_rounded, color: Brand.primary)),
+        if (order.unread > 0) Badge(label: Text('${order.unread}'), child: const Icon(Icons.chat_outlined, color: Brand.primary)),
         const SizedBox(width: 6),
-        const Icon(Icons.chevron_left_rounded, color: Brand.mutedFg),
+        const Icon(Icons.chevron_left_outlined, color: Brand.mutedFg),
       ]),
     );
   }
@@ -275,9 +282,9 @@ class _HowItWorks extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const steps = [
-      (Icons.touch_app_rounded, 'اختر الخدمة', 'حدد المهمة وهل هي حضورية أو عن بُعد'),
-      (Icons.campaign_rounded, 'يصل طلبك', 'لمقدمي الخدمة في مدينتك فوراً'),
-      (Icons.handshake_rounded, 'تابع التنفيذ', 'راسل مقدم الخدمة وقيّمه بعد الإنجاز'),
+      (Icons.touch_app_outlined, 'اختر الخدمة', 'حدد المهمة وهل هي حضورية أو عن بُعد'),
+      (Icons.campaign_outlined, 'يصل طلبك', 'لمقدمي الخدمة في مدينتك فوراً'),
+      (Icons.handshake_outlined, 'تابع التنفيذ', 'راسل مقدم الخدمة وقيّمه بعد الإنجاز'),
     ];
     return AppCard(
       color: Brand.accent,

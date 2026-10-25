@@ -148,13 +148,13 @@ class ErrorRetry extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => EmptyState(
-        icon: Icons.wifi_off_rounded,
+        icon: Icons.wifi_off_outlined,
         title: 'تعذّر التحميل',
         message: message,
         action: OutlinedButton.icon(
           style: OutlinedButton.styleFrom(minimumSize: const Size(140, 44)),
           onPressed: onRetry,
-          icon: const Icon(Icons.refresh_rounded),
+          icon: const Icon(Icons.refresh_outlined),
           label: const Text('إعادة المحاولة'),
         ),
       );
@@ -359,7 +359,7 @@ class MenuTile extends StatelessWidget {
       ),
       title: Text(title, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5, color: color ?? Brand.foreground)),
       subtitle: subtitle == null ? null : Text(subtitle!, style: const TextStyle(fontSize: 12, color: Brand.mutedFg)),
-      trailing: trailing ?? const Icon(Icons.chevron_left_rounded, color: Brand.mutedFg),
+      trailing: trailing ?? const Icon(Icons.chevron_left_outlined, color: Brand.mutedFg),
     );
   }
 }

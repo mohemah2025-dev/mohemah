@@ -95,10 +95,10 @@ class _RegisterFormState extends State<_RegisterForm> {
       child: Form(
         key: _form,
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Field(controller: _name, label: 'الاسم', hint: 'الاسم الكامل', icon: Icons.person_rounded, autofill: const [AutofillHints.name], validator: (v) => v.length < 2 ? 'أدخل الاسم' : null),
-          Field(controller: _phone, label: 'رقم الجوال', hint: '05XXXXXXXX', icon: Icons.phone_iphone_rounded, keyboard: TextInputType.phone, ltr: true, autofill: const [AutofillHints.telephoneNumber], validator: validatePhone),
-          Field(controller: _email, label: 'البريد الإلكتروني', hint: 'name@example.com', icon: Icons.alternate_email_rounded, keyboard: TextInputType.emailAddress, ltr: true, autofill: const [AutofillHints.email], validator: validateEmail),
-          Field(controller: _pw, label: 'كلمة المرور', hint: '8 أحرف على الأقل', icon: Icons.lock_rounded, password: true, ltr: true, autofill: const [AutofillHints.newPassword], validator: validatePassword),
+          Field(controller: _name, label: 'الاسم', hint: 'الاسم الكامل', icon: Icons.person_outlined, autofill: const [AutofillHints.name], validator: (v) => v.length < 2 ? 'أدخل الاسم' : null),
+          Field(controller: _phone, label: 'رقم الجوال', hint: '05XXXXXXXX', icon: Icons.phone_iphone_outlined, keyboard: TextInputType.phone, ltr: true, autofill: const [AutofillHints.telephoneNumber], validator: validatePhone),
+          Field(controller: _email, label: 'البريد الإلكتروني', hint: 'name@example.com', icon: Icons.alternate_email_outlined, keyboard: TextInputType.emailAddress, ltr: true, autofill: const [AutofillHints.email], validator: validateEmail),
+          Field(controller: _pw, label: 'كلمة المرور', hint: '8 أحرف على الأقل', icon: Icons.lock_outlined, password: true, ltr: true, autofill: const [AutofillHints.newPassword], validator: validatePassword),
           RegionField(value: _region, required: false, label: 'المدينة (اختياري)', onChanged: (v) => setState(() => _region = v)),
           CheckboxListTile(
             value: _agree,
@@ -117,7 +117,7 @@ class _RegisterFormState extends State<_RegisterForm> {
             ]), style: const TextStyle(fontSize: 13.5)),
           ),
           const SizedBox(height: 8),
-          BusyButton(label: 'إنشاء الحساب', icon: Icons.person_add_alt_1_rounded, onPressed: _submit),
+          BusyButton(label: 'إنشاء الحساب', icon: Icons.person_add_alt_1_outlined, onPressed: _submit),
         ]),
       ),
     );

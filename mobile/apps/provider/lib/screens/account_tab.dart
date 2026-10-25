@@ -30,7 +30,7 @@ class ProviderAccountTab extends StatelessWidget {
                 const Positioned(
                   bottom: -2,
                   left: -2,
-                  child: CircleAvatar(radius: 12, backgroundColor: Colors.white, child: Icon(Icons.photo_camera_rounded, size: 15, color: Brand.primaryDeep)),
+                  child: CircleAvatar(radius: 12, backgroundColor: Colors.white, child: Icon(Icons.photo_camera_outlined, size: 15, color: Brand.primaryDeep)),
                 ),
               ]),
             ),
@@ -48,30 +48,30 @@ class ProviderAccountTab extends StatelessWidget {
                 Pill('مستوى ${tier.name}', icon: tierIcon(loyaltyTiers.indexOf(tier)), color: Brand.coral, background: const Color(0xFFFDECEA)),
               ]),
             ),
-            IconButton(onPressed: () => push(const ProfileEditPage(showBio: true)), icon: const Icon(Icons.edit_rounded, color: Brand.primaryDeep)),
+            IconButton(onPressed: () => push(const ProfileEditPage(showBio: true)), icon: const Icon(Icons.edit_outlined, color: Brand.primaryDeep)),
           ]),
         ),
         const SizedBox(height: 16),
         MenuGroup(children: [
           MenuTile(
-            icon: Icons.account_balance_wallet_rounded,
+            icon: Icons.account_balance_wallet_outlined,
             title: 'الرصيد والاشتراك',
             subtitle: session.hasActiveSubscription ? 'اشتراك فعّال حتى ${fmtDate(session.subscriptionEnd)}' : '${store.feed?.balance ?? p.coinBalance} كوين',
             onTap: () => push(const BillingPage()),
           ),
-          MenuTile(icon: Icons.receipt_long_rounded, title: 'سجل العمليات', onTap: () => push(const TransactionsPage())),
+          MenuTile(icon: Icons.receipt_long_outlined, title: 'سجل العمليات', onTap: () => push(const TransactionsPage())),
           MenuTile(icon: Icons.star_rounded, title: 'تقييماتي', onTap: () => push(const RatingsPage())),
         ]),
         const SizedBox(height: 16),
         MenuGroup(children: [
-          MenuTile(icon: Icons.notifications_rounded, title: 'الإشعارات', onTap: () => push(const NotificationsPage())),
-          MenuTile(icon: Icons.policy_rounded, title: 'شروط مقدمي الخدمة', onTap: () => push(const PoliciesPage(audience: 'providers'))),
+          MenuTile(icon: Icons.notifications_outlined, title: 'الإشعارات', onTap: () => push(const NotificationsPage())),
+          MenuTile(icon: Icons.policy_outlined, title: 'شروط مقدمي الخدمة', onTap: () => push(const PoliciesPage(audience: 'providers'))),
         ]),
         const SizedBox(height: 16),
         MenuGroup(children: [
-          MenuTile(icon: Icons.lock_rounded, title: 'تغيير كلمة المرور', onTap: () => push(const ChangePasswordPage())),
+          MenuTile(icon: Icons.lock_outlined, title: 'تغيير كلمة المرور', onTap: () => push(const ChangePasswordPage())),
           MenuTile(
-            icon: Icons.logout_rounded,
+            icon: Icons.logout_outlined,
             title: 'تسجيل خروج',
             onTap: () async {
               if (store.feed?.online == true) {
@@ -82,7 +82,7 @@ class ProviderAccountTab extends StatelessWidget {
               if (context.mounted) await signOutFlow(context);
             },
           ),
-          MenuTile(icon: Icons.delete_forever_rounded, title: 'حذف الحساب', color: Brand.danger, onTap: () => deleteAccountFlow(context)),
+          MenuTile(icon: Icons.delete_forever_outlined, title: 'حذف الحساب', color: Brand.danger, onTap: () => deleteAccountFlow(context)),
         ]),
         const SizedBox(height: 20),
         const Center(child: Text('مهمة شريك • الإصدار 1.0.0', style: TextStyle(color: Brand.mutedFg, fontSize: 12))),
@@ -98,8 +98,8 @@ Future<void> _changePhoto(BuildContext context) async {
     builder: (c) => SafeArea(
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         const Text('الصورة الشخصية', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-        ListTile(leading: const Icon(Icons.photo_camera_rounded), title: const Text('التقاط صورة'), onTap: () => Navigator.pop(c, ImageSource.camera)),
-        ListTile(leading: const Icon(Icons.photo_library_rounded), title: const Text('اختيار من الصور'), onTap: () => Navigator.pop(c, ImageSource.gallery)),
+        ListTile(leading: const Icon(Icons.photo_camera_outlined), title: const Text('التقاط صورة'), onTap: () => Navigator.pop(c, ImageSource.camera)),
+        ListTile(leading: const Icon(Icons.photo_library_outlined), title: const Text('اختيار من الصور'), onTap: () => Navigator.pop(c, ImageSource.gallery)),
         const SizedBox(height: 8),
       ]),
     ),
@@ -236,7 +236,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
                             CircleAvatar(
                               radius: 20,
                               backgroundColor: c.withValues(alpha: 0.12),
-                              child: Icon(t.isDebit ? Icons.south_west_rounded : Icons.north_east_rounded, color: c, size: 20),
+                              child: Icon(t.isDebit ? Icons.south_west_outlined : Icons.north_east_outlined, color: c, size: 20),
                             ),
                             const SizedBox(width: 10),
                             Expanded(

@@ -30,7 +30,7 @@ class ActivityTab extends StatelessWidget {
                   crossAxisSpacing: 10,
                   childAspectRatio: 1.75,
                   children: [
-                    _Stat(icon: Icons.task_alt_rounded, color: Brand.success, value: fmtNum(s.completed), label: 'طلب مكتمل'),
+                    _Stat(icon: Icons.task_alt_outlined, color: Brand.success, value: fmtNum(s.completed), label: 'طلب مكتمل'),
                     _Stat(
                       icon: Icons.star_rounded,
                       color: const Color(0xFFE0A100),
@@ -38,8 +38,8 @@ class ActivityTab extends StatelessWidget {
                       label: 'التقييم (${s.ratingCount})',
                       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RatingsPage())),
                     ),
-                    _Stat(icon: Icons.timer_rounded, color: Brand.primaryDeep, value: fmtNum(s.workHours), label: 'ساعة عمل'),
-                    _Stat(icon: Icons.handyman_rounded, color: Brand.sky, value: fmtNum(s.active), label: 'طلب جارٍ'),
+                    _Stat(icon: Icons.timer_outlined, color: Brand.primaryDeep, value: fmtNum(s.workHours), label: 'ساعة عمل'),
+                    _Stat(icon: Icons.handyman_outlined, color: Brand.sky, value: fmtNum(s.active), label: 'طلب جارٍ'),
                   ],
                 ),
                 const SizedBox(height: 14),

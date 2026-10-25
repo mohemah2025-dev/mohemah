@@ -135,7 +135,7 @@ class _ProviderRegisterFormState extends State<ProviderRegisterForm> {
               radius: 15,
               backgroundColor: i <= _step ? Brand.primaryDeep : Brand.muted,
               child: i < _step
-                  ? const Icon(Icons.check_rounded, size: 16, color: Colors.white)
+                  ? const Icon(Icons.check_outlined, size: 16, color: Colors.white)
                   : Text('${i + 1}', style: TextStyle(color: i <= _step ? Colors.white : Brand.mutedFg, fontWeight: FontWeight.w800, fontSize: 13)),
             ),
             const SizedBox(height: 4),
@@ -157,7 +157,7 @@ class _ProviderRegisterFormState extends State<ProviderRegisterForm> {
           flex: 2,
           child: _step < 2
               ? FilledButton(onPressed: _next, child: const Text('التالي'))
-              : BusyButton(label: 'إرسال الطلب', icon: Icons.send_rounded, onPressed: _submit),
+              : BusyButton(label: 'إرسال الطلب', icon: Icons.send_outlined, onPressed: _submit),
         ),
       ]),
     ]);
@@ -179,12 +179,12 @@ class _ProviderRegisterFormState extends State<ProviderRegisterForm> {
                   radius: 48,
                   backgroundColor: Brand.muted,
                   backgroundImage: _avatar == null ? null : MemoryImage(_avatar!.bytes),
-                  child: _avatar == null ? const Icon(Icons.person_rounded, size: 52, color: Brand.mutedFg) : null,
+                  child: _avatar == null ? const Icon(Icons.person_outlined, size: 52, color: Brand.mutedFg) : null,
                 ),
                 const Positioned(
                   bottom: 0,
                   left: 0,
-                  child: CircleAvatar(radius: 16, backgroundColor: Brand.primaryDeep, child: Icon(Icons.photo_camera_rounded, size: 17, color: Colors.white)),
+                  child: CircleAvatar(radius: 16, backgroundColor: Brand.primaryDeep, child: Icon(Icons.photo_camera_outlined, size: 17, color: Colors.white)),
                 ),
               ]),
               const SizedBox(height: 6),
@@ -199,27 +199,27 @@ class _ProviderRegisterFormState extends State<ProviderRegisterForm> {
             controller: _name,
             label: 'الاسم الثلاثي',
             hint: 'كما في الهوية',
-            icon: Icons.person_rounded,
+            icon: Icons.person_outlined,
             validator: (v) => v.split(RegExp(r'\s+')).where((x) => x.isNotEmpty).length < 3 ? 'أدخل الاسم الثلاثي' : null,
           ),
         Field(
           controller: _nid,
           label: 'رقم الهوية / الإقامة',
           hint: '10 أرقام',
-          icon: Icons.badge_rounded,
+          icon: Icons.badge_outlined,
           keyboard: TextInputType.number,
           ltr: true,
           formatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(10)],
           validator: (v) => RegExp(r'^[12]\d{9}$').hasMatch(v) ? null : 'رقم الهوية/الإقامة 10 أرقام يبدأ بـ 1 أو 2',
         ),
-        Field(controller: _nationality, label: 'الجنسية', icon: Icons.flag_rounded, maxLength: 60),
+        Field(controller: _nationality, label: 'الجنسية', icon: Icons.flag_outlined, maxLength: 60),
         PickerField(
           label: 'الجنس',
           value: _gender,
           options: const ['male', 'female'],
           labels: const ['ذكر', 'أنثى'],
           hint: 'اختر',
-          icon: Icons.wc_rounded,
+          icon: Icons.wc_outlined,
           validator: (v) => v == null ? 'اختر الجنس' : null,
           onChanged: (v) => setState(() => _gender = v),
         ),
@@ -236,9 +236,9 @@ class _ProviderRegisterFormState extends State<ProviderRegisterForm> {
           },
         ),
         if (!widget.applyExisting) ...[
-          Field(controller: _phone, label: 'رقم الجوال', hint: '05XXXXXXXX', icon: Icons.phone_iphone_rounded, keyboard: TextInputType.phone, ltr: true, validator: validatePhone),
-          Field(controller: _email, label: 'البريد الإلكتروني', hint: 'name@example.com', icon: Icons.alternate_email_rounded, keyboard: TextInputType.emailAddress, ltr: true, validator: validateEmail),
-          Field(controller: _pw, label: 'كلمة المرور', hint: '8 أحرف على الأقل', icon: Icons.lock_rounded, password: true, ltr: true, validator: validatePassword),
+          Field(controller: _phone, label: 'رقم الجوال', hint: '05XXXXXXXX', icon: Icons.phone_iphone_outlined, keyboard: TextInputType.phone, ltr: true, validator: validatePhone),
+          Field(controller: _email, label: 'البريد الإلكتروني', hint: 'name@example.com', icon: Icons.alternate_email_outlined, keyboard: TextInputType.emailAddress, ltr: true, validator: validateEmail),
+          Field(controller: _pw, label: 'كلمة المرور', hint: '8 أحرف على الأقل', icon: Icons.lock_outlined, password: true, ltr: true, validator: validatePassword),
         ],
       ]),
     );
@@ -339,7 +339,7 @@ class ServicesGrid extends StatelessWidget {
                       if (showPrice) Text('${s.coinPrice} كوين/طلب', style: const TextStyle(fontSize: 10.5, color: Brand.mutedFg)),
                     ]),
                   ),
-                  if (selected.contains(s.id)) Icon(Icons.check_circle_rounded, size: 18, color: primary),
+                  if (selected.contains(s.id)) Icon(Icons.check_circle_outlined, size: 18, color: primary),
                 ]),
               ),
             ),

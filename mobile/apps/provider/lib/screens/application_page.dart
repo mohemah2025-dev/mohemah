@@ -83,7 +83,7 @@ class _ApplicationPageState extends State<ApplicationPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('حسابي'),
-        actions: [IconButton(tooltip: 'تسجيل خروج', onPressed: () => signOutFlow(context), icon: const Icon(Icons.logout_rounded))],
+        actions: [IconButton(tooltip: 'تسجيل خروج', onPressed: () => signOutFlow(context), icon: const Icon(Icons.logout_outlined))],
       ),
       body: RefreshIndicator(
         onRefresh: () async {
@@ -124,7 +124,7 @@ class _ApplicationPageState extends State<ApplicationPage> {
                 },
               ),
             const SizedBox(height: 8),
-            BusyButton(label: 'إرسال للمراجعة', icon: Icons.cloud_upload_rounded, onPressed: ready ? _upload : null),
+            BusyButton(label: 'إرسال للمراجعة', icon: Icons.cloud_upload_outlined, onPressed: ready ? _upload : null),
           ],
         ]),
       ),
@@ -139,7 +139,7 @@ class _WaitingCard extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(color: Brand.warning.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(22)),
         child: const Column(children: [
-          Icon(Icons.hourglass_top_rounded, color: Brand.warning, size: 44),
+          Icon(Icons.hourglass_top_outlined, color: Brand.warning, size: 44),
           SizedBox(height: 10),
           Text('بانتظار المراجعة', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: Brand.warning)),
           SizedBox(height: 6),
@@ -157,7 +157,7 @@ class _RejectedCard extends StatelessWidget {
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(color: Brand.danger.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(22)),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Icon(Icons.error_rounded, color: Brand.danger, size: 32),
+          const Icon(Icons.error_outlined, color: Brand.danger, size: 32),
           const SizedBox(width: 12),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -194,7 +194,7 @@ class _DocStatus extends StatelessWidget {
             CircleAvatar(
               radius: 18,
               backgroundColor: c.withValues(alpha: 0.12),
-              child: Icon(ok ? Icons.check_rounded : rejected ? Icons.close_rounded : Icons.hourglass_top_rounded, color: c, size: 22),
+              child: Icon(ok ? Icons.check_outlined : rejected ? Icons.close_outlined : Icons.hourglass_top_outlined, color: c, size: 22),
             ),
             const SizedBox(width: 10),
             Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w800))),

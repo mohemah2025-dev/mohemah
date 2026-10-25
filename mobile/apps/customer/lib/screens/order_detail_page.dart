@@ -53,15 +53,15 @@ class OrderDetailPage extends StatelessWidget {
                     Text(o.serviceName, style: const TextStyle(color: Brand.mutedFg, fontSize: 12)),
                   ]),
                 ),
-                Pill(modeLabel(o.mode), icon: o.mode == 'remote' ? Icons.videocam_rounded : Icons.home_work_rounded),
+                Pill(modeLabel(o.mode), icon: o.mode == 'remote' ? Icons.videocam_outlined : Icons.home_work_outlined),
               ]),
               const SizedBox(height: 8),
               const Divider(),
-              if ((o.description ?? '').isNotEmpty) InfoRow(icon: Icons.notes_rounded, label: 'شرح الطلب', value: o.description!),
-              if (o.region != null) InfoRow(icon: Icons.location_city_rounded, label: 'المدينة', value: o.region!),
-              if ((o.address ?? '').isNotEmpty) InfoRow(icon: Icons.place_rounded, label: 'العنوان', value: o.address!),
-              InfoRow(icon: Icons.schedule_rounded, label: 'موعد التنفيذ', value: o.scheduledAt == null ? 'في أقرب وقت' : fmtDateTime(o.scheduledAt)),
-              InfoRow(icon: Icons.event_rounded, label: 'تاريخ الطلب', value: fmtDateTime(o.createdAt)),
+              if ((o.description ?? '').isNotEmpty) InfoRow(icon: Icons.notes_outlined, label: 'شرح الطلب', value: o.description!),
+              if (o.region != null) InfoRow(icon: Icons.location_city_outlined, label: 'المدينة', value: o.region!),
+              if ((o.address ?? '').isNotEmpty) InfoRow(icon: Icons.place_outlined, label: 'العنوان', value: o.address!),
+              InfoRow(icon: Icons.schedule_outlined, label: 'موعد التنفيذ', value: o.scheduledAt == null ? 'في أقرب وقت' : fmtDateTime(o.scheduledAt)),
+              InfoRow(icon: Icons.event_outlined, label: 'تاريخ الطلب', value: fmtDateTime(o.createdAt)),
             ]),
           ),
           if (o.rating != null) ...[
@@ -138,7 +138,7 @@ class _Timeline extends StatelessWidget {
                 width: 30,
                 height: 30,
                 decoration: BoxDecoration(color: i <= current ? Brand.primary : Brand.muted, shape: BoxShape.circle),
-                child: Icon(i < current ? Icons.check_rounded : statusIcon(steps[i]), size: 16, color: i <= current ? Colors.white : Brand.mutedFg),
+                child: Icon(i < current ? Icons.check_outlined : statusIcon(steps[i]), size: 16, color: i <= current ? Colors.white : Brand.mutedFg),
               ),
               const SizedBox(height: 5),
               Text(_short(steps[i], order.mode), textAlign: TextAlign.center, style: TextStyle(fontSize: 10.5, fontWeight: i == current ? FontWeight.w800 : FontWeight.w500)),
@@ -191,7 +191,7 @@ class _ProviderCard extends StatelessWidget {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () => callPhone(context, order.providerPhone!),
-                  icon: const Icon(Icons.call_rounded),
+                  icon: const Icon(Icons.call_outlined),
                   label: const Text('اتصال'),
                 ),
               ),
@@ -203,7 +203,7 @@ class _ProviderCard extends StatelessWidget {
                   await Navigator.push(context, MaterialPageRoute(builder: (_) => OrderChatPage(orderId: order.id, title: 'محادثة مع $name')));
                   if (context.mounted) await OrdersScope.read(context).refresh();
                 },
-                icon: Badge(isLabelVisible: order.unread > 0, label: Text('${order.unread}'), child: const Icon(Icons.chat_rounded)),
+                icon: Badge(isLabelVisible: order.unread > 0, label: Text('${order.unread}'), child: const Icon(Icons.chat_outlined)),
                 label: const Text('مراسلة'),
               ),
             ),
@@ -272,7 +272,7 @@ class _Actions extends StatelessWidget {
         OutlinedButton.icon(
           style: OutlinedButton.styleFrom(foregroundColor: Brand.danger),
           onPressed: () => _cancel(context),
-          icon: const Icon(Icons.close_rounded),
+          icon: const Icon(Icons.close_outlined),
           label: const Text('إلغاء الطلب'),
         ),
         const SizedBox(height: 10),
@@ -280,7 +280,7 @@ class _Actions extends StatelessWidget {
       if (!order.isOpen && sub != null) ...[
         OutlinedButton.icon(
           onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => NewOrderPage(sub: sub!, initialDescription: order.description))),
-          icon: const Icon(Icons.replay_rounded),
+          icon: const Icon(Icons.replay_outlined),
           label: const Text('إعادة الطلب'),
         ),
         const SizedBox(height: 10),

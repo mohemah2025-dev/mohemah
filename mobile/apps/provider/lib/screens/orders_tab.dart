@@ -79,7 +79,7 @@ class _AvailableList extends StatelessWidget {
     if (orders.isEmpty) {
       return ListView(children: [
         EmptyState(
-          icon: Icons.inbox_rounded,
+          icon: Icons.inbox_outlined,
           title: 'لا توجد طلبات متاحة الآن',
           message: online ? 'ستظهر هنا الطلبات الجديدة في خدماتك ومدينتك.' : 'اتصل من الصفحة الرئيسية لتصلك الطلبات الجديدة فور وصولها.',
         ),
@@ -112,13 +112,13 @@ class OfferCard extends StatelessWidget {
               Text('#${o.orderNo} • ${timeAgo(o.createdAt)}', style: const TextStyle(color: Brand.mutedFg, fontSize: 12)),
             ]),
           ),
-          if (!subscribed) Pill('${o.coinCost} كوين', icon: Icons.toll_rounded, color: Brand.warning, background: const Color(0xFFFBF1DA)),
+          if (!subscribed) Pill('${o.coinCost} كوين', icon: Icons.toll_outlined, color: Brand.warning, background: const Color(0xFFFBF1DA)),
         ]),
         const SizedBox(height: 8),
         Wrap(spacing: 6, runSpacing: 6, children: [
-          Pill(modeLabel(o.mode), icon: o.mode == 'remote' ? Icons.videocam_rounded : Icons.home_work_rounded),
-          if (o.region != null) Pill(o.region!, icon: Icons.location_on_rounded),
-          Pill(o.scheduledAt == null ? 'في أقرب وقت' : fmtDateTime(o.scheduledAt), icon: Icons.schedule_rounded),
+          Pill(modeLabel(o.mode), icon: o.mode == 'remote' ? Icons.videocam_outlined : Icons.home_work_outlined),
+          if (o.region != null) Pill(o.region!, icon: Icons.location_on_outlined),
+          Pill(o.scheduledAt == null ? 'في أقرب وقت' : fmtDateTime(o.scheduledAt), icon: Icons.schedule_outlined),
         ]),
         if ((o.description ?? '').isNotEmpty) ...[
           const SizedBox(height: 8),
@@ -126,7 +126,7 @@ class OfferCard extends StatelessWidget {
         ],
         const SizedBox(height: 8),
         Row(children: [
-          const Icon(Icons.person_rounded, size: 17, color: Brand.mutedFg),
+          const Icon(Icons.person_outlined, size: 17, color: Brand.mutedFg),
           const SizedBox(width: 4),
           Text(o.customerName, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
           const SizedBox(width: 6),
@@ -153,7 +153,7 @@ class OfferCard extends StatelessWidget {
             flex: 2,
             child: BusyButton(
               color: Brand.success,
-              icon: Icons.check_rounded,
+              icon: Icons.check_outlined,
               label: 'قبول الطلب',
               onPressed: () async {
                 try {
@@ -210,8 +210,8 @@ class _ActiveList extends StatelessWidget {
                 StatusChip(status: j.status, mode: j.mode, provider: true),
               ]),
             ),
-            if (j.unread > 0) Badge(label: Text('${j.unread}'), child: const Icon(Icons.chat_rounded, color: Brand.primary)),
-            const Icon(Icons.chevron_left_rounded, color: Brand.mutedFg),
+            if (j.unread > 0) Badge(label: Text('${j.unread}'), child: const Icon(Icons.chat_outlined, color: Brand.primary)),
+            const Icon(Icons.chevron_left_outlined, color: Brand.mutedFg),
           ]),
         );
       },
@@ -225,9 +225,9 @@ class JobDetailPage extends StatelessWidget {
   final String jobId;
 
   static (String, IconData)? nextStep(ActiveJob j) {
-    if (j.status == 'accepted' && j.mode == 'in_person') return ('وصلت إلى الموقع', Icons.door_front_door_rounded);
-    if (j.status == 'accepted' || j.status == 'arrived') return ('بدء التنفيذ', Icons.play_arrow_rounded);
-    if (j.status == 'in_progress') return ('إنهاء المهمة', Icons.task_alt_rounded);
+    if (j.status == 'accepted' && j.mode == 'in_person') return ('وصلت إلى الموقع', Icons.door_front_door_outlined);
+    if (j.status == 'accepted' || j.status == 'arrived') return ('بدء التنفيذ', Icons.play_arrow_outlined);
+    if (j.status == 'in_progress') return ('إنهاء المهمة', Icons.task_alt_outlined);
     return null;
   }
 
@@ -242,7 +242,7 @@ class JobDetailPage extends StatelessWidget {
       return Scaffold(
         appBar: AppBar(title: const Text('الطلب')),
         body: EmptyState(
-          icon: Icons.task_alt_rounded,
+          icon: Icons.task_alt_outlined,
           title: 'لم يعد هذا الطلب ضمن الطلبات الجارية',
           message: 'اكتمل أو أُلغي. تجده في الطلبات السابقة.',
           action: FilledButton(
@@ -298,7 +298,7 @@ class JobDetailPage extends StatelessWidget {
               Row(children: [
                 if (j.customerPhone != null) ...[
                   Expanded(
-                    child: OutlinedButton.icon(onPressed: () => callPhone(context, j.customerPhone!), icon: const Icon(Icons.call_rounded), label: const Text('اتصال')),
+                    child: OutlinedButton.icon(onPressed: () => callPhone(context, j.customerPhone!), icon: const Icon(Icons.call_outlined), label: const Text('اتصال')),
                   ),
                   const SizedBox(width: 10),
                 ],
@@ -308,7 +308,7 @@ class JobDetailPage extends StatelessWidget {
                       await Navigator.push(context, MaterialPageRoute(builder: (_) => OrderChatPage(orderId: j.id, title: 'محادثة مع ${j.customerName}')));
                       await store.refresh();
                     },
-                    icon: Badge(isLabelVisible: j.unread > 0, label: Text('${j.unread}'), child: const Icon(Icons.chat_rounded)),
+                    icon: Badge(isLabelVisible: j.unread > 0, label: Text('${j.unread}'), child: const Icon(Icons.chat_outlined)),
                     label: const Text('مراسلة'),
                   ),
                 ),
@@ -318,22 +318,22 @@ class JobDetailPage extends StatelessWidget {
           const SectionTitle('تفاصيل الطلب'),
           AppCard(
             child: Column(children: [
-              if ((j.description ?? '').isNotEmpty) InfoRow(icon: Icons.notes_rounded, label: 'شرح الطلب', value: j.description!),
-              if (j.region != null) InfoRow(icon: Icons.location_city_rounded, label: 'المدينة', value: j.region!),
+              if ((j.description ?? '').isNotEmpty) InfoRow(icon: Icons.notes_outlined, label: 'شرح الطلب', value: j.description!),
+              if (j.region != null) InfoRow(icon: Icons.location_city_outlined, label: 'المدينة', value: j.region!),
               if ((j.address ?? '').isNotEmpty)
                 InfoRow(
-                  icon: Icons.place_rounded,
+                  icon: Icons.place_outlined,
                   label: 'العنوان',
                   value: j.address!,
                   trailing: TextButton.icon(
                     onPressed: () => openUrl(context, mapsUrl(lat: j.lat, lng: j.lng, address: j.address)),
-                    icon: const Icon(Icons.map_rounded, size: 18),
+                    icon: const Icon(Icons.map_outlined, size: 18),
                     label: const Text('الخريطة'),
                   ),
                 ),
-              InfoRow(icon: Icons.schedule_rounded, label: 'موعد التنفيذ', value: j.scheduledAt == null ? 'في أقرب وقت' : fmtDateTime(j.scheduledAt)),
+              InfoRow(icon: Icons.schedule_outlined, label: 'موعد التنفيذ', value: j.scheduledAt == null ? 'في أقرب وقت' : fmtDateTime(j.scheduledAt)),
               InfoRow(icon: Icons.check_circle_outline_rounded, label: 'قُبل في', value: fmtDateTime(j.acceptedAt)),
-              if (j.chargedCoins > 0) InfoRow(icon: Icons.toll_rounded, label: 'الكوينز المخصومة', value: '${j.chargedCoins} كوين'),
+              if (j.chargedCoins > 0) InfoRow(icon: Icons.toll_outlined, label: 'الكوينز المخصومة', value: '${j.chargedCoins} كوين'),
             ]),
           ),
           const SizedBox(height: 18),
@@ -379,7 +379,7 @@ class JobDetailPage extends StatelessWidget {
                   if (context.mounted) showError(context, e);
                 }
               },
-              icon: const Icon(Icons.undo_rounded),
+              icon: const Icon(Icons.undo_outlined),
               label: const Text('الاعتذار عن الطلب'),
             ),
             const Text('عند الاعتذار يعود الطلب لمقدمي الخدمة الآخرين ولا تُسترجع الكوينز.', textAlign: TextAlign.center, style: TextStyle(fontSize: 11.5, color: Brand.mutedFg)),
@@ -409,7 +409,7 @@ class _HistoryListState extends State<_HistoryList> {
   Widget build(BuildContext context) {
     final items = widget.items;
     if (items == null) return const Loading();
-    if (items.isEmpty) return ListView(children: const [EmptyState(icon: Icons.history_rounded, title: 'لا توجد طلبات سابقة بعد')]);
+    if (items.isEmpty) return ListView(children: const [EmptyState(icon: Icons.history_outlined, title: 'لا توجد طلبات سابقة بعد')]);
     final store = ProviderScope.read(context);
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),

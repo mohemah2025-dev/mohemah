@@ -58,7 +58,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
             : items == null
                 ? const Loading()
                 : items.isEmpty
-                    ? ListView(children: const [EmptyState(icon: Icons.notifications_none_rounded, title: 'لا توجد إشعارات', message: 'ستظهر هنا تحديثات طلباتك ورسائل الإدارة.')])
+                    ? ListView(children: const [EmptyState(icon: Icons.notifications_none_outlined, title: 'لا توجد إشعارات', message: 'ستظهر هنا تحديثات طلباتك ورسائل الإدارة.')])
                     : ListView.separated(
                         padding: const EdgeInsets.all(16),
                         itemCount: items.length,
@@ -72,7 +72,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
                                 width: 40,
                                 height: 40,
                                 decoration: BoxDecoration(color: Brand.primary.withValues(alpha: 0.1), shape: BoxShape.circle),
-                                child: const Icon(Icons.notifications_rounded, color: Brand.primary, size: 21),
+                                child: const Icon(Icons.notifications_outlined, color: Brand.primary, size: 21),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
@@ -162,7 +162,7 @@ class _SupportMessagesPageState extends State<SupportMessagesPage> {
               : items == null
                   ? const Loading()
                   : items.isEmpty
-                      ? const EmptyState(icon: Icons.support_agent_rounded, title: 'تواصل مع فريق مهمة', message: 'اكتب رسالتك وسيرد عليك فريق الإدارة هنا.')
+                      ? const EmptyState(icon: Icons.support_agent_outlined, title: 'تواصل مع فريق مهمة', message: 'اكتب رسالتك وسيرد عليك فريق الإدارة هنا.')
                       : ListView.builder(
                           reverse: true,
                           padding: const EdgeInsets.all(16),
@@ -331,7 +331,7 @@ class _Composer extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          IconButton.filled(onPressed: onSend, icon: const Icon(Icons.send_rounded, textDirection: TextDirection.rtl)),
+          IconButton.filled(onPressed: onSend, icon: const Icon(Icons.send_outlined, textDirection: TextDirection.rtl)),
         ]),
       ),
     );
@@ -352,7 +352,7 @@ class PoliciesPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('السياسات والشروط')),
       body: list.isEmpty
-          ? const EmptyState(icon: Icons.policy_rounded, title: 'لا توجد سياسات منشورة بعد')
+          ? const EmptyState(icon: Icons.policy_outlined, title: 'لا توجد سياسات منشورة بعد')
           : ListView.separated(
               padding: const EdgeInsets.all(16),
               itemCount: list.length,
@@ -360,10 +360,10 @@ class PoliciesPage extends StatelessWidget {
               itemBuilder: (c, i) => AppCard(
                 onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => PolicyPage(policy: list[i]))),
                 child: Row(children: [
-                  const Icon(Icons.description_rounded, color: Brand.primary),
+                  const Icon(Icons.description_outlined, color: Brand.primary),
                   const SizedBox(width: 12),
                   Expanded(child: Text(list[i].title, style: const TextStyle(fontWeight: FontWeight.w700))),
-                  const Icon(Icons.chevron_left_rounded, color: Brand.mutedFg),
+                  const Icon(Icons.chevron_left_outlined, color: Brand.mutedFg),
                 ]),
               ),
             ),
@@ -432,9 +432,9 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
       body: Form(
         key: _form,
         child: ListView(padding: const EdgeInsets.all(18), children: [
-          Field(controller: _name, label: 'الاسم', icon: Icons.person_rounded, validator: (v) => v.length < 2 ? 'أدخل الاسم' : null),
-          Field(controller: _phone, label: 'رقم الجوال', icon: Icons.phone_iphone_rounded, keyboard: TextInputType.phone, ltr: true, validator: (v) => v.isEmpty ? null : validatePhone(v)),
-          Field(controller: _email, label: 'البريد الإلكتروني', icon: Icons.alternate_email_rounded, keyboard: TextInputType.emailAddress, ltr: true, validator: validateEmail),
+          Field(controller: _name, label: 'الاسم', icon: Icons.person_outlined, validator: (v) => v.length < 2 ? 'أدخل الاسم' : null),
+          Field(controller: _phone, label: 'رقم الجوال', icon: Icons.phone_iphone_outlined, keyboard: TextInputType.phone, ltr: true, validator: (v) => v.isEmpty ? null : validatePhone(v)),
+          Field(controller: _email, label: 'البريد الإلكتروني', icon: Icons.alternate_email_outlined, keyboard: TextInputType.emailAddress, ltr: true, validator: validateEmail),
           RegionField(value: _region, required: false, onChanged: (v) => setState(() => _region = v)),
           LocationPicker(
             picked: _loc,
@@ -445,7 +445,7 @@ class _ProfileEditPageState extends State<ProfileEditPage> {
           ),
           if (widget.showBio) Field(controller: _bio, label: 'نبذة عنك', icon: Icons.info_outline_rounded, maxLines: 4, maxLength: 500),
           const SizedBox(height: 8),
-          BusyButton(label: 'حفظ', icon: Icons.check_rounded, onPressed: _save),
+          BusyButton(label: 'حفظ', icon: Icons.check_outlined, onPressed: _save),
         ]),
       ),
     );
@@ -484,8 +484,8 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
           key: _form,
           child: ListView(padding: const EdgeInsets.all(18), children: [
             Field(controller: _current, label: 'كلمة المرور الحالية', icon: Icons.lock_outline_rounded, password: true, ltr: true, validator: (v) => requiredField(v, 'كلمة المرور الحالية')),
-            Field(controller: _next, label: 'كلمة المرور الجديدة', icon: Icons.lock_rounded, password: true, ltr: true, validator: validatePassword),
-            Field(controller: _again, label: 'تأكيد كلمة المرور', icon: Icons.lock_rounded, password: true, ltr: true, validator: (v) => v != _next.text.trim() ? 'كلمتا المرور غير متطابقتين' : null),
+            Field(controller: _next, label: 'كلمة المرور الجديدة', icon: Icons.lock_outlined, password: true, ltr: true, validator: validatePassword),
+            Field(controller: _again, label: 'تأكيد كلمة المرور', icon: Icons.lock_outlined, password: true, ltr: true, validator: (v) => v != _next.text.trim() ? 'كلمتا المرور غير متطابقتين' : null),
             const SizedBox(height: 8),
             BusyButton(label: 'تغيير كلمة المرور', onPressed: _save),
           ]),

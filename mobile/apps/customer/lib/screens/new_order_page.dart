@@ -154,14 +154,14 @@ class _NewOrderPageState extends State<NewOrderPage> {
             SegmentedButton<String>(
               showSelectedIcon: false,
               segments: const [
-                ButtonSegment(value: 'in_person', label: Text('حضوري'), icon: Icon(Icons.home_work_rounded)),
-                ButtonSegment(value: 'remote', label: Text('عن بُعد'), icon: Icon(Icons.videocam_rounded)),
+                ButtonSegment(value: 'in_person', label: Text('حضوري'), icon: Icon(Icons.home_work_outlined)),
+                ButtonSegment(value: 'remote', label: Text('عن بُعد'), icon: Icon(Icons.videocam_outlined)),
               ],
               selected: {_mode},
               onSelectionChanged: (v) => setState(() => _mode = v.first),
             )
           else
-            Pill(_mode == 'remote' ? 'هذه الخدمة عن بُعد فقط' : 'هذه الخدمة حضورية فقط', icon: _mode == 'remote' ? Icons.videocam_rounded : Icons.home_work_rounded),
+            Pill(_mode == 'remote' ? 'هذه الخدمة عن بُعد فقط' : 'هذه الخدمة حضورية فقط', icon: _mode == 'remote' ? Icons.videocam_outlined : Icons.home_work_outlined),
           const SizedBox(height: 18),
           Field(
             controller: _desc,
@@ -190,7 +190,7 @@ class _NewOrderPageState extends State<NewOrderPage> {
                   for (final a in _addresses)
                     ChoiceChip(
                       label: Text(a.label),
-                      avatar: const Icon(Icons.place_rounded, size: 17),
+                      avatar: const Icon(Icons.place_outlined, size: 17),
                       selected: _picked?.id == a.id,
                       onSelected: (_) => setState(() => _pick(a)),
                     ),
@@ -216,7 +216,7 @@ class _NewOrderPageState extends State<NewOrderPage> {
                   await Navigator.push(context, MaterialPageRoute(builder: (_) => const AddressesPage()));
                   if (mounted) await _loadAddresses();
                 },
-                icon: const Icon(Icons.add_location_alt_rounded, size: 19),
+                icon: const Icon(Icons.add_location_alt_outlined, size: 19),
                 label: const Text('إدارة عناويني المحفوظة'),
               ),
             ),
@@ -243,11 +243,11 @@ class _NewOrderPageState extends State<NewOrderPage> {
           if (_scheduled) ...[
             const SizedBox(height: 12),
             Row(children: [
-              Expanded(child: _PickBox(icon: Icons.event_rounded, label: 'التاريخ', value: _date == null ? null : fmtDate(_date), onTap: _pickDate)),
+              Expanded(child: _PickBox(icon: Icons.event_outlined, label: 'التاريخ', value: _date == null ? null : fmtDate(_date), onTap: _pickDate)),
               const SizedBox(width: 10),
               Expanded(
                 child: _PickBox(
-                  icon: Icons.schedule_rounded,
+                  icon: Icons.schedule_outlined,
                   label: 'الوقت',
                   value: _time == null ? null : fmtTime(DateTime(2000, 1, 1, _time!.hour, _time!.minute)),
                   onTap: _pickTimeOnly,
@@ -266,7 +266,7 @@ class _NewOrderPageState extends State<NewOrderPage> {
             ]),
           ),
           const SizedBox(height: 18),
-          BusyButton(label: 'إرسال الطلب', icon: Icons.send_rounded, onPressed: _submit),
+          BusyButton(label: 'إرسال الطلب', icon: Icons.send_outlined, onPressed: _submit),
         ]),
       ),
     );
@@ -339,7 +339,7 @@ class _MatchingSheetState extends State<_MatchingSheet> with SingleTickerProvide
                     width: 64,
                     height: 64,
                     decoration: BoxDecoration(color: primary, shape: BoxShape.circle),
-                    child: const Icon(Icons.person_search_rounded, color: Colors.white, size: 32),
+                    child: const Icon(Icons.person_search_outlined, color: Colors.white, size: 32),
                   ),
                 ),
               ),
@@ -354,7 +354,7 @@ class _MatchingSheetState extends State<_MatchingSheet> with SingleTickerProvide
           const SizedBox(height: 18),
           FilledButton.icon(
             onPressed: () => CustomerShell.goTo(2),
-            icon: const Icon(Icons.receipt_long_rounded),
+            icon: const Icon(Icons.receipt_long_outlined),
             label: const Text('متابعة الطلب والمراسلة'),
           ),
         ]),

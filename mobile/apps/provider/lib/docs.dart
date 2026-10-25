@@ -33,8 +33,8 @@ Future<PickedDoc?> pickDocument(BuildContext context, String label) async {
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
         const SizedBox(height: 6),
-        ListTile(leading: const Icon(Icons.photo_camera_rounded), title: const Text('التقاط صورة'), onTap: () => Navigator.pop(c, 'camera')),
-        ListTile(leading: const Icon(Icons.photo_library_rounded), title: const Text('اختيار من الصور'), onTap: () => Navigator.pop(c, 'gallery')),
+        ListTile(leading: const Icon(Icons.photo_camera_outlined), title: const Text('التقاط صورة'), onTap: () => Navigator.pop(c, 'camera')),
+        ListTile(leading: const Icon(Icons.photo_library_outlined), title: const Text('اختيار من الصور'), onTap: () => Navigator.pop(c, 'gallery')),
         const SizedBox(height: 8),
       ]),
     ),
@@ -84,9 +84,9 @@ class DocSlot extends StatelessWidget {
               width: 56,
               height: 56,
               child: d == null
-                  ? Container(color: Brand.muted, child: const Icon(Icons.upload_file_rounded, color: Brand.mutedFg))
+                  ? Container(color: Brand.muted, child: const Icon(Icons.upload_file_outlined, color: Brand.mutedFg))
                   : d.isPdf
-                      ? Container(color: const Color(0xFFFBEDEC), child: const Icon(Icons.picture_as_pdf_rounded, color: Brand.danger))
+                      ? Container(color: const Color(0xFFFBEDEC), child: const Icon(Icons.picture_as_pdf_outlined, color: Brand.danger))
                       : Image.memory(d.bytes, fit: BoxFit.cover),
             ),
           ),
@@ -98,7 +98,7 @@ class DocSlot extends StatelessWidget {
                   maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Brand.mutedFg, fontSize: 12)),
             ]),
           ),
-          Icon(d == null ? Icons.add_circle_rounded : Icons.check_circle_rounded, color: d == null ? Brand.primary : Brand.success),
+          Icon(d == null ? Icons.add_circle_outlined : Icons.check_circle_outlined, color: d == null ? Brand.primary : Brand.success),
         ]),
       ),
     );

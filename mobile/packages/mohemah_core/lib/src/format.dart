@@ -73,19 +73,19 @@ Color statusColor(String status) {
 IconData statusIcon(String status) {
   switch (status) {
     case 'pending':
-      return Icons.hourglass_top_rounded;
+      return Icons.hourglass_top_outlined;
     case 'accepted':
-      return Icons.directions_car_rounded;
+      return Icons.directions_car_outlined;
     case 'arrived':
-      return Icons.door_front_door_rounded;
+      return Icons.door_front_door_outlined;
     case 'in_progress':
-      return Icons.handyman_rounded;
+      return Icons.handyman_outlined;
     case 'completed':
-      return Icons.check_circle_rounded;
+      return Icons.check_circle_outlined;
     case 'cancelled':
-      return Icons.cancel_rounded;
+      return Icons.cancel_outlined;
   }
-  return Icons.info_rounded;
+  return Icons.info_outlined;
 }
 
 /// Steps shown in the order timeline (remote orders skip "arrived").

@@ -23,7 +23,7 @@ class _OrdersTabState extends State<OrdersTab> {
       appBar: AppBar(title: const Text('طلباتي')),
       body: !session.signedIn
           ? EmptyState(
-              icon: Icons.receipt_long_rounded,
+              icon: Icons.receipt_long_outlined,
               title: 'سجّل دخولك لعرض طلباتك ومتابعتها',
               action: FilledButton(
                 style: FilledButton.styleFrom(minimumSize: const Size(180, 48)),
@@ -63,13 +63,13 @@ class _List extends StatelessWidget {
     if (orders.isEmpty) {
       return ListView(children: [
         EmptyState(
-          icon: open ? Icons.inbox_rounded : Icons.history_rounded,
+          icon: open ? Icons.inbox_outlined : Icons.history_outlined,
           title: open ? 'لا توجد طلبات جارية' : 'لا توجد طلبات سابقة',
           action: open
               ? FilledButton.icon(
                   style: FilledButton.styleFrom(minimumSize: const Size(200, 48)),
                   onPressed: () => CustomerShell.goTo(1),
-                  icon: const Icon(Icons.add_rounded),
+                  icon: const Icon(Icons.add_outlined),
                   label: const Text('اطلب مهمة جديدة'),
                 )
               : null,
@@ -112,11 +112,11 @@ class OrderCard extends StatelessWidget {
           const Divider(),
           const SizedBox(height: 8),
           Row(children: [
-            const Icon(Icons.engineering_rounded, size: 18, color: Brand.mutedFg),
+            const Icon(Icons.engineering_outlined, size: 18, color: Brand.mutedFg),
             const SizedBox(width: 6),
             Expanded(child: Text(order.providerName ?? 'بانتظار مقدم خدمة', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
             if (order.rating != null) Stars(value: order.rating!.toDouble(), size: 14),
-            if (order.unread > 0) Pill('${order.unread} رسالة جديدة', icon: Icons.chat_rounded, color: Brand.primary, background: const Color(0xFFE5EDFB)),
+            if (order.unread > 0) Pill('${order.unread} رسالة جديدة', icon: Icons.chat_outlined, color: Brand.primary, background: const Color(0xFFE5EDFB)),
           ]),
         ],
       ]),

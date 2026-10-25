@@ -55,21 +55,84 @@ class _CustomerShellState extends State<CustomerShell> {
       valueListenable: CustomerShell.tab,
       builder: (context, index, _) => Scaffold(
         body: IndexedStack(index: index, children: const [HomeTab(), ServicesTab(), OrdersTab(), AccountTab()]),
+        // Five slots: the middle one is the (+) "request a service" button.
         bottomNavigationBar: NavigationBar(
-          selectedIndex: index,
-          onDestinationSelected: (i) => CustomerShell.tab.value = i,
+          selectedIndex: index >= 2 ? index + 1 : index,
+          onDestinationSelected: (i) {
+            if (i == 2) {
+              showRequestSheet(context);
+              return;
+            }
+            CustomerShell.tab.value = i > 2 ? i - 1 : i;
+          },
           destinations: [
-            const NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home_rounded), label: 'الرئيسية'),
-            const NavigationDestination(icon: Icon(Icons.grid_view_outlined), selectedIcon: Icon(Icons.grid_view_rounded), label: 'الخدمات'),
+            const NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'الرئيسية'),
+            const NavigationDestination(icon: Icon(Icons.grid_view_outlined), selectedIcon: Icon(Icons.grid_view), label: 'الخدمات'),
+            NavigationDestination(
+              icon: Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  gradient: Brand.gradient,
+                  shape: BoxShape.circle,
+                  boxShadow: [BoxShadow(color: Brand.primary.withValues(alpha: 0.35), blurRadius: 12, offset: const Offset(0, 5))],
+                ),
+                child: const Icon(Icons.add, color: Colors.white, size: 30),
+              ),
+              label: 'اطلب خدمة',
+            ),
             NavigationDestination(
               icon: Badge(isLabelVisible: openCount > 0, label: Text('$openCount'), child: const Icon(Icons.receipt_long_outlined)),
-              selectedIcon: Badge(isLabelVisible: openCount > 0, label: Text('$openCount'), child: const Icon(Icons.receipt_long_rounded)),
+              selectedIcon: Badge(isLabelVisible: openCount > 0, label: Text('$openCount'), child: const Icon(Icons.receipt_long)),
               label: 'طلباتي',
             ),
-            const NavigationDestination(icon: Icon(Icons.person_outline_rounded), selectedIcon: Icon(Icons.person_rounded), label: 'حسابي'),
+            const NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'حسابي'),
           ],
         ),
       ),
     );
   }
+}
+
+/// Quick "request a service" sheet opened from the (+) button: pick a main service.
+void showRequestSheet(BuildContext context) {
+  final services = PublicScope.of(context).services;
+  showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (ctx) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          const Text('ماذا تحتاج اليوم؟', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 4),
+          const Text('اختر الخدمة الرئيسية ثم المهمة المطلوبة', style: TextStyle(color: Brand.mutedFg, fontSize: 12.5)),
+          const SizedBox(height: 14),
+          if (services.isEmpty)
+            const EmptyState(icon: Icons.design_services_outlined, title: 'لا توجد خدمات متاحة حالياً')
+          else
+            Flexible(
+              child: GridView.count(
+                crossAxisCount: 3,
+                shrinkWrap: true,
+                mainAxisSpacing: 10,
+                crossAxisSpacing: 10,
+                childAspectRatio: 0.95,
+                children: [
+                  for (final s in services)
+                    ServiceBox(
+                      service: s,
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => ServiceDetailPage(service: s)));
+                      },
+                    ),
+                ],
+              ),
+            ),
+        ]),
+      ),
+    ),
+  );
 }

@@ -74,7 +74,7 @@ class _FieldState extends State<Field> {
             suffixIcon: widget.password
                 ? IconButton(
                     onPressed: () => setState(() => _hidden = !_hidden),
-                    icon: Icon(_hidden ? Icons.visibility_rounded : Icons.visibility_off_rounded, color: Brand.mutedFg),
+                    icon: Icon(_hidden ? Icons.visibility_outlined : Icons.visibility_off_outlined, color: Brand.mutedFg),
                   )
                 : null,
           ),
@@ -100,7 +100,7 @@ class RegionField extends StatelessWidget {
       value: value,
       options: regions,
       hint: 'اختر المدينة',
-      icon: Icons.location_city_rounded,
+      icon: Icons.location_city_outlined,
       validator: required ? (v) => v == null ? 'اختر المدينة' : null : null,
       onChanged: onChanged,
     );
@@ -152,7 +152,7 @@ class PickerField extends StatelessWidget {
                 for (final o in options)
                   ListTile(
                     title: Text(_labelOf(o), style: TextStyle(fontWeight: o == state.value ? FontWeight.w800 : FontWeight.w500)),
-                    trailing: o == state.value ? Icon(Icons.check_circle_rounded, color: Theme.of(c).colorScheme.primary) : null,
+                    trailing: o == state.value ? Icon(Icons.check_circle_outlined, color: Theme.of(c).colorScheme.primary) : null,
                     onTap: () => Navigator.pop(c, o),
                   ),
               ]),
@@ -185,7 +185,7 @@ class PickerField extends StatelessWidget {
               decoration: InputDecoration(
                 errorText: state.errorText,
                 prefixIcon: icon == null ? null : Icon(icon, color: Brand.mutedFg, size: 21),
-                suffixIcon: const Icon(Icons.keyboard_arrow_down_rounded, color: Brand.mutedFg),
+                suffixIcon: const Icon(Icons.keyboard_arrow_down_outlined, color: Brand.mutedFg),
               ),
               child: Text(state.value == null ? hint : _labelOf(state.value!),
                   style: TextStyle(fontSize: 15, color: state.value == null ? Brand.mutedFg : Brand.foreground)),
@@ -227,7 +227,7 @@ class AuthScaffold extends StatelessWidget {
                 child: Align(
                   alignment: AlignmentDirectional.centerStart,
                   child: showBack && canPop
-                      ? IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.arrow_forward_rounded, color: Colors.white))
+                      ? IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.arrow_forward_outlined, color: Colors.white))
                       : null,
                 ),
               ),
@@ -297,7 +297,7 @@ class _LoginFormState extends State<LoginForm> {
             controller: _id,
             label: 'البريد الإلكتروني',
             hint: 'name@example.com',
-            icon: Icons.alternate_email_rounded,
+            icon: Icons.alternate_email_outlined,
             keyboard: TextInputType.emailAddress,
             ltr: true,
             textInputAction: TextInputAction.next,
@@ -307,7 +307,7 @@ class _LoginFormState extends State<LoginForm> {
           Field(
             controller: _pw,
             label: 'كلمة المرور',
-            icon: Icons.lock_rounded,
+            icon: Icons.lock_outlined,
             password: true,
             ltr: true,
             textInputAction: TextInputAction.done,
@@ -315,7 +315,7 @@ class _LoginFormState extends State<LoginForm> {
             validator: (v) => requiredField(v, 'كلمة المرور'),
           ),
           const SizedBox(height: 6),
-          BusyButton(label: 'تسجيل الدخول', icon: Icons.login_rounded, onPressed: _submit),
+          BusyButton(label: 'تسجيل الدخول', icon: Icons.login_outlined, onPressed: _submit),
           if (widget.footer != null) ...[const SizedBox(height: 12), widget.footer!],
         ]),
       ),

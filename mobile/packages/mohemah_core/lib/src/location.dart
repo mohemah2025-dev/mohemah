@@ -1,7 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
-import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:http/http.dart' as http;
 
 import 'public_data.dart';
 import 'theme.dart';
@@ -46,22 +48,25 @@ String? _matchRegion(List<String> regions, Iterable<String?> names) {
   return null;
 }
 
-/// Turns coordinates into a readable Arabic address and the matching city.
+/// Turns coordinates into a readable Arabic address and the matching city
+/// (OpenStreetMap reverse geocoding: free, no key, no native plugin).
 Future<PickedLocation> describeLocation(double lat, double lng, List<String> regions) async {
   try {
-    await setLocaleIdentifier('ar_SA');
-    final marks = await placemarkFromCoordinates(lat, lng);
-    if (marks.isNotEmpty) {
-      final p = marks.first;
+    final uri = Uri.parse('https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&addressdetails=1&accept-language=ar&lat=$lat&lon=$lng');
+    final res = await http.get(uri, headers: {'User-Agent': 'MohemahApp/1.0 (sa.mohemah)'}).timeout(const Duration(seconds: 12));
+    if (res.statusCode == 200) {
+      final data = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
+      final a = (data['address'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
+      String? v(String k) => (a[k] as String?)?.trim();
       final parts = <String>[];
-      for (final x in [p.subLocality, p.thoroughfare, p.street, p.name]) {
-        final v = (x ?? '').trim();
-        if (v.isNotEmpty && !parts.contains(v) && !RegExp(r'^[A-Z0-9+]{4,}\+').hasMatch(v)) parts.add(v);
+      for (final x in [v('neighbourhood') ?? v('suburb') ?? v('quarter'), v('road'), v('house_number')]) {
+        if (x != null && x.isNotEmpty && !parts.contains(x)) parts.add(x);
       }
-      final region = _matchRegion(regions, [p.locality, p.subAdministrativeArea, p.administrativeArea]);
-      final city = (p.locality ?? '').trim();
-      if (city.isNotEmpty && !parts.contains(city)) parts.add(city);
-      return PickedLocation(lat: lat, lng: lng, address: parts.isEmpty ? '$lat, $lng' : parts.take(3).join('، '), region: region);
+      final city = v('city') ?? v('town') ?? v('village');
+      final region = _matchRegion(regions, [city, v('county'), v('state'), data['display_name'] as String?]);
+      if (city != null && city.isNotEmpty) parts.add(city);
+      if (parts.isNotEmpty) return PickedLocation(lat: lat, lng: lng, address: parts.join('، '), region: region);
+      return PickedLocation(lat: lat, lng: lng, address: (data['display_name'] ?? '$lat, $lng').toString(), region: region);
     }
   } catch (_) {}
   return PickedLocation(lat: lat, lng: lng, address: '${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}');

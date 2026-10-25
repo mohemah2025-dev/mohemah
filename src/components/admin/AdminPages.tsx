@@ -1,12 +1,12 @@
 import { ActivityTrendChart, ServiceDemandChart } from "./AdminOverviewCharts";
 import { ServiceIcon } from "@/components/ServiceAppearance";
 import { AdminProviderApplications } from "@/components/ProviderApplication";
-import { useAuth } from "@/lib/AuthContext";
+import { ADMIN_SECTIONS, useAuth, type AdminPermissions, type PermLevel } from "@/lib/AuthContext";
 import { errMsg } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "@tanstack/react-router";
-import { useAdmin, MainService, SubService, REGIONS_LIST, AdminCustomer, AdminProviderRow, uploadAdminImage } from "@/lib/adminStore";
+import { useAdmin, MainService, SubService, REGIONS_LIST, AdminCustomer, AdminProviderRow, uploadAdminImage, type StaffMember } from "@/lib/adminStore";
 import { ArrowLeft, Plus, Pencil, Trash2, TrendingUp, TrendingDown, Coins, Users, UserCheck, Star, Wrench, MapPin, ArrowDownCircle, ArrowUpCircle, Upload, Download, Save, LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
 
@@ -457,13 +457,66 @@ export function AdminFinancePage() {
 }
 
 /* ============ Staff ============ */
+const LEVELS: { v: PermLevel; label: string }[] = [{ v: "none", label: "بدون" }, { v: "view", label: "عرض" }, { v: "edit", label: "تعديل" }];
+
+/** Default page permissions for a new supervisor (everything except administration pages). */
+function defaultAccess(): AdminPermissions {
+  const p = Object.fromEntries(ADMIN_SECTIONS.map((x) => [x.key, "edit"])) as AdminPermissions;
+  p.gateways = "view"; p.settings = "view"; p.integrations = "none"; p.staff = "none";
+  return p;
+}
+
+/** One row per page with none / view / edit. */
+function PermissionsMatrix({ value, onChange, max }: { value: AdminPermissions; onChange: (v: AdminPermissions) => void; max?: AdminPermissions | null }) {
+  const rank = { none: 0, view: 1, edit: 2 };
+  const setAll = (lv: PermLevel) => onChange(Object.fromEntries(ADMIN_SECTIONS.map((x) => [x.key, max && rank[max[x.key]] < rank[lv] ? max[x.key] : lv])) as AdminPermissions);
+  return (
+    <div>
+      <div className="flex flex-wrap gap-2 mb-2 text-[11px]">
+        <span className="text-muted-foreground">تطبيق على الكل:</span>
+        {LEVELS.map((l) => <button key={l.v} type="button" onClick={() => setAll(l.v)} className="px-2 py-0.5 rounded-full border border-border hover:bg-mohemah-light">{l.label}</button>)}
+      </div>
+      <div className="border border-border rounded-xl divide-y divide-border max-h-[50vh] overflow-y-auto">
+        {ADMIN_SECTIONS.map((sec) => (
+          <div key={sec.key} className="flex items-center justify-between gap-2 px-3 py-2">
+            <span className="text-xs font-bold">{sec.label}</span>
+            <div className="inline-flex rounded-lg border border-border overflow-hidden text-[11px]">
+              {LEVELS.map((l) => {
+                const disabled = !!max && rank[max[sec.key]] < rank[l.v];
+                const active = value[sec.key] === l.v;
+                return (
+                  <button key={l.v} type="button" disabled={disabled} onClick={() => onChange({ ...value, [sec.key]: l.v })}
+                    className={`px-2.5 py-1 ${active ? (l.v === "edit" ? "bg-emerald-600 text-white" : l.v === "view" ? "bg-mohemah-blue text-white" : "bg-muted-foreground text-white") : "bg-card"} disabled:opacity-30`}>
+                    {l.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function accessSummary(a: AdminPermissions | null, owner: boolean) {
+  if (owner) return "كل الصفحات (تعديل)";
+  const p = a ?? defaultAccess();
+  const edit = ADMIN_SECTIONS.filter((x) => p[x.key] === "edit").length;
+  const view = ADMIN_SECTIONS.filter((x) => p[x.key] === "view").length;
+  return `تعديل ${edit} · عرض ${view} · بدون ${ADMIN_SECTIONS.length - edit - view}`;
+}
+
 export function AdminStaffPage() {
-  const { staff, customers, providers, addStaff, toggleStaff, resetPassword } = useAdmin();
-  const { isOwner, user } = useAuth();
+  const { staff, customers, providers, addStaff, toggleStaff, resetPassword, setStaffPermissions } = useAdmin();
+  const { isOwner, user, can, permissions } = useAuth();
+  const canEdit = can("staff", "edit");
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<StaffMember | null>(null);
   const [resetFor, setResetFor] = useState("");
   const [newPass, setNewPass] = useState("");
-  const everyone = [...staff.map(s => ({ id: s.id, name: `${s.name} (${s.role})` })), ...providers.map(p => ({ id: p.id, name: `${p.name} (مقدم خدمة)` })), ...customers.filter(c => !providers.some(p => p.id === c.id)).map(c => ({ id: c.id, name: `${c.name} (طالب خدمة)` }))];
+  const everyone = [...staff.map(s => ({ id: s.id, name: `${s.name} (${s.role})` })), ...providers.map(p => ({ id: p.id, name: `${p.name} (مقدم خدمة)` })), ...customers.filter(c => !providers.some(p => p.id === c.id)).map(c => ({ id: c.id, name: `${c.name} (طالب خدمة)` }))]
+    .filter((u) => isOwner || !staff.some((s) => s.id === u.id && s.role === "مالك"));
   const doReset = async () => {
     if (!resetFor || newPass.length < 8) return toast.error("اختر المستخدم واكتب كلمة مرور 8 أحرف على الأقل");
     try { await resetPassword(resetFor, newPass); toast.success("تم تعيين كلمة المرور الجديدة وتسجيل خروج المستخدم من أجهزته"); setNewPass(""); setResetFor(""); }
@@ -471,29 +524,36 @@ export function AdminStaffPage() {
   };
   return (
     <div>
-      <PageHeader title="المستخدمون والصلاحيات" subtitle="حسابات لوحة التحكم وأدوارها"
-        action={isOwner ? <button onClick={() => setOpen(true)} className="mohemah-btn-coral text-sm px-4 py-2 rounded-xl flex items-center gap-2"><Plus className="w-4 h-4" /> إضافة مستخدم</button> : undefined} />
+      <PageHeader title="المستخدمون والصلاحيات" subtitle="حسابات لوحة التحكم وصلاحية كل مستخدم على كل صفحة"
+        action={canEdit ? <button onClick={() => setOpen(true)} className="mohemah-btn-coral text-sm px-4 py-2 rounded-xl flex items-center gap-2"><Plus className="w-4 h-4" /> إضافة مستخدم</button> : undefined} />
       <div className="bg-card border border-border rounded-2xl overflow-x-auto">
-        <table className="w-full text-sm text-right min-w-[560px]">
+        <table className="w-full text-sm text-right min-w-[640px]">
           <thead className="bg-mohemah-light text-xs text-muted-foreground">
             <tr>{["#", "الاسم", "الدخول", "الدور", "الصلاحيات", "الحالة", ""].map((h) => <th key={h} className="p-3">{h}</th>)}</tr>
           </thead>
           <tbody>
-            {staff.map((s, i) => (
-              <tr key={s.id} className="border-t border-border">
-                <td className="p-3 text-muted-foreground">{i + 1}</td>
-                <td className="p-3 font-bold">{s.name}</td>
-                <td className="p-3" dir="ltr">{s.email}</td>
-                <td className="p-3"><span className="text-[11px] px-2 py-1 rounded-full bg-mohemah-blue/15 text-mohemah-blue">{s.role}</span></td>
-                <td className="p-3 text-[11px] text-muted-foreground">{s.role === "مالك" ? "كل الأقسام" : "كل الأقسام عدا الإعدادات والصلاحيات وبوابات الدفع"}</td>
-                <td className="p-3"><span className={`text-[11px] px-2 py-1 rounded-full ${s.active ? "bg-emerald-100 text-emerald-700" : "bg-muted text-muted-foreground"}`}>{s.active ? "نشط" : "موقوف"}</span></td>
-                <td className="p-3">{isOwner && s.id !== user?.id && <button onClick={() => toggleStaff(s.id)} className="text-xs text-mohemah-blue hover:underline">{s.active ? "إيقاف" : "تفعيل"}</button>}</td>
-              </tr>
-            ))}
+            {staff.map((s, i) => {
+              const owner = s.role === "مالك";
+              return (
+                <tr key={s.id} className="border-t border-border">
+                  <td className="p-3 text-muted-foreground">{i + 1}</td>
+                  <td className="p-3 font-bold">{s.name}</td>
+                  <td className="p-3" dir="ltr">{s.email}</td>
+                  <td className="p-3"><span className="text-[11px] px-2 py-1 rounded-full bg-mohemah-blue/15 text-mohemah-blue">{s.role}</span></td>
+                  <td className="p-3 text-[11px] text-muted-foreground">{accessSummary(s.access, owner)}</td>
+                  <td className="p-3"><span className={`text-[11px] px-2 py-1 rounded-full ${s.active ? "bg-emerald-100 text-emerald-700" : "bg-muted text-muted-foreground"}`}>{s.active ? "نشط" : "موقوف"}</span></td>
+                  <td className="p-3 whitespace-nowrap space-x-3 space-x-reverse">
+                    {canEdit && !owner && s.id !== user?.id && <button onClick={() => setEditing(s)} className="text-xs text-mohemah-blue hover:underline">الصلاحيات</button>}
+                    {canEdit && s.id !== user?.id && (isOwner || !owner) && <button onClick={() => toggleStaff(s.id)} className="text-xs text-mohemah-blue hover:underline">{s.active ? "إيقاف" : "تفعيل"}</button>}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
-      {isOwner && (
+      <p className="text-[11px] text-muted-foreground mt-2">«عرض» يفتح الصفحة للقراءة فقط، و«تعديل» يسمح بالحفظ والإضافة والحذف، و«بدون» يخفي الصفحة. الصلاحيات تُطبَّق في الخادم أيضاً.</p>
+      {canEdit && (
         <section className="mt-6 border-t border-border pt-5 space-y-3 max-w-xl">
           <h2 className="font-bold text-sm">إعادة تعيين كلمة مرور مستخدم</h2>
           <p className="text-xs text-muted-foreground">يُستخدم عندما ينسى طالب الخدمة أو مقدم الخدمة كلمة المرور ويتواصل مع الدعم.</p>
@@ -504,32 +564,59 @@ export function AdminStaffPage() {
           </div>
         </section>
       )}
-      {open && <NewStaffDialog onClose={() => setOpen(false)} onSave={async (d) => { try { await addStaff(d); toast.success("تم إضافة المستخدم"); setOpen(false); } catch (e) { toast.error(errMsg(e)); } }} />}
+      {open && <NewStaffDialog canOwner={isOwner} max={isOwner ? null : permissions} onClose={() => setOpen(false)} onSave={async (d) => { try { await addStaff(d); toast.success("تم إضافة المستخدم"); setOpen(false); } catch (e) { toast.error(errMsg(e)); } }} />}
+      {editing && <PermissionsDialog member={editing} max={isOwner ? null : permissions} onClose={() => setEditing(null)}
+        onSave={async (p) => { try { await setStaffPermissions(editing.id, p); toast.success("تم حفظ الصلاحيات"); setEditing(null); } catch (e) { toast.error(errMsg(e)); } }} />}
     </div>
   );
 }
 
-function NewStaffDialog({ onClose, onSave }: { onClose: () => void; onSave: (s: { name: string; login: string; password: string; role: "مالك" | "مشرف" }) => void }) {
+function PermissionsDialog({ member, max, onClose, onSave }: { member: StaffMember; max: AdminPermissions | null; onClose: () => void; onSave: (p: AdminPermissions) => void }) {
+  const [value, setValue] = useState<AdminPermissions>(member.access ?? defaultAccess());
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-card rounded-2xl p-6 max-w-lg w-full" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-lg font-bold mb-1">صلاحيات {member.name}</h3>
+        <p className="text-xs text-muted-foreground mb-4">حدد لكل صفحة: بدون، عرض، أو تعديل. يسري التغيير فوراً.</p>
+        <PermissionsMatrix value={value} onChange={setValue} max={max} />
+        <div className="flex gap-2 mt-5">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-mohemah-light text-sm font-bold">إلغاء</button>
+          <button onClick={() => onSave(value)} className="flex-1 py-2.5 rounded-xl mohemah-btn-coral text-sm font-bold">حفظ الصلاحيات</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NewStaffDialog({ canOwner, max, onClose, onSave }: { canOwner: boolean; max: AdminPermissions | null; onClose: () => void; onSave: (s: { name: string; login: string; password: string; role: "مالك" | "مشرف"; permissions?: AdminPermissions }) => void }) {
   const [name, setName] = useState("");
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<"مالك" | "مشرف">("مشرف");
+  const [access, setAccess] = useState<AdminPermissions>(() => {
+    const d = defaultAccess();
+    if (!max) return d;
+    const rank = { none: 0, view: 1, edit: 2 };
+    return Object.fromEntries(ADMIN_SECTIONS.map((x) => [x.key, rank[max[x.key]] < rank[d[x.key]] ? max[x.key] : d[x.key]])) as AdminPermissions;
+  });
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-card rounded-2xl p-6 max-w-lg w-full" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-card rounded-2xl p-6 max-w-lg w-full max-h-[92vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-lg font-bold mb-4">إضافة مستخدم للوحة التحكم</h3>
         <div className="space-y-3 text-sm">
           <Field label="الاسم"><input value={name} onChange={(e) => setName(e.target.value)} className="admin-input" /></Field>
           <Field label="البريد أو اسم المستخدم (للدخول)"><input dir="ltr" value={login} onChange={(e) => setLogin(e.target.value)} className="admin-input" placeholder="support1 أو name@mohemah.sa" /></Field>
           <Field label="كلمة المرور المؤقتة"><input dir="ltr" value={password} onChange={(e) => setPassword(e.target.value)} className="admin-input" placeholder="8 أحرف على الأقل" /></Field>
-          <Field label="الدور">
-            <select value={role} onChange={(e) => setRole(e.target.value as "مالك" | "مشرف")} className="admin-input"><option>مشرف</option><option>مالك</option></select>
-          </Field>
-          <p className="text-[11px] text-muted-foreground">المشرف يدير كل الأقسام عدا الإعدادات العامة والصلاحيات وبوابات الدفع. المالك يدير كل شيء.</p>
+          {canOwner && (
+            <Field label="الدور">
+              <select value={role} onChange={(e) => setRole(e.target.value as "مالك" | "مشرف")} className="admin-input"><option>مشرف</option><option>مالك</option></select>
+            </Field>
+          )}
+          {role === "مشرف" ? <PermissionsMatrix value={access} onChange={setAccess} max={max} /> : <p className="text-[11px] text-muted-foreground">المالك يملك كل الصلاحيات على كل الصفحات.</p>}
         </div>
         <div className="flex gap-2 mt-5">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-mohemah-light text-sm font-bold">إلغاء</button>
-          <button onClick={() => name && login && password.length >= 8 ? onSave({ name, login, password, role }) : toast.error("أكمل الحقول (كلمة المرور 8 أحرف على الأقل)")} className="flex-1 py-2.5 rounded-xl mohemah-btn-coral text-sm font-bold">حفظ</button>
+          <button onClick={() => name && login && password.length >= 8 ? onSave({ name, login, password, role, permissions: role === "مشرف" ? access : undefined }) : toast.error("أكمل الحقول (كلمة المرور 8 أحرف على الأقل)")} className="flex-1 py-2.5 rounded-xl mohemah-btn-coral text-sm font-bold">حفظ</button>
         </div>
       </div>
     </div>

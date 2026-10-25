@@ -81,10 +81,8 @@ class _ApplicationPageState extends State<ApplicationPage> {
     final ready = rejectedKinds.isEmpty ? _new.isNotEmpty : rejectedKinds.every(_new.containsKey);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('حسابي'),
-        actions: [IconButton(tooltip: 'تسجيل خروج', onPressed: () => signOutFlow(context), icon: const Icon(Icons.logout_outlined))],
-      ),
+      appBar: PageHeader.bar('حسابي',
+          trailing: IconButton(tooltip: 'تسجيل خروج', onPressed: () => signOutFlow(context), icon: const Icon(Icons.logout_outlined))),
       body: RefreshIndicator(
         onRefresh: () async {
           await s.refresh().catchError((_) {});

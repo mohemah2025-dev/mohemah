@@ -1,8 +1,9 @@
 import {
-  addMonths, all, fail, first, json, now, num, oneOf, readJson, REGIONS, run, stmt, str, strArray, uid, inList,
+  all, fail, first, json, now, num, oneOf, readJson, REGIONS, run, stmt, str, strArray, uid, inList,
   type Ctx, type Router,
 } from "../lib/core";
 import { requireProvider, requireUser } from "../lib/auth";
+import { notifyExternal } from "../lib/messaging";
 import {
   activeSubscriptionEnd, getSettings, latestSubscriptionEnd, notifyStmts, orderNo, recomputeCustomerRating,
   recomputeProviderRating,
@@ -241,6 +242,7 @@ export function registerOrderRoutes(r: Router) {
     const subEnd = await activeSubscriptionEnd(c.env, u.id);
     const t = now();
     const label = orderLabel(o);
+    const smsAccepted = () => { if (o.customer_id) notifyExternal(c, [o.customer_id], { title: "تم قبول طلبك", body: `قبل مقدم الخدمة طلبك (${label})، تابع الحالة من تطبيق مهمة.`, email: false }); };
     const notifyCustomer = o.customer_id ? notifyStmts(c, [o.customer_id], { title: "تم قبول طلبك", body: `قبل مقدم الخدمة طلب ${label}، تابع الحالة من صفحة الطلبات.`, link: "/orders", icon: "CheckCircle2" }) : [];
 
     // An active subscription (paid or gifted) always covers the order; otherwise coins are charged when enabled.
@@ -250,7 +252,7 @@ export function registerOrderRoutes(r: Router) {
       ]);
       const after = await getOrder(c, o.id);
       if (after.provider_id !== u.id || after.accepted_at !== t) fail(409, "not_pending", "قبل هذا الطلب مقدم خدمة آخر");
-      if (notifyCustomer.length) await c.env.DB.batch(notifyCustomer);
+      if (notifyCustomer.length) { await c.env.DB.batch(notifyCustomer); smsAccepted(); }
       return json({ success: true, mode: "subscription", balance: p.coin_balance });
     }
 
@@ -273,7 +275,7 @@ export function registerOrderRoutes(r: Router) {
       if (bal < cost) return json({ success: false, error: "insufficient_balance", balance: bal, required: cost }, 402);
       fail(409, "not_pending", "قبل هذا الطلب مقدم خدمة آخر");
     }
-    if (notifyCustomer.length) await c.env.DB.batch(notifyCustomer);
+    if (notifyCustomer.length) { await c.env.DB.batch(notifyCustomer); smsAccepted(); }
     return json({ success: true, mode: "coins", balance: (await providerProfile(c, u.id)).coin_balance });
   });
 
@@ -392,12 +394,12 @@ export function registerOrderRoutes(r: Router) {
     const [s, p, gateways] = await Promise.all([
       getSettings(c.env),
       providerProfile(c, u.id),
-      all(c.env.DB, "SELECT id, name, provider_key, fee_percent, test_mode FROM payment_gateways WHERE active = 1 ORDER BY sort_order"),
+      all(c.env.DB, "SELECT id, name, provider_key, fee_percent, test_mode FROM payment_gateways WHERE active = 1 AND (test_mode = 1 OR provider_key IN ('moyasar','tap')) ORDER BY sort_order"),
     ]);
     return json({
       billing_coins_enabled: !!s.billing_coins_enabled, billing_subscription_enabled: !!s.billing_subscription_enabled,
       sub_price_1m: s.sub_price_1m, sub_price_3m: s.sub_price_3m, sub_price_6m: s.sub_price_6m, sub_price_12m: s.sub_price_12m,
-      vat_percent: s.vat_percent, test_payments_enabled: !!s.test_payments_enabled,
+      vat_percent: s.vat_percent, test_payments_enabled: !!s.test_payments_enabled, coin_price: s.coin_price ?? 1,
       balance: p.coin_balance, billing_mode: p.billing_mode,
       subscription_end: await activeSubscriptionEnd(c.env, u.id), latest_end: await latestSubscriptionEnd(c.env, u.id), gateways,
     });
@@ -413,45 +415,7 @@ export function registerOrderRoutes(r: Router) {
     return json({ ok: true });
   });
 
-  async function testGateway(c: Ctx, gatewayId: string | null) {
-    const s = await getSettings(c.env);
-    const gw = await first<{ name: string; test_mode: number }>(c.env.DB, "SELECT name, test_mode FROM payment_gateways WHERE id = ? AND active = 1", gatewayId);
-    if (!gw) fail(400, "gateway_unavailable", "وسيلة الدفع غير متاحة");
-    // Real payment confirmation (gateway webhook) arrives in the launch phase; until then only test payments are possible.
-    if (!gw!.test_mode || !s.test_payments_enabled) fail(402, "live_gateway_not_connected", "بوابة الدفع غير مربوطة بعد");
-    return { gw: gw!, s };
-  }
-
-  r.post("/api/provider/topup", async (c) => {
-    const u = await requireProvider(c);
-    const b = await readJson(c.req);
-    const coins = num(b, "coins", { required: true, min: 1, max: 10000, int: true, label: "عدد الكوينز" })!;
-    const { gw } = await testGateway(c, str(b, "gateway_id", { required: true, max: 64 }));
-    await c.env.DB.batch([
-      stmt(c.env.DB, "UPDATE users SET coin_balance = coin_balance + ? WHERE id = ?", coins, u.id),
-      stmt(c.env.DB, `INSERT INTO coin_transactions (id, provider_id, amount, tx_type, balance_after, description, method)
-                      SELECT ?, ?, ?, 'topup', coin_balance, 'شحن رصيد (تجريبي)', ? FROM users WHERE id = ?`, uid(), u.id, coins, gw.name, u.id),
-    ]);
-    return json({ success: true, balance: (await providerProfile(c, u.id)).coin_balance });
-  });
-
-  r.post("/api/provider/subscribe", async (c) => {
-    const u = await requireProvider(c);
-    const b = await readJson(c.req);
-    const months = num(b, "months", { required: true, int: true, label: "الباقة" })!;
-    const { gw, s } = await testGateway(c, str(b, "gateway_id", { required: true, max: 64 }));
-    if (!s.billing_subscription_enabled) fail(409, "subscription_disabled", "الاشتراك غير مفعّل");
-    const price = ({ 1: s.sub_price_1m, 3: s.sub_price_3m, 6: s.sub_price_6m, 12: s.sub_price_12m } as Record<number, number>)[months];
-    if (price === undefined) fail(400, "invalid_plan", "باقة غير صحيحة");
-    const start = (await latestSubscriptionEnd(c.env, u.id)) ?? now();
-    const end = addMonths(start, months);
-    await c.env.DB.batch([
-      stmt(c.env.DB, "INSERT INTO provider_subscriptions (id, provider_id, months, amount, method, starts_at, ends_at) VALUES (?,?,?,?,?,?,?)", uid(), u.id, months, price, gw.name, start, end),
-      stmt(c.env.DB, "UPDATE users SET billing_mode = 'subscription' WHERE id = ?", u.id),
-      ...notifyStmts(c, [u.id], { title: "تم تفعيل اشتراكك", body: `اشتراكك فعّال حتى ${end.slice(0, 10)}`, category: "general", link: "/provider/billing" }),
-    ]);
-    return json({ success: true, ends_at: end });
-  });
+  // Top-up and subscription purchases live in routes/payments.ts.
 
   r.get("/api/provider/transactions", async (c) => {
     const u = await requireUser(c, { app: "provider" });

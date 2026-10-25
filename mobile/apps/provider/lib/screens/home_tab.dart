@@ -129,6 +129,29 @@ class _ConnectionCardState extends State<_ConnectionCard> with SingleTickerProvi
         SizedBox(
           height: cardHeight,
           child: Column(children: [
+            if (subActive)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BillingPage())),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                    decoration: BoxDecoration(
+                      color: Brand.success.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Brand.success.withValues(alpha: 0.35)),
+                    ),
+                    child: Row(children: [
+                      const Icon(Icons.verified_outlined, color: Brand.success, size: 20),
+                      const SizedBox(width: 8),
+                      const Expanded(child: Text('الاشتراك فعّال', style: TextStyle(color: Brand.success, fontWeight: FontWeight.w800, fontSize: 14))),
+                      Text('حتى ${subEnd!.year}/${subEnd.month.toString().padLeft(2, '0')}/${subEnd.day.toString().padLeft(2, '0')}',
+                          style: const TextStyle(color: Brand.success, fontSize: 12, fontWeight: FontWeight.w600)),
+                    ]),
+                  ),
+                ),
+              ),
             // The connection circle in the middle.
             Expanded(
               child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [

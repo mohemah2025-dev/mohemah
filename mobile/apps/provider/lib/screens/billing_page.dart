@@ -63,11 +63,60 @@ class _BillingPageState extends State<BillingPage> {
     if (mounted) showSnack(context, message);
   }
 
+  /// Real gateway (Moyasar / Tap): opens the payment page, then the provider confirms from a dialog.
+  Future<bool> _maybePayOnline(dynamic r, String successMessage) async {
+    if (r is! Map || r['payment_url'] == null) return false;
+    final id = '${r['payment_id']}';
+    if (!mounted) return true;
+    await openUrl(context, '${r['payment_url']}');
+    if (!mounted) return true;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        var checking = false;
+        return StatefulBuilder(
+          builder: (ctx, setD) => AlertDialog(
+            title: const Text('إتمام الدفع'),
+            content: Text('أكمل الدفع (${r['amount']} ريال) في الصفحة التي فُتحت، ثم ارجع واضغط «تحقق من الدفع».'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('لاحقاً')),
+              FilledButton(
+                onPressed: checking
+                    ? null
+                    : () async {
+                        setD(() => checking = true);
+                        try {
+                          final p = await ProviderScope.read(context).api.get('/api/provider/payments/$id');
+                          final st = p is Map ? p['status'] : null;
+                          if (st == 'paid') {
+                            if (ctx.mounted) Navigator.pop(ctx);
+                            await _after(successMessage);
+                            return;
+                          }
+                          if (ctx.mounted) showSnack(ctx, st == 'failed' ? 'لم تتم عملية الدفع' : 'لم يصل تأكيد الدفع بعد، حاول بعد لحظات', error: st == 'failed');
+                          if (st == 'failed' && ctx.mounted) Navigator.pop(ctx);
+                        } catch (e) {
+                          if (ctx.mounted) showError(ctx, e);
+                        }
+                        if (ctx.mounted) setD(() => checking = false);
+                      },
+                child: Text(checking ? 'جارٍ التحقق…' : 'تحقق من الدفع'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    return true;
+  }
+
   Future<void> _topup(Billing b, int coins) async {
     final gw = await _pickGateway(b);
     if (gw == null || !mounted) return;
     try {
-      await ProviderScope.read(context).api.post('/api/provider/topup', {'coins': coins, 'gateway_id': gw});
+      final r = await ProviderScope.read(context).api.post('/api/provider/topup', {'coins': coins, 'gateway_id': gw});
+      if (await _maybePayOnline(r, 'تمت إضافة $coins كوين لرصيدك')) return;
       await _after('تمت إضافة $coins كوين لرصيدك');
     } catch (e) {
       if (mounted) showError(context, e);
@@ -78,7 +127,8 @@ class _BillingPageState extends State<BillingPage> {
     final gw = await _pickGateway(b);
     if (gw == null || !mounted) return;
     try {
-      await ProviderScope.read(context).api.post('/api/provider/subscribe', {'months': months, 'gateway_id': gw});
+      final r = await ProviderScope.read(context).api.post('/api/provider/subscribe', {'months': months, 'gateway_id': gw});
+      if (await _maybePayOnline(r, 'تم الدفع وتفعيل اشتراكك')) return;
       await _after('تم تفعيل اشتراكك');
     } catch (e) {
       if (mounted) showError(context, e);
@@ -98,15 +148,13 @@ class _BillingPageState extends State<BillingPage> {
   Widget build(BuildContext context) {
     final b = _b;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('الرصيد والاشتراك'),
-        actions: [
-          IconButton(
-            tooltip: 'سجل العمليات',
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TransactionsPage())),
-            icon: const Icon(Icons.receipt_long_outlined),
-          ),
-        ],
+      appBar: PageHeader.bar(
+        'الرصيد والاشتراك',
+        trailing: IconButton(
+          tooltip: 'سجل العمليات',
+          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TransactionsPage())),
+          icon: const Icon(Icons.receipt_long_outlined),
+        ),
       ),
       body: _error != null && b == null
           ? ErrorRetry(message: _error!, onRetry: _load)

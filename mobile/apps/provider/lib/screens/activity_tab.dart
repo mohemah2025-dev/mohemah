@@ -16,7 +16,7 @@ class ActivityTab extends StatelessWidget {
     final store = ProviderScope.of(context);
     final s = store.stats;
     return Scaffold(
-      appBar: AppBar(title: const Text('نشاطي')),
+      appBar: PageHeader.bar('نشاطي'),
       body: RefreshIndicator(
         onRefresh: store.loadStats,
         child: s == null

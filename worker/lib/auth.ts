@@ -137,3 +137,50 @@ export async function verifyFileSignature(env: Env, key: string, e: string, s: s
   if (!key || !e || !s || Number(e) < Date.now() / 1000) return false;
   return (await hmac(env, `${key}:${e}`)) === s;
 }
+
+/* ---------- Admin permissions per section ---------- */
+export const ADMIN_SECTIONS = [
+  "dashboard", "customers", "providers", "services", "finance", "billing", "gateways",
+  "notifications", "messages", "ads", "policies", "integrations", "staff", "settings",
+] as const;
+export type AdminSection = (typeof ADMIN_SECTIONS)[number];
+export type PermLevel = "none" | "view" | "edit";
+export type AdminPermissions = Record<AdminSection, PermLevel>;
+
+/** Staff without custom permissions keep the previous behaviour: everything except administration pages. */
+export function defaultStaffPermissions(): AdminPermissions {
+  const p = Object.fromEntries(ADMIN_SECTIONS.map((s) => [s, "edit"])) as AdminPermissions;
+  p.gateways = "view";
+  p.settings = "view";
+  p.integrations = "none";
+  p.staff = "none";
+  return p;
+}
+
+export function parsePermissions(raw: unknown): AdminPermissions {
+  const base = defaultStaffPermissions();
+  let obj: Record<string, unknown> = {};
+  if (typeof raw === "string" && raw) { try { obj = JSON.parse(raw); } catch { obj = {}; } } else if (raw && typeof raw === "object") obj = raw as Record<string, unknown>;
+  for (const s of ADMIN_SECTIONS) {
+    const v = obj[s];
+    if (v === "none" || v === "view" || v === "edit") base[s] = v;
+  }
+  return base;
+}
+
+export async function permissionsOf(c: Ctx, u: AuthUser): Promise<AdminPermissions> {
+  if (u.roles.includes("admin")) return Object.fromEntries(ADMIN_SECTIONS.map((s) => [s, "edit"])) as AdminPermissions;
+  const row = await first<{ admin_permissions: string | null }>(c.env.DB, "SELECT admin_permissions FROM users WHERE id = ?", u.id);
+  return parsePermissions(row?.admin_permissions);
+}
+
+/** Admin user with at least `level` on one of `sections` (the owner always passes). */
+export async function requirePerm(c: Ctx, sections: AdminSection | AdminSection[], level: "view" | "edit") {
+  const u = await requireAdmin(c);
+  if (u.roles.includes("admin")) return u;
+  const p = await permissionsOf(c, u);
+  const list = Array.isArray(sections) ? sections : [sections];
+  const ok = list.some((s) => (level === "view" ? p[s] !== "none" : p[s] === "edit"));
+  if (!ok) fail(403, "forbidden", level === "view" ? "لا تملك صلاحية عرض هذا القسم" : "لا تملك صلاحية التعديل في هذا القسم");
+  return u;
+}

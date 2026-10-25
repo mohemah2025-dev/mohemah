@@ -22,6 +22,7 @@ import { Route as AdminBillingRouteImport } from './routes/admin/billing'
 import { Route as AdminCustomersRouteImport } from './routes/admin/customers'
 import { Route as AdminFinanceRouteImport } from './routes/admin/finance'
 import { Route as AdminGatewaysRouteImport } from './routes/admin/gateways'
+import { Route as AdminIntegrationsRouteImport } from './routes/admin/integrations'
 import { Route as AdminMessagesRouteImport } from './routes/admin/messages'
 import { Route as AdminNotificationsRouteImport } from './routes/admin/notifications'
 import { Route as AdminPoliciesRouteImport } from './routes/admin/policies'
@@ -104,6 +105,11 @@ const AdminFinanceRoute = AdminFinanceRouteImport.update({
 const AdminGatewaysRoute = AdminGatewaysRouteImport.update({
   id: '/gateways',
   path: '/gateways',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminIntegrationsRoute = AdminIntegrationsRouteImport.update({
+  id: '/integrations',
+  path: '/integrations',
   getParentRoute: () => AdminRouteRoute,
 } as any)
 const AdminMessagesRoute = AdminMessagesRouteImport.update({
@@ -210,6 +216,7 @@ export interface FileRoutesByFullPath {
   '/admin/customers': typeof AdminCustomersRoute
   '/admin/finance': typeof AdminFinanceRoute
   '/admin/gateways': typeof AdminGatewaysRoute
+  '/admin/integrations': typeof AdminIntegrationsRoute
   '/admin/messages': typeof AdminMessagesRoute
   '/admin/notifications': typeof AdminNotificationsRoute
   '/admin/policies': typeof AdminPoliciesRoute
@@ -242,6 +249,7 @@ export interface FileRoutesByTo {
   '/admin/customers': typeof AdminCustomersRoute
   '/admin/finance': typeof AdminFinanceRoute
   '/admin/gateways': typeof AdminGatewaysRoute
+  '/admin/integrations': typeof AdminIntegrationsRoute
   '/admin/messages': typeof AdminMessagesRoute
   '/admin/notifications': typeof AdminNotificationsRoute
   '/admin/policies': typeof AdminPoliciesRoute
@@ -275,6 +283,7 @@ export interface FileRoutesById {
   '/admin/customers': typeof AdminCustomersRoute
   '/admin/finance': typeof AdminFinanceRoute
   '/admin/gateways': typeof AdminGatewaysRoute
+  '/admin/integrations': typeof AdminIntegrationsRoute
   '/admin/messages': typeof AdminMessagesRoute
   '/admin/notifications': typeof AdminNotificationsRoute
   '/admin/policies': typeof AdminPoliciesRoute
@@ -310,6 +319,7 @@ export interface FileRouteTypes {
     | '/admin/customers'
     | '/admin/finance'
     | '/admin/gateways'
+    | '/admin/integrations'
     | '/admin/messages'
     | '/admin/notifications'
     | '/admin/policies'
@@ -342,6 +352,7 @@ export interface FileRouteTypes {
     | '/admin/customers'
     | '/admin/finance'
     | '/admin/gateways'
+    | '/admin/integrations'
     | '/admin/messages'
     | '/admin/notifications'
     | '/admin/policies'
@@ -374,6 +385,7 @@ export interface FileRouteTypes {
     | '/admin/customers'
     | '/admin/finance'
     | '/admin/gateways'
+    | '/admin/integrations'
     | '/admin/messages'
     | '/admin/notifications'
     | '/admin/policies'
@@ -504,6 +516,13 @@ declare module '@tanstack/react-router' {
       path: '/gateways'
       fullPath: '/admin/gateways'
       preLoaderRoute: typeof AdminGatewaysRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/integrations': {
+      id: '/admin/integrations'
+      path: '/integrations'
+      fullPath: '/admin/integrations'
+      preLoaderRoute: typeof AdminIntegrationsRouteImport
       parentRoute: typeof AdminRouteRoute
     }
     '/admin/messages': {
@@ -655,6 +674,7 @@ interface AdminRouteRouteChildren {
   AdminCustomersRoute: typeof AdminCustomersRoute
   AdminFinanceRoute: typeof AdminFinanceRoute
   AdminGatewaysRoute: typeof AdminGatewaysRoute
+  AdminIntegrationsRoute: typeof AdminIntegrationsRoute
   AdminMessagesRoute: typeof AdminMessagesRoute
   AdminNotificationsRoute: typeof AdminNotificationsRoute
   AdminPoliciesRoute: typeof AdminPoliciesRoute
@@ -671,6 +691,7 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminCustomersRoute: AdminCustomersRoute,
   AdminFinanceRoute: AdminFinanceRoute,
   AdminGatewaysRoute: AdminGatewaysRoute,
+  AdminIntegrationsRoute: AdminIntegrationsRoute,
   AdminMessagesRoute: AdminMessagesRoute,
   AdminNotificationsRoute: AdminNotificationsRoute,
   AdminPoliciesRoute: AdminPoliciesRoute,

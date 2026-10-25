@@ -42,7 +42,7 @@ class _ProviderOrdersTabState extends State<ProviderOrdersTab> {
     final feed = store.feed;
     final section = ProviderShell.ordersSection.value;
     return Scaffold(
-      appBar: AppBar(title: const Text('الطلبات')),
+      appBar: PageHeader.bar('الطلبات'),
       body: Column(children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
@@ -240,7 +240,7 @@ class JobDetailPage extends StatelessWidget {
     }
     if (job == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('الطلب')),
+        appBar: PageHeader.bar('الطلب'),
         body: EmptyState(
           icon: Icons.task_alt_outlined,
           title: 'لم يعد هذا الطلب ضمن الطلبات الجارية',
@@ -258,7 +258,7 @@ class JobDetailPage extends StatelessWidget {
     final canRelease = j.status == 'accepted' || j.status == 'arrived';
 
     return Scaffold(
-      appBar: AppBar(title: Text('طلب #${j.orderNo}')),
+      appBar: PageHeader.bar('طلب #${j.orderNo}'),
       body: RefreshIndicator(
         onRefresh: store.refresh,
         child: ListView(padding: const EdgeInsets.fromLTRB(16, 4, 16, 30), children: [

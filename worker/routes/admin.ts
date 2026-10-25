@@ -3,9 +3,10 @@ import {
   addDays, all, bool, fail, first, inList, json, normalizePhone, now, num, oneOf, readJson, REGIONS, run, stmt, str, strArray,
   uid, validEmail, validSaudiPhone, type Ctx, type Router,
 } from "../lib/core";
-import { hashPassword, requireAdmin, requireOwner, signFileUrl, validatePassword } from "../lib/auth";
+import { ADMIN_SECTIONS, hashPassword, parsePermissions, permissionsOf, requireAdmin, requirePerm, requireUser, signFileUrl, validatePassword } from "../lib/auth";
 import { getSettings, notifyStmts, safeJson } from "../lib/domain";
 import { formFile, savePublicImage } from "./account";
+import { EMAIL_PROVIDERS, notifyExternal, SMS_PROVIDERS, testEmail, testSms } from "../lib/messaging";
 
 const ICON_RE = /^[A-Za-z0-9]{1,40}$/;
 const COLORS = ["blue", "emerald", "gold", "ruby", "teal", "graphite"] as const;
@@ -55,14 +56,27 @@ async function patchRow(c: Ctx, table: string, id: string, f: Record<string, unk
   if (!res.meta.changes) fail(404, "not_found", "العنصر غير موجود");
 }
 
+/** "moyasar" and "tap" are real gateways; anything else is a simulated (test-only) payment method. */
+function gatewayKey(v: string | null) {
+  const k = (v ?? "custom").toLowerCase();
+  return /^[a-z0-9_-]{2,30}$/.test(k) ? k : "custom";
+}
+
+/** Changing an owner/staff account needs the staff permission (and an owner for owner accounts). */
+async function guardAdminTarget(c: Ctx, id: string) {
+  const roles = (await all<{ role: string }>(c.env.DB, "SELECT role FROM user_roles WHERE user_id = ?", id)).map((r) => r.role);
+  if (roles.includes("admin")) await requireUser(c, { app: "admin", roles: ["admin"] });
+  else if (roles.includes("staff")) await requirePerm(c, "staff", "edit");
+}
+
 export function registerAdminRoutes(r: Router) {
   /* ---------- Users ---------- */
   r.get("/api/admin/users", async (c) => {
-    await requireAdmin(c);
+    await requirePerm(c, ["customers", "providers", "staff", "dashboard", "billing", "finance"], "view");
     const [users, roles, provSvcs, orderStats] = await Promise.all([
       all<Record<string, unknown> & { id: string }>(c.env.DB,
         `SELECT id, full_name, email, username, phone, region, gender, rating, rating_count, coin_balance, is_active, is_online,
-                verification_status, created_at, updated_at, last_seen_at FROM users ORDER BY created_at DESC LIMIT 5000`),
+                verification_status, admin_permissions, created_at, updated_at, last_seen_at FROM users ORDER BY created_at DESC LIMIT 5000`),
       all<{ user_id: string; role: string }>(c.env.DB, "SELECT user_id, role FROM user_roles"),
       all<{ provider_id: string; name: string }>(c.env.DB, "SELECT ps.provider_id, s.name FROM provider_services ps JOIN services s ON s.id = ps.service_id"),
       all<{ customer_id: string; service_name: string; n: number }>(c.env.DB, "SELECT customer_id, service_name, COUNT(*) AS n FROM orders WHERE customer_id IS NOT NULL GROUP BY customer_id, service_name"),
@@ -78,16 +92,18 @@ export function registerAdminRoutes(r: Router) {
       if (x.n > o.favN) { o.fav = x.service_name; o.favN = x.n; }
     });
     return json(users.map((u) => ({
-      ...u, is_active: !!u.is_active, is_online: !!u.is_online, roles: rolesBy[u.id] ?? [], services: svcBy[u.id] ?? [],
+      ...u, permissions: (rolesBy[u.id] ?? []).includes("staff") && !(rolesBy[u.id] ?? []).includes("admin") ? parsePermissions(u.admin_permissions) : null,
+      admin_permissions: undefined, is_active: !!u.is_active, is_online: !!u.is_online, roles: rolesBy[u.id] ?? [], services: svcBy[u.id] ?? [],
       orders_count: ordersBy[u.id]?.total ?? 0, favorite_service: ordersBy[u.id]?.fav || null,
     })));
   });
 
   r.patch("/api/admin/users/:id", async (c) => {
-    const admin = await requireAdmin(c);
+    const admin = await requirePerm(c, ["customers", "providers", "staff"], "edit");
     const id = c.params.id;
     const target = await first<{ coin_balance: number }>(c.env.DB, "SELECT coin_balance FROM users WHERE id = ?", id);
     if (!target) fail(404, "not_found", "المستخدم غير موجود");
+    await guardAdminTarget(c, id);
     const b = await readJson(c.req);
     const f: Record<string, unknown> = {};
     const name = str(b, "full_name", { max: 150 });
@@ -125,9 +141,12 @@ export function registerAdminRoutes(r: Router) {
   });
 
   r.post("/api/admin/users/:id/role", async (c) => {
-    const owner = await requireOwner(c);
     const b = await readJson(c.req);
     const role = oneOf(b, "role", ["admin", "staff", "provider", "customer"] as const, { required: true })!;
+    // Only an owner grants or removes the owner role; other roles follow the matching page permission.
+    const owner = role === "admin"
+      ? await requireUser(c, { app: "admin", roles: ["admin"] })
+      : await requirePerm(c, role === "staff" ? "staff" : role === "provider" ? "providers" : "customers", "edit");
     const enable = bool(b, "enable") ?? false;
     const id = c.params.id;
     if (!(await first(c.env.DB, "SELECT 1 FROM users WHERE id = ?", id))) fail(404, "not_found", "المستخدم غير موجود");
@@ -150,10 +169,30 @@ export function registerAdminRoutes(r: Router) {
     return json({ ok: true });
   });
 
+  /** Page permissions of a staff member: {"section": "none" | "view" | "edit"}. */
+  r.put("/api/admin/users/:id/permissions", async (c) => {
+    const me = await requirePerm(c, "staff", "edit");
+    const id = c.params.id;
+    if (id === me.id) fail(400, "self_permissions", "لا يمكنك تعديل صلاحياتك بنفسك");
+    const roles = (await all<{ role: string }>(c.env.DB, "SELECT role FROM user_roles WHERE user_id = ?", id)).map((r) => r.role);
+    if (roles.includes("admin")) fail(400, "owner_permissions", "المالك يملك كل الصلاحيات");
+    if (!roles.includes("staff")) fail(404, "not_staff", "المستخدم ليس من مشرفي اللوحة");
+    const perms = parsePermissions((await readJson(c.req)).permissions);
+    // A staff member cannot grant more than they have.
+    if (!me.roles.includes("admin")) {
+      const mine = await permissionsOf(c, me);
+      const rank = { none: 0, view: 1, edit: 2 } as const;
+      for (const s of ADMIN_SECTIONS) if (rank[perms[s]] > rank[mine[s]]) fail(403, "forbidden", "لا يمكنك منح صلاحية أعلى من صلاحياتك");
+    }
+    await run(c.env.DB, "UPDATE users SET admin_permissions = ?, updated_at = ? WHERE id = ?", JSON.stringify(perms), now(), id);
+    return json({ ok: true, permissions: perms });
+  });
+
   r.post("/api/admin/users/:id/password", async (c) => {
-    await requireOwner(c);
+    await requirePerm(c, ["customers", "providers", "staff"], "edit");
     const password = str(await readJson(c.req), "password", { required: true, label: "كلمة المرور" });
     validatePassword(password);
+    await guardAdminTarget(c, c.params.id);
     const res = await run(c.env.DB, "UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?", await hashPassword(c.env, password!), now(), c.params.id);
     if (!res.meta.changes) fail(404, "not_found", "المستخدم غير موجود");
     await run(c.env.DB, "DELETE FROM sessions WHERE user_id = ?", c.params.id);
@@ -162,7 +201,7 @@ export function registerAdminRoutes(r: Router) {
 
   /** Owner creates a staff/owner account directly (sign-in by email or username). */
   r.post("/api/admin/staff", async (c) => {
-    await requireOwner(c);
+    await requirePerm(c, "staff", "edit");
     const b = await readJson(c.req);
     const full_name = str(b, "full_name", { required: true, max: 150, label: "الاسم" })!;
     const login = str(b, "login", { required: true, max: 255, label: "البريد أو اسم المستخدم" })!.toLowerCase();
@@ -171,10 +210,12 @@ export function registerAdminRoutes(r: Router) {
     const password = str(b, "password", { required: true, label: "كلمة المرور" });
     validatePassword(password);
     const role = oneOf(b, "role", ["admin", "staff"] as const) ?? "staff";
+    if (role === "admin") await requireUser(c, { app: "admin", roles: ["admin"] });
+    const permissions = b.permissions !== undefined && role === "staff" ? JSON.stringify(parsePermissions(b.permissions)) : null;
     if (await first(c.env.DB, "SELECT 1 FROM users WHERE email = ?1 OR username = ?1", login)) fail(409, "taken", "البريد أو اسم المستخدم مستخدم");
     const id = uid();
     await c.env.DB.batch([
-      stmt(c.env.DB, `INSERT INTO users (id, ${isEmail ? "email" : "username"}, full_name, password_hash) VALUES (?,?,?,?)`, id, login, full_name, await hashPassword(c.env, password!)),
+      stmt(c.env.DB, `INSERT INTO users (id, ${isEmail ? "email" : "username"}, full_name, password_hash, admin_permissions) VALUES (?,?,?,?,?)`, id, login, full_name, await hashPassword(c.env, password!), permissions),
       stmt(c.env.DB, "INSERT INTO user_roles (user_id, role) VALUES (?,?)", id, role),
     ]);
     return json({ id }, 201);
@@ -182,7 +223,7 @@ export function registerAdminRoutes(r: Router) {
 
   /* ---------- Provider applications ---------- */
   r.get("/api/admin/applications", async (c) => {
-    await requireAdmin(c);
+    await requirePerm(c, ["providers", "dashboard"], "view");
     const status = c.url.searchParams.get("status") ?? "pending";
     if (!["pending", "approved", "rejected"].includes(status)) fail(400, "invalid_status");
     const rows = await all<Record<string, unknown> & { requested_services: string }>(c.env.DB,
@@ -197,13 +238,13 @@ export function registerAdminRoutes(r: Router) {
   });
 
   r.get("/api/admin/applications/:id/documents", async (c) => {
-    await requireAdmin(c);
+    await requirePerm(c, "providers", "view");
     const docs = await all<{ id: string; kind: string; r2_key: string; created_at: string; status: string; note: string | null }>(c.env.DB, "SELECT id, kind, r2_key, created_at, status, note FROM provider_documents WHERE user_id = ? ORDER BY created_at DESC", c.params.id);
     return json(await Promise.all(docs.map(async (d) => ({ id: d.id, kind: d.kind, created_at: d.created_at, status: d.status, note: d.note, url: `${c.url.origin}${await signFileUrl(c.env, d.r2_key)}` }))));
   });
 
   r.post("/api/admin/applications/:id/review", async (c) => {
-    const admin = await requireAdmin(c);
+    const admin = await requirePerm(c, "providers", "edit");
     const b = await readJson(c.req);
     const approve = bool(b, "approve") ?? false;
     let note = str(b, "note", { max: 500 });
@@ -238,12 +279,15 @@ export function registerAdminRoutes(r: Router) {
         ? { title: "تمت الموافقة على حسابك", body: "تم قبولك كمقدم خدمة في مهمة، فعّل الاتصال من الرئيسية لاستقبال الطلبات.", link: "/provider", category: "general", created_by: admin.id }
         : { title: "تحديث طلب التسجيل", body: `لم تتم الموافقة على طلبك${note ? `: ${note}` : "."}`, link: "/provider/account", category: "general", created_by: admin.id }),
     ]);
+    notifyExternal(c, [c.params.id], approve
+      ? { title: "تمت الموافقة على حسابك", body: "تم قبولك كمقدم خدمة، افتح تطبيق «مهمة شريك» وفعّل الاتصال لاستقبال الطلبات." }
+      : { title: "تحديث طلب التسجيل", body: `لم تتم الموافقة على طلبك${note ? `: ${note}` : "."} يمكنك تعديل المستندات من التطبيق.` });
     return json({ success: true });
   });
 
   /* ---------- Services ---------- */
   r.get("/api/admin/services", async (c) => {
-    await requireAdmin(c);
+    await requirePerm(c, ["services", "providers", "dashboard", "finance"], "view");
     const [services, subs] = await Promise.all([
       all(c.env.DB, "SELECT * FROM services ORDER BY sort_order, name"),
       all(c.env.DB, "SELECT * FROM sub_services ORDER BY sort_order, name"),
@@ -251,7 +295,7 @@ export function registerAdminRoutes(r: Router) {
     return json({ services, sub_services: subs });
   });
   r.post("/api/admin/services", async (c) => {
-    await requireAdmin(c);
+    await requirePerm(c, "services", "edit");
     const f = serviceFields(await readJson(c.req), false);
     const id = uid();
     const keys = Object.keys(f);
@@ -259,17 +303,17 @@ export function registerAdminRoutes(r: Router) {
     return json({ id }, 201);
   });
   r.patch("/api/admin/services/:id", async (c) => {
-    await requireAdmin(c);
+    await requirePerm(c, "services", "edit");
     await patchRow(c, "services", c.params.id, serviceFields(await readJson(c.req), true));
     return json({ ok: true });
   });
   r.delete("/api/admin/services/:id", async (c) => {
-    await requireAdmin(c);
+    await requirePerm(c, "services", "edit");
     await run(c.env.DB, "DELETE FROM services WHERE id = ?", c.params.id);
     return json({ ok: true });
   });
   r.post("/api/admin/sub-services", async (c) => {
-    await requireAdmin(c);
+    await requirePerm(c, "services", "edit");
     const f = subFields(await readJson(c.req), false);
     if (!f.service_id || !(await first(c.env.DB, "SELECT 1 FROM services WHERE id = ?", f.service_id))) fail(400, "invalid_service", "الخدمة الرئيسية غير موجودة");
     const id = uid();
@@ -278,19 +322,19 @@ export function registerAdminRoutes(r: Router) {
     return json({ id }, 201);
   });
   r.patch("/api/admin/sub-services/:id", async (c) => {
-    await requireAdmin(c);
+    await requirePerm(c, "services", "edit");
     const f = subFields(await readJson(c.req), true);
     if (f.service_id && !(await first(c.env.DB, "SELECT 1 FROM services WHERE id = ?", f.service_id))) fail(400, "invalid_service", "الخدمة الرئيسية غير موجودة");
     await patchRow(c, "sub_services", c.params.id, f);
     return json({ ok: true });
   });
   r.delete("/api/admin/sub-services/:id", async (c) => {
-    await requireAdmin(c);
+    await requirePerm(c, "services", "edit");
     await run(c.env.DB, "DELETE FROM sub_services WHERE id = ?", c.params.id);
     return json({ ok: true });
   });
   r.post("/api/admin/reorder", async (c) => {
-    await requireAdmin(c);
+    await requirePerm(c, "services", "edit");
     const b = await readJson(c.req);
     const table = oneOf(b, "table", ["services", "sub_services"] as const, { required: true })!;
     const ids = strArray(b, "ids", 500);
@@ -298,7 +342,7 @@ export function registerAdminRoutes(r: Router) {
     return json({ ok: true });
   });
   r.post("/api/admin/services/suggested", async (c) => {
-    await requireAdmin(c);
+    await requirePerm(c, "services", "edit");
     const b = await readJson(c.req);
     const list = Array.isArray(b.list) ? (b.list as Record<string, unknown>[]).slice(0, 50) : [];
     const existing = new Set((await all<{ name: string }>(c.env.DB, "SELECT name FROM services")).map((x) => x.name));
@@ -322,7 +366,7 @@ export function registerAdminRoutes(r: Router) {
 
   /* ---------- Finance ---------- */
   r.get("/api/admin/transactions", async (c) => {
-    await requireAdmin(c);
+    await requirePerm(c, ["finance", "billing", "dashboard"], "view");
     return json(await all(c.env.DB,
       `SELECT t.id, t.provider_id, t.order_id, t.amount, t.tx_type, t.balance_after, t.description, t.method, t.created_at,
               u.full_name AS provider_name, u.phone AS provider_phone, o.service_name
@@ -331,7 +375,7 @@ export function registerAdminRoutes(r: Router) {
   });
 
   r.get("/api/admin/orders", async (c) => {
-    await requireAdmin(c);
+    await requirePerm(c, ["finance", "dashboard", "customers", "providers"], "view");
     return json(await all(c.env.DB,
       `SELECT o.id, o.order_no + 100000 AS order_no, o.service_id, o.service_name, o.sub_service_name, o.mode, o.status, o.region, o.coin_cost, o.charged_coins,
               o.billing_mode, o.rating, o.created_at, o.accepted_at, o.completed_at, o.cancelled_at, o.provider_id, o.customer_id,
@@ -341,7 +385,7 @@ export function registerAdminRoutes(r: Router) {
   });
 
   r.post("/api/admin/grant", async (c) => {
-    const admin = await requireAdmin(c);
+    const admin = await requirePerm(c, "billing", "edit");
     const b = await readJson(c.req);
     const kind = oneOf(b, "kind", ["coins", "subscription"] as const, { required: true })!;
     const target = str(b, "provider_id", { max: 64 });
@@ -385,7 +429,7 @@ export function registerAdminRoutes(r: Router) {
 
   /* ---------- Notifications ---------- */
   r.get("/api/admin/notifications", async (c) => {
-    await requireAdmin(c);
+    await requirePerm(c, "notifications", "view");
     const rows = await all<Record<string, unknown> & { id: string }>(c.env.DB, "SELECT * FROM notifications WHERE category <> 'order' ORDER BY sent_at DESC LIMIT 300");
     const targets = await all<{ notification_id: string; user_id: string }>(c.env.DB,
       `SELECT notification_id, user_id FROM notification_targets WHERE notification_id IN (SELECT id FROM notifications WHERE category <> 'order' ORDER BY sent_at DESC LIMIT 300)`);
@@ -394,7 +438,7 @@ export function registerAdminRoutes(r: Router) {
     return json(rows.map((n) => ({ ...n, target_ids: by[n.id] ?? [] })));
   });
   r.post("/api/admin/notifications", async (c) => {
-    const admin = await requireAdmin(c);
+    const admin = await requirePerm(c, "notifications", "edit");
     const b = await readJson(c.req);
     const title = str(b, "title", { required: true, max: 200, label: "العنوان" })!;
     const body = str(b, "body", { required: true, max: 1000, label: "النص" })!;
@@ -419,7 +463,7 @@ export function registerAdminRoutes(r: Router) {
     return json({ id }, 201);
   });
   r.delete("/api/admin/notifications/:id", async (c) => {
-    await requireAdmin(c);
+    await requirePerm(c, "notifications", "edit");
     await run(c.env.DB, "DELETE FROM notifications WHERE id = ?", c.params.id);
     return json({ ok: true });
   });
@@ -437,17 +481,17 @@ export function registerAdminRoutes(r: Router) {
     const active = bool(b, "active"); if (active !== null) f.active = active ? 1 : 0;
     return f;
   }
-  r.get("/api/admin/ads", async (c) => { await requireAdmin(c); return json(await all(c.env.DB, "SELECT * FROM ads ORDER BY created_at DESC")); });
+  r.get("/api/admin/ads", async (c) => { await requirePerm(c, "ads", "view"); return json(await all(c.env.DB, "SELECT * FROM ads ORDER BY created_at DESC")); });
   r.post("/api/admin/ads", async (c) => {
-    await requireAdmin(c);
+    await requirePerm(c, "ads", "edit");
     const f = adFields(await readJson(c.req), false);
     const keys = Object.keys(f);
     const id = uid();
     await run(c.env.DB, `INSERT INTO ads (id, ${keys.join(", ")}) VALUES (?, ${keys.map(() => "?").join(", ")})`, id, ...keys.map((k) => f[k]));
     return json({ id }, 201);
   });
-  r.patch("/api/admin/ads/:id", async (c) => { await requireAdmin(c); await patchRow(c, "ads", c.params.id, adFields(await readJson(c.req), true)); return json({ ok: true }); });
-  r.delete("/api/admin/ads/:id", async (c) => { await requireAdmin(c); await run(c.env.DB, "DELETE FROM ads WHERE id = ?", c.params.id); return json({ ok: true }); });
+  r.patch("/api/admin/ads/:id", async (c) => { await requirePerm(c, "ads", "edit"); await patchRow(c, "ads", c.params.id, adFields(await readJson(c.req), true)); return json({ ok: true }); });
+  r.delete("/api/admin/ads/:id", async (c) => { await requirePerm(c, "ads", "edit"); await run(c.env.DB, "DELETE FROM ads WHERE id = ?", c.params.id); return json({ ok: true }); });
 
   /* ---------- Policies ---------- */
   function policyFields(b: Record<string, unknown>, partial: boolean) {
@@ -460,23 +504,26 @@ export function registerAdminRoutes(r: Router) {
     const pub = bool(b, "published"); if (pub !== null) f.published = pub ? 1 : 0;
     return f;
   }
-  r.get("/api/admin/policies", async (c) => { await requireAdmin(c); return json(await all(c.env.DB, "SELECT * FROM policies ORDER BY updated_at DESC")); });
+  r.get("/api/admin/policies", async (c) => { await requirePerm(c, "policies", "view"); return json(await all(c.env.DB, "SELECT * FROM policies ORDER BY updated_at DESC")); });
   r.post("/api/admin/policies", async (c) => {
-    await requireAdmin(c);
+    await requirePerm(c, "policies", "edit");
     const f = policyFields(await readJson(c.req), false);
     const keys = Object.keys(f);
     const id = uid();
     await run(c.env.DB, `INSERT INTO policies (id, ${keys.join(", ")}) VALUES (?, ${keys.map(() => "?").join(", ")})`, id, ...keys.map((k) => f[k]));
     return json({ id }, 201);
   });
-  r.patch("/api/admin/policies/:id", async (c) => { await requireAdmin(c); await patchRow(c, "policies", c.params.id, policyFields(await readJson(c.req), true)); return json({ ok: true }); });
-  r.delete("/api/admin/policies/:id", async (c) => { await requireAdmin(c); await run(c.env.DB, "DELETE FROM policies WHERE id = ?", c.params.id); return json({ ok: true }); });
+  r.patch("/api/admin/policies/:id", async (c) => { await requirePerm(c, "policies", "edit"); await patchRow(c, "policies", c.params.id, policyFields(await readJson(c.req), true)); return json({ ok: true }); });
+  r.delete("/api/admin/policies/:id", async (c) => { await requirePerm(c, "policies", "edit"); await run(c.env.DB, "DELETE FROM policies WHERE id = ?", c.params.id); return json({ ok: true }); });
 
   /* ---------- Settings ---------- */
   r.get("/api/admin/settings", async (c) => { await requireAdmin(c); return json(await getSettings(c.env)); });
   r.put("/api/admin/settings", async (c) => {
-    await requireOwner(c);
     const b = await readJson(c.req);
+    const billingKeys = ["billing_coins_enabled", "billing_subscription_enabled", "test_payments_enabled", "sub_price_1m", "sub_price_3m", "sub_price_6m", "sub_price_12m", "vat_percent", "coin_price"];
+    const generalKeys = Object.keys(b).filter((k) => !billingKeys.includes(k));
+    if (generalKeys.length) await requirePerm(c, "settings", "edit");
+    if (Object.keys(b).some((k) => billingKeys.includes(k))) await requirePerm(c, ["billing", "gateways"], "edit");
     const f: Record<string, unknown> = {};
     for (const [k, max] of [["app_name", 60], ["currency_label", 30], ["support_email", 255], ["support_phone", 30], ["welcome_customer", 500], ["welcome_provider", 500], ["primary_color", 20]] as const) {
       if (b[k] !== undefined) f[k] = str(b, k, { max });
@@ -485,7 +532,7 @@ export function registerAdminRoutes(r: Router) {
     for (const k of ["billing_coins_enabled", "billing_subscription_enabled", "test_payments_enabled"] as const) {
       const v = bool(b, k); if (v !== null) f[k] = v ? 1 : 0;
     }
-    for (const k of ["sub_price_1m", "sub_price_3m", "sub_price_6m", "sub_price_12m", "vat_percent"] as const) {
+    for (const k of ["sub_price_1m", "sub_price_3m", "sub_price_6m", "sub_price_12m", "vat_percent", "coin_price"] as const) {
       const v = num(b, k, { min: 0, max: 1000000 }); if (v !== null) f[k] = v;
     }
     if (f.billing_coins_enabled === 0 && f.billing_subscription_enabled === 0) fail(400, "no_billing", "فعّل طريقة تحصيل واحدة على الأقل");
@@ -497,7 +544,7 @@ export function registerAdminRoutes(r: Router) {
   });
 
   r.post("/api/admin/upload", async (c) => {
-    await requireAdmin(c);
+    await requirePerm(c, ["services", "ads", "settings", "notifications"], "edit");
     const form = await c.req.formData();
     const file = formFile(form, "file");
     if (!file) return fail(400, "no_file", "اختر صورة");
@@ -505,18 +552,18 @@ export function registerAdminRoutes(r: Router) {
   });
 
   /* ---------- Payment gateways ---------- */
-  r.get("/api/admin/gateways", async (c) => { await requireAdmin(c); return json(await all(c.env.DB, "SELECT * FROM payment_gateways ORDER BY sort_order, created_at")); });
+  r.get("/api/admin/gateways", async (c) => { await requirePerm(c, ["gateways", "billing"], "view"); return json(await all(c.env.DB, "SELECT * FROM payment_gateways ORDER BY sort_order, created_at")); });
   r.post("/api/admin/gateways", async (c) => {
-    await requireOwner(c);
+    await requirePerm(c, "gateways", "edit");
     const b = await readJson(c.req);
     const id = uid();
     await run(c.env.DB, "INSERT INTO payment_gateways (id, name, provider_key, merchant_id, public_key, fee_percent, sort_order) VALUES (?,?,?,?,?,?,?)",
-      id, str(b, "name", { required: true, max: 60, label: "اسم البوابة" }), str(b, "provider_key", { max: 30 }) ?? "custom",
+      id, str(b, "name", { required: true, max: 60, label: "اسم البوابة" }), gatewayKey(str(b, "provider_key", { max: 30 })),
       str(b, "merchant_id", { max: 120 }), str(b, "public_key", { max: 300 }), num(b, "fee_percent", { min: 0, max: 100 }) ?? 0, num(b, "sort_order", { int: true, min: 0 }) ?? 99);
     return json({ id }, 201);
   });
   r.patch("/api/admin/gateways/:id", async (c) => {
-    await requireOwner(c);
+    await requirePerm(c, "gateways", "edit");
     const b = await readJson(c.req);
     const f: Record<string, unknown> = {};
     for (const k of ["test_mode", "active"] as const) { const v = bool(b, k); if (v !== null) f[k] = v ? 1 : 0; }
@@ -525,18 +572,58 @@ export function registerAdminRoutes(r: Router) {
     await patchRow(c, "payment_gateways", c.params.id, f);
     return json({ ok: true });
   });
-  r.delete("/api/admin/gateways/:id", async (c) => { await requireOwner(c); await run(c.env.DB, "DELETE FROM payment_gateways WHERE id = ?", c.params.id); return json({ ok: true }); });
+  r.delete("/api/admin/gateways/:id", async (c) => { await requirePerm(c, "gateways", "edit"); await run(c.env.DB, "DELETE FROM payment_gateways WHERE id = ?", c.params.id); return json({ ok: true }); });
+
+  /* ---------- SMS and e-mail (keys are Worker secrets; only the non-secret settings are saved here) ---------- */
+  r.put("/api/admin/integrations", async (c) => {
+    await requirePerm(c, "integrations", "edit");
+    const b = await readJson(c.req);
+    const f: Record<string, unknown> = {};
+    for (const k of ["sms_enabled", "email_enabled"] as const) { const v = bool(b, k); if (v !== null) f[k] = v ? 1 : 0; }
+    if (b.sms_provider !== undefined) { const v = str(b, "sms_provider", { max: 20 }); if (v && !(SMS_PROVIDERS as readonly string[]).includes(v)) fail(400, "invalid_provider", "مزود رسائل غير مدعوم"); f.sms_provider = v; }
+    if (b.email_provider !== undefined) { const v = str(b, "email_provider", { max: 20 }); if (v && !(EMAIL_PROVIDERS as readonly string[]).includes(v)) fail(400, "invalid_provider", "مزود بريد غير مدعوم"); f.email_provider = v; }
+    if (b.sms_sender !== undefined) f.sms_sender = str(b, "sms_sender", { max: 11 });
+    if (b.sms_username !== undefined) f.sms_username = str(b, "sms_username", { max: 100 });
+    if (b.email_from !== undefined) { const v = str(b, "email_from", { max: 255 }); if (v && !validEmail(v)) fail(400, "invalid_email", "بريد المرسل غير صحيح"); f.email_from = v; }
+    if (b.email_from_name !== undefined) f.email_from_name = str(b, "email_from_name", { max: 80 });
+    if (Object.keys(f).length) {
+      const keys = Object.keys(f);
+      await run(c.env.DB, `UPDATE app_settings SET ${keys.map((k) => `${k} = ?`).join(", ")}, updated_at = ? WHERE id = 1`, ...keys.map((k) => f[k]), now());
+    }
+    return json(await getSettings(c.env));
+  });
+  r.post("/api/admin/integrations/test-sms", async (c) => {
+    await requirePerm(c, "integrations", "edit");
+    const to = str(await readJson(c.req), "to", { required: true, max: 20, label: "رقم الجوال" })!;
+    const p = normalizePhone(to);
+    if (!validSaudiPhone(p)) fail(400, "invalid_phone", "رقم الجوال غير صحيح");
+    const r2 = await testSms(c.env, p);
+    if (!r2.ok) fail(502, "sms_failed", `فشل الإرسال: ${r2.error}`);
+    return json({ ok: true });
+  });
+  r.post("/api/admin/integrations/test-email", async (c) => {
+    await requirePerm(c, "integrations", "edit");
+    const to = str(await readJson(c.req), "to", { required: true, max: 255, label: "البريد" })!;
+    if (!validEmail(to)) fail(400, "invalid_email", "البريد غير صحيح");
+    const r2 = await testEmail(c.env, to);
+    if (!r2.ok) fail(502, "email_failed", `فشل الإرسال: ${r2.error}`);
+    return json({ ok: true });
+  });
+  r.get("/api/admin/integrations/log", async (c) => {
+    await requirePerm(c, "integrations", "view");
+    return json(await all(c.env.DB, "SELECT id, channel, recipient, subject, status, error, created_at FROM message_log ORDER BY created_at DESC LIMIT 100"));
+  });
 
   /* ---------- Messages ---------- */
   r.get("/api/admin/messages", async (c) => {
-    await requireAdmin(c);
+    await requirePerm(c, "messages", "view");
     return json(await all(c.env.DB,
       `SELECT m.id, m.sender_id, m.recipient_id, m.subject, m.body, m.created_at, m.read_at, s.full_name AS sender_name, t.full_name AS recipient_name
          FROM messages m LEFT JOIN users s ON s.id = m.sender_id LEFT JOIN users t ON t.id = m.recipient_id
         WHERE m.order_id IS NULL ORDER BY m.created_at DESC LIMIT 300`));
   });
   r.post("/api/admin/messages", async (c) => {
-    const admin = await requireAdmin(c);
+    const admin = await requirePerm(c, "messages", "edit");
     const b = await readJson(c.req);
     const recipient = str(b, "recipient_id", { required: true, max: 64, label: "المستلم" })!;
     if (!(await first(c.env.DB, "SELECT 1 FROM users WHERE id = ?", recipient))) fail(404, "not_found", "المستلم غير موجود");
@@ -548,7 +635,7 @@ export function registerAdminRoutes(r: Router) {
     return json({ id }, 201);
   });
   r.get("/api/admin/people", async (c) => {
-    await requireAdmin(c);
+    await requirePerm(c, ["messages", "notifications", "billing", "staff"], "view");
     return json(await all(c.env.DB, "SELECT id, full_name, phone, email FROM users ORDER BY created_at DESC LIMIT 2000"));
   });
 }

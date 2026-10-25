@@ -6,8 +6,11 @@
 - Providers see only pending orders in services they offer (and their city when both are set); addresses and phone numbers are revealed only after acceptance.
 - Provider registrations stay pending until an administrator approves them; the provider role is never self-assigned. Applicant documents are private in R2 and opened through short-lived signed URLs.
 - The first administration visit creates the owner account (username `admin`) once; later owners/staff are created by the owner. Staff cannot change settings, gateways or roles.
-- Payments are test-only while `test_payments_enabled` is on; real gateway confirmation (webhook) is required before disabling it.
+- Real payments go through Moyasar or Tap (`worker/routes/payments.ts`): the Worker creates the hosted checkout with the secret key (Worker secrets `MOYASAR_SECRET_KEY` / `TAP_SECRET_KEY`) and applies a purchase only after re-reading the payment from the gateway API (return page or webhook) with a matching amount, once. Other gateways are simulated and work only while `test_payments_enabled` is on.
+- Admin access is per page: each staff account has `none | view | edit` per section (`users.admin_permissions`), enforced in the Worker with `requirePerm`; the owner has everything.
+- SMS (Unifonic / Taqnyat / Msegat) and e-mail (Resend / SendGrid) keys are Worker secrets (`SMS_API_KEY`, `EMAIL_API_KEY`); only non-secret settings live in `app_settings`.
 - Use explicit Latin numbering in locale formatters and English digits in static numeric text; retain Arabic labels.
 - Store service icon keys and semantic palette keys in service records; resolve them through the shared registry and global CSS tokens.
 - Never fabricate activity: charts and stats read real orders and transactions.
 - Customer and provider apps poll for updates (orders, notifications); native push arrives with the mobile apps.
+- Native mobile apps live in `mobile/` (Flutter): `apps/customer` (مهمة) and `apps/provider` (مهمة شريك) share `packages/mohemah_core`. They call the same Worker API with app-scoped bearer sessions (`app: customer|provider`) and never re-implement business rules. Platform folders are generated in CI (`.github/workflows/mobile.yml`) by `flutter create` + `mobile/tool/configure_platforms.py`; the Worker URL is passed as `--dart-define=API_BASE`.

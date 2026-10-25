@@ -8,6 +8,14 @@ export interface Env {
   PBKDF2_ITERATIONS?: string;
   /** Firebase service account JSON (secret) used to send push notifications. */
   FCM_SERVICE_ACCOUNT?: string;
+  /** Payment gateway secret keys (Worker secrets). */
+  MOYASAR_SECRET_KEY?: string;
+  MOYASAR_WEBHOOK_SECRET?: string;
+  TAP_SECRET_KEY?: string;
+  /** SMS provider key (Unifonic AppSid / Taqnyat bearer token / Msegat API key). */
+  SMS_API_KEY?: string;
+  /** E-mail provider key (Resend / SendGrid). */
+  EMAIL_API_KEY?: string;
 }
 
 export type App = "customer" | "provider" | "admin";
@@ -128,6 +136,8 @@ export type Ctx = {
   req: Request; env: Env; url: URL; params: Record<string, string>; ip: string;
   /** Push notifications to send after a successful response. */
   push: import("./push").PushJob[];
+  /** Background work (SMS, e-mail) finished after the response is sent. */
+  tasks: Promise<unknown>[];
 };
 type Handler = (c: Ctx) => Promise<Response>;
 

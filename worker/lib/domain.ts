@@ -5,7 +5,9 @@ export type Settings = {
   support_email: string | null; support_phone: string | null; welcome_customer: string | null; welcome_provider: string | null;
   billing_coins_enabled: number; billing_subscription_enabled: number;
   sub_price_1m: number; sub_price_3m: number; sub_price_6m: number; sub_price_12m: number;
-  vat_percent: number; test_payments_enabled: number;
+  vat_percent: number; test_payments_enabled: number; coin_price: number;
+  sms_enabled: number; sms_provider: string | null; sms_sender: string | null; sms_username: string | null;
+  email_enabled: number; email_provider: string | null; email_from: string | null; email_from_name: string | null;
 };
 
 export async function getSettings(env: Env) {
@@ -19,7 +21,7 @@ export function publicSettings(s: Settings) {
     welcome_customer: s.welcome_customer, welcome_provider: s.welcome_provider,
     billing_coins_enabled: !!s.billing_coins_enabled, billing_subscription_enabled: !!s.billing_subscription_enabled,
     sub_price_1m: s.sub_price_1m, sub_price_3m: s.sub_price_3m, sub_price_6m: s.sub_price_6m, sub_price_12m: s.sub_price_12m,
-    vat_percent: s.vat_percent, test_payments_enabled: !!s.test_payments_enabled,
+    vat_percent: s.vat_percent, test_payments_enabled: !!s.test_payments_enabled, coin_price: s.coin_price ?? 1,
   };
 }
 

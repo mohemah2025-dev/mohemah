@@ -131,23 +131,13 @@ class _NewOrderPageState extends State<NewOrderPage> {
     final data = PublicScope.of(context);
     final parent = data.serviceById(widget.sub.serviceId);
     final both = widget.sub.deliveryMode == 'both';
-    final (fg, _) = serviceColors(widget.sub.color ?? parent?.color);
     return Scaffold(
       body: Column(children: [
         // Gradient banner: task name, its icon and description.
         PageHeader(
           title: widget.sub.name,
           subtitle: (widget.sub.description ?? '').isNotEmpty ? widget.sub.description! : (parent != null ? 'من خدمات ${parent.name}' : 'حدد التفاصيل وأرسل طلبك'),
-          icon: Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 14, offset: const Offset(0, 5))],
-            ),
-            child: Icon(serviceIcon(widget.sub.icon ?? parent?.icon), color: fg, size: 30),
-          ),
+          watermark: serviceIcon(widget.sub.icon ?? parent?.icon),
           bottom: parent == null
               ? null
               : Align(

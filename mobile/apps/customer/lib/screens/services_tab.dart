@@ -109,23 +109,13 @@ class ServiceDetailPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final subs = PublicScope.of(context).subsOf(service.id);
-    final (fg, _) = serviceColors(service.color);
     return Scaffold(
       body: ListView(padding: EdgeInsets.zero, children: [
         // Full-width gradient banner like the home header: name, icon and description.
         PageHeader(
           title: service.name,
           subtitle: service.description?.isNotEmpty == true ? service.description! : 'اختر المهمة المطلوبة وسيصل طلبك لمقدمي الخدمة فوراً',
-          icon: Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 14, offset: const Offset(0, 5))],
-            ),
-            child: Icon(serviceIcon(service.icon), color: fg, size: 32),
-          ),
+          watermark: serviceIcon(service.icon),
           bottom: Align(
             alignment: AlignmentDirectional.centerStart,
             child: Container(

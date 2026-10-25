@@ -29,7 +29,28 @@ export interface AppProfile {
   created_at: string;
 }
 
-export type MePayload = { profile: AppProfile | null; roles: AppRole[]; app: App | null; subscription_end?: string | null; token?: string };
+/** Admin panel sections; each is "none" | "view" | "edit" for a staff member (the owner has everything). */
+export const ADMIN_SECTIONS = [
+  { key: "dashboard", label: "الرئيسية" },
+  { key: "customers", label: "طالبو الخدمات" },
+  { key: "providers", label: "مقدمو الخدمات" },
+  { key: "services", label: "الخدمات" },
+  { key: "finance", label: "المالية" },
+  { key: "billing", label: "الاشتراكات والتحصيل" },
+  { key: "gateways", label: "بوابات الدفع" },
+  { key: "notifications", label: "الإشعارات" },
+  { key: "messages", label: "الرسائل" },
+  { key: "ads", label: "المساحات الإعلانية" },
+  { key: "policies", label: "السياسات والشروط" },
+  { key: "integrations", label: "الرسائل النصية والبريد" },
+  { key: "staff", label: "المستخدمون والصلاحيات" },
+  { key: "settings", label: "الإعدادات" },
+] as const;
+export type AdminSection = (typeof ADMIN_SECTIONS)[number]["key"];
+export type PermLevel = "none" | "view" | "edit";
+export type AdminPermissions = Record<AdminSection, PermLevel>;
+
+export type MePayload = { profile: AppProfile | null; roles: AppRole[]; app: App | null; subscription_end?: string | null; permissions?: AdminPermissions | null; token?: string };
 
 interface AuthState {
   app: App;
@@ -42,6 +63,9 @@ interface AuthState {
   isOwner: boolean;
   isProvider: boolean;
   isCustomer: boolean;
+  permissions: AdminPermissions | null;
+  /** Admin panel: may this account view / edit a section? */
+  can: (section: AdminSection, level?: "view" | "edit") => boolean;
   signIn: (identifier: string, password: string) => Promise<MePayload>;
   acceptSession: (payload: MePayload) => void;
   signOut: () => Promise<void>;
@@ -69,7 +93,7 @@ export function AuthProvider({ app, children }: { app: App; children: ReactNode 
 
   const acceptSession = useCallback((payload: MePayload) => {
     if (payload.token) session.set(app, payload.token);
-    setMe({ profile: payload.profile, roles: payload.roles, app: payload.app, subscription_end: payload.subscription_end });
+    setMe({ profile: payload.profile, roles: payload.roles, app: payload.app, subscription_end: payload.subscription_end, permissions: payload.permissions ?? null });
   }, [app]);
 
   const signIn = useCallback(async (identifier: string, password: string) => {
@@ -97,6 +121,12 @@ export function AuthProvider({ app, children }: { app: App; children: ReactNode 
       isOwner: roles.includes("admin"),
       isProvider: roles.includes("provider"),
       isCustomer: roles.includes("customer"),
+      permissions: me.permissions ?? null,
+      can: (section, level = "view") => {
+        if (roles.includes("admin")) return true;
+        const v = me.permissions?.[section] ?? "none";
+        return level === "view" ? v !== "none" : v === "edit";
+      },
       signIn,
       acceptSession,
       signOut,

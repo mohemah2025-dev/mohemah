@@ -19,7 +19,7 @@ class ProviderAccountTab extends StatelessWidget {
     void push(Widget page) => Navigator.push(context, MaterialPageRoute(builder: (_) => page));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('حسابي')),
+      appBar: PageHeader.bar('حسابي'),
       body: ListView(padding: const EdgeInsets.fromLTRB(16, 4, 16, 30), children: [
         AppCard(
           child: Row(children: [
@@ -124,7 +124,7 @@ class MyServicesPage extends StatelessWidget {
   const MyServicesPage({super.key});
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('خدماتي')),
+        appBar: PageHeader.bar('خدماتي'),
         body: ListView(padding: const EdgeInsets.all(16), children: const [MyServicesPanel()]),
       );
 }
@@ -158,7 +158,7 @@ class _RatingsPageState extends State<RatingsPage> {
   Widget build(BuildContext context) {
     final items = _items;
     return Scaffold(
-      appBar: AppBar(title: const Text('تقييماتي')),
+      appBar: PageHeader.bar('تقييماتي'),
       body: _error != null && items == null
           ? ErrorRetry(message: _error!, onRetry: _load)
           : items == null
@@ -216,7 +216,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
   Widget build(BuildContext context) {
     final items = _items;
     return Scaffold(
-      appBar: AppBar(title: const Text('سجل العمليات')),
+      appBar: PageHeader.bar('سجل العمليات'),
       body: _error != null && items == null
           ? ErrorRetry(message: _error!, onRetry: _load)
           : items == null

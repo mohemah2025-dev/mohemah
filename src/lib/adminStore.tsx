@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, ReactNode, useCallback } from "react";
 import { api, errMsg } from "@/lib/api";
 import { compressImage } from "@/lib/imageCompress";
-import { useAuth } from "@/lib/AuthContext";
+import { useAuth, type AdminPermissions, type AdminSection } from "@/lib/AuthContext";
 import { toast } from "sonner";
 
 /* ============================ Types ============================ */
@@ -80,6 +80,8 @@ export interface StaffMember {
   email: string;
   role: "مالك" | "مشرف" | "دعم" | "محاسبة";
   permissions: { read: string[]; write: string[] };
+  /** Page permissions (staff only; null for the owner). */
+  access: AdminPermissions | null;
   active: boolean;
 }
 
@@ -250,7 +252,8 @@ interface AdminState {
   updateProvider: (id: string, patch: Partial<AdminProviderRow>) => void;
   removeProvider: (id: string) => void;
 
-  addStaff: (s: { name: string; login: string; password: string; role: "مالك" | "مشرف" }) => Promise<void>;
+  addStaff: (s: { name: string; login: string; password: string; role: "مالك" | "مشرف"; permissions?: AdminPermissions }) => Promise<void>;
+  setStaffPermissions: (id: string, permissions: AdminPermissions) => Promise<void>;
   toggleStaff: (id: string) => void;
   removeStaff: (id: string) => void;
 
@@ -277,6 +280,7 @@ type ApiUser = {
   id: string; full_name: string | null; email: string | null; username: string | null; phone: string | null; region: string | null;
   gender: string | null; rating: number; coin_balance: number; is_active: boolean; roles: string[]; services: string[];
   orders_count: number; favorite_service: string | null; updated_at: string; last_seen_at: string | null;
+  permissions?: AdminPermissions | null;
 };
 type ApiService = { id: string; name: string; description: string | null; icon: string; color: string; coin_price: number; active: number; sort_order: number };
 type ApiSub = { id: string; service_id: string; name: string; description: string | null; details: string | null; estimated_duration: string | null; requires_photos: number; icon: string; color: string; coin_price: number | null; delivery_mode: string; active: number; sort_order: number };
@@ -307,7 +311,7 @@ export async function uploadAdminImage(file: File) {
 }
 
 export function AdminProvider({ children }: { children: ReactNode }) {
-  const { user, roles } = useAuth();
+  const { user, roles, can } = useAuth();
   const isAdmin = roles.includes("admin") || roles.includes("staff");
 
   const [loading, setLoading] = useState(true);
@@ -353,6 +357,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
           id: p.id, name, email: p.email ?? p.username ?? "—",
           role: p.roles.includes("admin") ? "مالك" : "مشرف",
           permissions: { read: [...PERM_SECTIONS], write: p.roles.includes("admin") ? [...PERM_SECTIONS] : PERM_SECTIONS.filter((x) => x !== "staff" && x !== "settings") },
+          access: p.permissions ?? null,
           active: p.is_active,
         });
       }
@@ -434,11 +439,22 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   const refreshAll = useCallback(async () => {
     if (!isAdmin) { setLoading(false); return; }
     setLoading(true);
-    const results = await Promise.allSettled([loadServices(), loadSettings(), loadAds(), loadPolicies(), loadNotifications(), loadUsers(), loadTransactions(), loadOrders()]);
+    // Load only what this account may view (the server enforces the same rules).
+    const any = (...xs: AdminSection[]) => xs.some((x) => can(x, "view"));
+    const results = await Promise.allSettled([
+      any("services", "providers", "dashboard", "finance") ? loadServices() : null,
+      loadSettings(),
+      any("ads") ? loadAds() : null,
+      any("policies") ? loadPolicies() : null,
+      any("notifications") ? loadNotifications() : null,
+      any("customers", "providers", "staff", "dashboard", "billing", "finance") ? loadUsers() : null,
+      any("finance", "billing", "dashboard") ? loadTransactions() : null,
+      any("finance", "dashboard", "customers", "providers") ? loadOrders() : null,
+    ]);
     const failed = results.find((r) => r.status === "rejected") as PromiseRejectedResult | undefined;
     if (failed) report(failed.reason);
     setLoading(false);
-  }, [isAdmin, loadServices, loadSettings, loadAds, loadPolicies, loadNotifications, loadUsers, loadTransactions, loadOrders]);
+  }, [isAdmin, can, loadServices, loadSettings, loadAds, loadPolicies, loadNotifications, loadUsers, loadTransactions, loadOrders]);
 
   useEffect(() => { refreshAll(); }, [refreshAll, user?.id]);
 
@@ -501,8 +517,12 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     try { await adm(`/api/admin/users/${id}/role`, { body: { role: "provider", enable: false } }); toast.success("تم إلغاء صفة مقدم الخدمة"); await loadUsers(); } catch (e) { report(e); }
   };
 
-  const addStaff = async (s: { name: string; login: string; password: string; role: "مالك" | "مشرف" }) => {
-    await adm("/api/admin/staff", { body: { full_name: s.name, login: s.login, password: s.password, role: s.role === "مالك" ? "admin" : "staff" } });
+  const addStaff = async (s: { name: string; login: string; password: string; role: "مالك" | "مشرف"; permissions?: AdminPermissions }) => {
+    await adm("/api/admin/staff", { body: { full_name: s.name, login: s.login, password: s.password, role: s.role === "مالك" ? "admin" : "staff", permissions: s.permissions } });
+    await loadUsers();
+  };
+  const setStaffPermissions = async (id: string, permissions: AdminPermissions) => {
+    await adm(`/api/admin/users/${id}/permissions`, { method: "PUT", body: { permissions } });
     await loadUsers();
   };
   const toggleStaff = async (id: string) => {
@@ -574,7 +594,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     updateService, addService, removeService, moveSubService, addSubService, updateSubService, removeSubService, reorder, addSuggestedServices,
     addCustomer, updateCustomer, removeCustomer,
     addProvider, updateProvider, removeProvider,
-    addStaff, toggleStaff, removeStaff,
+    addStaff, setStaffPermissions, toggleStaff, removeStaff,
     sendNotification, removeNotification,
     addAd, updateAd, removeAd,
     addPolicy, updatePolicy, removePolicy,

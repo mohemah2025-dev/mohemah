@@ -5,6 +5,7 @@ import {
 import {
   clearRateLimit, createSession, destroySession, getUser, hashPassword, rateLimit, requireUser, signFileUrl,
   validatePassword, verifyFileSignature, verifyPassword,
+  ADMIN_SECTIONS, parsePermissions, type AdminPermissions,
 } from "../lib/auth";
 import { deleteFiles, getFile, putFile } from "../lib/storage";
 import { activeSubscriptionEnd, getSettings, publicSettings, referralCodeFor, serializeProfile, type UserRow } from "../lib/domain";
@@ -49,7 +50,14 @@ async function mePayload(c: Ctx, userId: string, app: App) {
   const profile = await loadProfile(c, userId);
   const roles = (await all<{ role: string }>(c.env.DB, "SELECT role FROM user_roles WHERE user_id = ?", userId)).map((r) => r.role);
   const subscription_end = roles.includes("provider") ? await activeSubscriptionEnd(c.env, userId) : null;
-  return { profile, roles, app, subscription_end };
+  // Admin panel: pages this account may view or edit (the owner has everything).
+  let permissions: AdminPermissions | null = null;
+  if (app === "admin" && (roles.includes("admin") || roles.includes("staff"))) {
+    permissions = roles.includes("admin")
+      ? (Object.fromEntries(ADMIN_SECTIONS.map((x) => [x, "edit"])) as AdminPermissions)
+      : parsePermissions((await first<{ admin_permissions: string | null }>(c.env.DB, "SELECT admin_permissions FROM users WHERE id = ?", userId))?.admin_permissions);
+  }
+  return { profile, roles, app, subscription_end, permissions };
 }
 
 export function formFile(f: FormData, k: string): File | null {

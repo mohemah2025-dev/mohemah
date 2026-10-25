@@ -12,8 +12,13 @@ void showSnack(BuildContext context, String message, {bool error = false}) {
   if (m == null) return;
   m.hideCurrentSnackBar();
   m.showSnackBar(SnackBar(
-    content: Text(message),
-    backgroundColor: error ? Brand.danger : Brand.foreground,
+    content: Row(children: [
+      Icon(error ? Icons.error_outline : Icons.check_circle_outline, color: Colors.white, size: 22),
+      const SizedBox(width: 10),
+      Expanded(child: Text(message, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700, height: 1.4))),
+    ]),
+    backgroundColor: error ? Brand.danger : Brand.primaryDeep,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
     duration: Duration(milliseconds: error ? 3800 : 2600),
   ));
 }
@@ -449,8 +454,11 @@ class AccentBox extends StatelessWidget {
 /// Gradient page header in the same style as the home header: back button (when the page
 /// can go back), title, optional icon + description and an optional widget at the bottom.
 class PageHeader extends StatelessWidget {
-  const PageHeader({super.key, required this.title, this.subtitle, this.icon, this.trailing, this.bottom});
+  const PageHeader({super.key, required this.title, this.subtitle, this.icon, this.trailing, this.bottom, this.watermark});
   final String title;
+
+  /// Large translucent icon blended into the bottom-left corner of the banner (no circle).
+  final IconData? watermark;
   final String? subtitle;
   final Widget? icon;
   final Widget? trailing;
@@ -463,7 +471,7 @@ class PageHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final canPop = Navigator.of(context).canPop();
-    return GradientHeader(
+    final header = GradientHeader(
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(children: [
           if (canPop)
@@ -481,6 +489,29 @@ class PageHeader extends StatelessWidget {
           ]),
         ],
         if (bottom != null) ...[const SizedBox(height: 14), bottom!],
+        if (watermark != null) const SizedBox(height: 18),
+      ]),
+    );
+    if (watermark == null) return header;
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(bottom: Radius.circular(30)),
+      child: Stack(children: [
+        header,
+        PositionedDirectional(
+          end: -14,
+          bottom: -26,
+          child: IgnorePointer(
+            child: ShaderMask(
+              shaderCallback: (r) => LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Colors.white.withValues(alpha: 0.34), Colors.white.withValues(alpha: 0.06)],
+              ).createShader(r),
+              blendMode: BlendMode.srcIn,
+              child: Icon(watermark, size: 128, color: Colors.white),
+            ),
+          ),
+        ),
       ]),
     );
   }

@@ -20,7 +20,7 @@ class _OrdersTabState extends State<OrdersTab> {
     final session = SessionScope.of(context);
     final store = OrdersScope.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('طلباتي')),
+      appBar: PageHeader.bar('طلباتي'),
       body: !session.signedIn
           ? EmptyState(
               icon: Icons.receipt_long_outlined,
@@ -33,7 +33,7 @@ class _OrdersTabState extends State<OrdersTab> {
             )
           : Column(children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
                 child: AuthTabs(
                   index: _seg,
                   labels: ['الجارية (${store.open.length})', 'السابقة'],

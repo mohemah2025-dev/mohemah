@@ -32,16 +32,21 @@ class _ServicesTabState extends State<ServicesTab> {
     final matchingServices = q.isEmpty ? services : services.where((s) => s.name.contains(q) || matchingSubs.any((x) => x.serviceId == s.id)).toList();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('الخدمات')),
-      body: RefreshIndicator(
-        onRefresh: data.load,
-        child: ListView(padding: const EdgeInsets.fromLTRB(16, 4, 16, 24), children: [
-          TextField(
+      body: Column(children: [
+        PageHeader(
+          title: 'الخدمات',
+          subtitle: 'اختر القسم ثم المهمة التي تحتاجها',
+          bottom: TextField(
             controller: _q,
             onChanged: (v) => setState(() => _query = v),
+            style: const TextStyle(color: Brand.foreground),
             decoration: InputDecoration(
+              filled: true,
+              fillColor: Colors.white,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
               hintText: 'ابحث عن خدمة',
-              prefixIcon: const Icon(Icons.search_outlined),
+              prefixIcon: const Icon(Icons.search_outlined, color: Brand.mutedFg),
               suffixIcon: _query.isEmpty
                   ? null
                   : IconButton(
@@ -49,11 +54,15 @@ class _ServicesTabState extends State<ServicesTab> {
                         _q.clear();
                         _query = '';
                       }),
-                      icon: const Icon(Icons.close_outlined),
+                      icon: const Icon(Icons.close_outlined, color: Brand.mutedFg),
                     ),
             ),
           ),
-          const SizedBox(height: 14),
+        ),
+        Expanded(
+          child: RefreshIndicator(
+        onRefresh: data.load,
+        child: ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 24), children: [
           if (!data.loaded)
             const Loading()
           else if (services.isEmpty)
@@ -85,7 +94,9 @@ class _ServicesTabState extends State<ServicesTab> {
             ),
           ],
         ]),
-      ),
+          ),
+        ),
+      ]),
     );
   }
 }
@@ -98,52 +109,48 @@ class ServiceDetailPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final subs = PublicScope.of(context).subsOf(service.id);
-    final (fg, bg) = serviceColors(service.color);
+    final (fg, _) = serviceColors(service.color);
     return Scaffold(
-      appBar: AppBar(title: Text(service.name)),
-      body: ListView(padding: const EdgeInsets.fromLTRB(16, 4, 16, 24), children: [
-        // Banner: main service name, short description and its icon.
-        Container(
-          padding: const EdgeInsets.fromLTRB(20, 22, 20, 22),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-            gradient: LinearGradient(begin: Alignment.topRight, end: Alignment.bottomLeft, colors: [bg, Color.lerp(bg, fg, 0.18)!]),
+      body: ListView(padding: EdgeInsets.zero, children: [
+        // Full-width gradient banner like the home header: name, icon and description.
+        PageHeader(
+          title: service.name,
+          subtitle: service.description?.isNotEmpty == true ? service.description! : 'اختر المهمة المطلوبة وسيصل طلبك لمقدمي الخدمة فوراً',
+          icon: Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 14, offset: const Offset(0, 5))],
+            ),
+            child: Icon(serviceIcon(service.icon), color: fg, size: 32),
           ),
-          child: Row(children: [
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(service.name, style: TextStyle(fontWeight: FontWeight.w800, fontSize: 21, color: fg)),
-                const SizedBox(height: 6),
-                Text(service.description?.isNotEmpty == true ? service.description! : 'اختر المهمة المطلوبة وسيصل طلبك لمقدمي الخدمة فوراً',
-                    style: const TextStyle(color: Brand.foreground, fontSize: 13, height: 1.6)),
-                const SizedBox(height: 10),
-                Pill('${subs.length} مهمة', icon: Icons.checklist_outlined),
-              ]),
+          bottom: Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+              decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(20)),
+              child: Text('${subs.length} مهمة متاحة', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
             ),
-            const SizedBox(width: 12),
-            Container(
-              width: 84,
-              height: 84,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-                boxShadow: [BoxShadow(color: fg.withValues(alpha: 0.15), blurRadius: 16, offset: const Offset(0, 6))],
-              ),
-              child: Icon(serviceIcon(service.icon), color: fg, size: 42),
-            ),
-          ]),
+          ),
         ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         const SectionTitle('اختر المهمة المطلوبة'),
         if (subs.isEmpty)
           const EmptyState(icon: Icons.hourglass_empty_outlined, title: 'لا توجد مهام في هذا القسم بعد')
         else
-          for (final s in subs) Padding(padding: const EdgeInsets.only(bottom: 8), child: SubServiceTile(sub: s, parent: service)),
+          for (final s in subs) Padding(padding: const EdgeInsets.only(bottom: 10), child: SubServiceTile(sub: s, parent: service)),
+          ]),
+        ),
       ]),
     );
   }
 }
 
-/// A main service as a soft rectangle: icon on top, name below.
+/// A main service as a white rectangle: coloured line on top, icon, then the name.
 class ServiceBox extends StatelessWidget {
   const ServiceBox({super.key, required this.service, required this.onTap, this.subtitle, this.width});
   final Service service;
@@ -154,30 +161,23 @@ class ServiceBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (fg, bg) = serviceColors(service.color);
-    return SizedBox(
+    return AccentBox(
+      accent: fg,
       width: width,
-      child: Material(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(18),
-          onTap: onTap,
-          child: Ink(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: bg, width: 1.4),
-              gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [bg.withValues(alpha: 0.55), Colors.white]),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Icon(serviceIcon(service.icon), color: fg, size: 32),
-              const SizedBox(height: 8),
-              Text(service.name, maxLines: 2, textAlign: TextAlign.center, overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, height: 1.3)),
-              if (subtitle != null) Text(subtitle!, style: const TextStyle(fontSize: 11, color: Brand.mutedFg)),
-            ]),
+      onTap: onTap,
+      child: Center(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(color: bg.withValues(alpha: 0.6), shape: BoxShape.circle),
+            child: Icon(serviceIcon(service.icon), color: fg, size: 25),
           ),
-        ),
+          const SizedBox(height: 8),
+          Text(service.name, maxLines: 2, textAlign: TextAlign.center, overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, height: 1.3)),
+          if (subtitle != null) Text(subtitle!, style: const TextStyle(fontSize: 11, color: Brand.mutedFg)),
+        ]),
       ),
     );
   }
@@ -193,8 +193,10 @@ class SubServiceTile extends StatelessWidget {
     final store = OrdersScope.of(context);
     final p = parent ?? PublicScope.of(context).serviceById(sub.serviceId);
     final fav = store.favorites.contains(sub.id);
-    return AppCard(
-      padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+    final (fg, _) = serviceColors(sub.color ?? p?.color);
+    return AccentBox(
+      accent: fg,
+      padding: const EdgeInsets.fromLTRB(14, 14, 6, 10),
       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => NewOrderPage(sub: sub))),
       child: Row(children: [
         ServiceIcon(icon: sub.icon ?? p?.icon, color: sub.color ?? p?.color, size: 44),

@@ -36,8 +36,9 @@ class HomeTab extends StatelessWidget {
             // 1) Favorites (search is in the header above).
             const SectionTitle('خدماتي المفضلة', padding: EdgeInsets.fromLTRB(4, 0, 4, 10)),
             if (favs.isEmpty)
-              AppCard(
-                padding: const EdgeInsets.all(14),
+              AccentBox(
+                accent: const Color(0xFFF2B01E),
+                padding: const EdgeInsets.fromLTRB(14, 16, 14, 12),
                 child: Row(children: const [
                   Icon(Icons.star_outline_rounded, color: Color(0xFFF2B01E)),
                   SizedBox(width: 10),
@@ -46,24 +47,30 @@ class HomeTab extends StatelessWidget {
               )
             else
               SizedBox(
-                height: 76,
+                height: 72,
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   itemCount: favs.length,
                   separatorBuilder: (_, __) => const SizedBox(width: 10),
                   itemBuilder: (_, i) {
                     final sub = favs[i];
-                    return SizedBox(
-                      width: 160,
-                      child: AppCard(
-                        padding: const EdgeInsets.all(10),
-                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => NewOrderPage(sub: sub))),
-                        child: Row(children: [
-                          ServiceIcon(icon: sub.icon ?? data.serviceById(sub.serviceId)?.icon, color: sub.color ?? data.serviceById(sub.serviceId)?.color, size: 40),
-                          const SizedBox(width: 8),
-                          Expanded(child: Text(sub.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700))),
-                        ]),
-                      ),
+                    final parent = data.serviceById(sub.serviceId);
+                    final (fg, bg) = serviceColors(sub.color ?? parent?.color);
+                    return AccentBox(
+                      width: 165,
+                      accent: fg,
+                      padding: const EdgeInsets.fromLTRB(10, 12, 10, 8),
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => NewOrderPage(sub: sub))),
+                      child: Row(children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(color: bg.withValues(alpha: 0.6), shape: BoxShape.circle),
+                          child: Icon(serviceIcon(sub.icon ?? parent?.icon), color: fg, size: 22),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(sub.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700))),
+                      ]),
                     );
                   },
                 ),
@@ -81,7 +88,7 @@ class HomeTab extends StatelessWidget {
               const EmptyState(icon: Icons.design_services_outlined, title: 'لا توجد خدمات متاحة حالياً', message: 'عُد قريباً، نضيف خدمات جديدة باستمرار.')
             else
               SizedBox(
-                height: 112,
+                height: 122,
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   itemCount: services.take(6).length,

@@ -404,3 +404,84 @@ class Avatar extends StatelessWidget {
     );
   }
 }
+
+/// White box with a soft silver border and a thin coloured line on top (the service colour).
+class AccentBox extends StatelessWidget {
+  const AccentBox({super.key, required this.accent, required this.child, this.onTap, this.width, this.padding = const EdgeInsets.fromLTRB(10, 14, 10, 10), this.radius = 16});
+  final Color accent;
+  final Widget child;
+  final VoidCallback? onTap;
+  final double? width;
+  final EdgeInsetsGeometry padding;
+  final double radius;
+
+  static const silver = Color(0xFFD9DEE5);
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: width,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(radius),
+          border: Border.all(color: silver),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 10, offset: const Offset(0, 3))],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(radius),
+          child: Material(
+            color: Colors.white,
+            child: InkWell(
+              onTap: onTap,
+              child: Stack(children: [
+                Padding(padding: padding, child: child),
+                Positioned(top: 0, left: 0, right: 0, child: Container(height: 4, color: accent)),
+              ]),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Gradient page header in the same style as the home header: back button (when the page
+/// can go back), title, optional icon + description and an optional widget at the bottom.
+class PageHeader extends StatelessWidget {
+  const PageHeader({super.key, required this.title, this.subtitle, this.icon, this.trailing, this.bottom});
+  final String title;
+  final String? subtitle;
+  final Widget? icon;
+  final Widget? trailing;
+  final Widget? bottom;
+
+  /// Title-only header used as a Scaffold `appBar`.
+  static PreferredSizeWidget bar(String title, {Widget? trailing}) =>
+      PreferredSize(preferredSize: const Size.fromHeight(84), child: PageHeader(title: title, trailing: trailing));
+
+  @override
+  Widget build(BuildContext context) {
+    final canPop = Navigator.of(context).canPop();
+    return GradientHeader(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          if (canPop)
+            IconButton(onPressed: () => Navigator.maybePop(context), icon: const BackButtonIcon(), padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
+          if (canPop) const SizedBox(width: 4),
+          Expanded(child: Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800))),
+          if (trailing != null) trailing!,
+        ]),
+        if (icon != null || subtitle != null) ...[
+          const SizedBox(height: 14),
+          Row(children: [
+            if (icon != null) ...[icon!, const SizedBox(width: 14)],
+            if (subtitle != null)
+              Expanded(child: Text(subtitle!, style: TextStyle(fontSize: 13, height: 1.6, color: Colors.white.withValues(alpha: 0.92)))),
+          ]),
+        ],
+        if (bottom != null) ...[const SizedBox(height: 14), bottom!],
+      ]),
+    );
+  }
+}

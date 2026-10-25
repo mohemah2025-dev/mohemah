@@ -17,8 +17,8 @@ class AccountTab extends StatelessWidget {
     void push(Widget page) => Navigator.push(context, MaterialPageRoute(builder: (_) => page));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('حسابي')),
-      body: ListView(padding: const EdgeInsets.fromLTRB(16, 4, 16, 30), children: [
+      appBar: PageHeader.bar('حسابي'),
+      body: ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 30), children: [
         if (p == null)
           AppCard(
             child: Column(children: [

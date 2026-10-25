@@ -122,6 +122,69 @@ jobs:
             حمّل الملف على الجوال واسمح بالتثبيت من مصادر غير معروفة عند الطلب.
           files: out/*.apk
 
+  web:
+    name: Web • ${{ matrix.app }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: customer
+            path: app
+          - app: provider
+            path: partner
+    env:
+      API_BASE: ${{ vars.API_BASE }}
+      GOOGLE_MAPS_API_KEY: ${{ vars.GOOGLE_MAPS_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Build web version
+        working-directory: mobile/apps/${{ matrix.app }}
+        run: |
+          flutter create --platforms=web --org sa.mohemah --project-name mohemah_${{ matrix.app }} .
+          rm -rf test
+          python3 ../../tool/configure_platforms.py . ${{ matrix.app }}
+          flutter pub get
+          flutter build web --release --base-href /${{ matrix.path }}/ \
+            --dart-define=API_BASE="$API_BASE" --dart-define=GOOGLE_MAPS_KEY="$GOOGLE_MAPS_API_KEY"
+          mkdir -p ../../../out-web/${{ matrix.path }}
+          cp -r build/web/. ../../../out-web/${{ matrix.path }}/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-${{ matrix.path }}
+          path: out-web
+          retention-days: 7
+
+  publish-web:
+    name: Publish web versions (/app and /partner)
+    needs: web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: web-*
+          merge-multiple: true
+          path: out-web
+      - name: Commit into public/ (Cloudflare deploys it with the site)
+        run: |
+          rm -rf public/app public/partner
+          cp -r out-web/app public/app
+          cp -r out-web/partner public/partner
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/app public/partner
+          if git diff --cached --quiet; then echo "no changes"; exit 0; fi
+          git commit -m "Update web versions of the mobile apps (build ${{ github.run_number }})"
+          for i in 1 2 3; do git pull --rebase origin main && git push origin HEAD:main && break; sleep 5; done
+
   ios:
     name: iOS (unsigned check)
     if: github.event_name == 'workflow_dispatch' && inputs.ios

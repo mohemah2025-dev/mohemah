@@ -85,16 +85,9 @@ class _ConnectionCard extends StatefulWidget {
   State<_ConnectionCard> createState() => _ConnectionCardState();
 }
 
-class _ConnectionCardState extends State<_ConnectionCard> with SingleTickerProviderStateMixin {
-  late final AnimationController _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 2200))..repeat();
+class _ConnectionCardState extends State<_ConnectionCard> {
   String? _panel;
   bool _toggling = false;
-
-  @override
-  void dispose() {
-    _pulse.dispose();
-    super.dispose();
-  }
 
   Future<void> _toggle(bool online) async {
     if (_toggling) return;
@@ -119,106 +112,100 @@ class _ConnectionCardState extends State<_ConnectionCard> with SingleTickerProvi
     final subEnd = feed?.subscriptionEnd;
     final subActive = subEnd != null && subEnd.isAfter(DateTime.now());
 
+    // The card fills the screen down to the tab bar; the demand chart appears when scrolling down.
+    final mq = MediaQuery.of(context);
+    final cardHeight = math.max(440.0, mq.size.height - mq.padding.top - mq.padding.bottom - 84 - 16 - 66 - 14);
+
     return AppCard(
       padding: EdgeInsets.zero,
       child: Column(children: [
-        // The connection circle, centred in a tall area of the card.
         SizedBox(
-          height: 300,
-          width: double.infinity,
-          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            GestureDetector(
-              onTap: feed == null ? null : () => _toggle(online),
-              child: SizedBox(
-                width: 210,
-                height: 210,
-                child: AnimatedBuilder(
-                  animation: _pulse,
-                  builder: (_, __) => CustomPaint(
-                    painter: _RingPainter(online: online, t: _pulse.value),
-                    child: Center(
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        width: 164,
-                        height: 164,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: online ? Brand.providerGradient : null,
-                          color: online ? null : Brand.muted,
-                          border: online ? null : Border.all(color: Brand.border),
-                          boxShadow: [
-                            BoxShadow(
-                              color: (online ? Brand.primaryDeep : Colors.black).withValues(alpha: online ? 0.35 : 0.08),
-                              blurRadius: 24,
-                              offset: const Offset(0, 10),
-                            ),
-                          ],
+          height: cardHeight,
+          child: Column(children: [
+            // The connection circle in the middle.
+            Expanded(
+              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                GestureDetector(
+                  onTap: feed == null ? null : () => _toggle(online),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    width: 178,
+                    height: 178,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: online ? Brand.providerGradient : null,
+                      color: online ? null : Brand.muted,
+                      boxShadow: [
+                        BoxShadow(
+                          color: (online ? Brand.primaryDeep : Colors.black).withValues(alpha: online ? 0.35 : 0.1),
+                          blurRadius: 26,
+                          offset: const Offset(0, 12),
                         ),
-                        child: _toggling
-                            ? Center(child: CircularProgressIndicator(color: online ? Colors.white : Brand.primaryDeep))
-                            : Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                                Icon(online ? Icons.wifi_tethering_rounded : Icons.portable_wifi_off_rounded, size: 46, color: online ? Colors.white : Brand.mutedFg),
-                                const SizedBox(height: 6),
-                                Text(online ? 'متصل' : 'غير متصل',
-                                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: online ? Colors.white : Brand.mutedFg)),
-                              ]),
-                      ),
+                      ],
                     ),
+                    child: _toggling
+                        ? Center(child: CircularProgressIndicator(color: online ? Colors.white : Brand.primaryDeep))
+                        : Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                            Icon(Icons.power_settings_new_rounded, size: 54, color: online ? Colors.white : Brand.mutedFg),
+                            const SizedBox(height: 6),
+                            Text(online ? 'متصل' : 'غير متصل',
+                                style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800, color: online ? Colors.white : Brand.mutedFg)),
+                          ]),
                   ),
                 ),
-              ),
+                const SizedBox(height: 14),
+                Text(
+                  online ? 'أنت متاح لاستقبال الطلبات الآن' : 'اضغط على الدائرة لبدء استقبال الطلبات',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Brand.mutedFg, fontSize: 12.5),
+                ),
+              ]),
             ),
-            const SizedBox(height: 10),
-            Text(
-              online ? 'أنت متاح لاستقبال الطلبات الآن' : 'اضغط على الدائرة لبدء استقبال الطلبات',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Brand.mutedFg, fontSize: 12.5),
+            // Services and loyalty in the bottom corners.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 4, 10, 10),
+              child: Row(children: [
+                _CornerIcon(
+                  icon: Icons.home_repair_service_rounded,
+                  label: 'الخدمات المتاحة',
+                  sub: '${feed?.servicesCount ?? 0} مختارة',
+                  color: const Color(0xFF2B6CD9),
+                  active: _panel == 'services',
+                  onTap: () => setState(() => _panel = _panel == 'services' ? null : 'services'),
+                ),
+                const Spacer(),
+                _CornerIcon(
+                  icon: Icons.workspace_premium_rounded,
+                  label: 'برنامج الولاء',
+                  sub: loyaltyTiers[tierIdx].name,
+                  color: const Color(0xFFD99A0B),
+                  active: _panel == 'loyalty',
+                  onTap: () => setState(() => _panel = _panel == 'loyalty' ? null : 'loyalty'),
+                ),
+              ]),
             ),
-          ]),
-        ),
-        // Services and loyalty as plain icons in the bottom corners.
-        Padding(
-          padding: const EdgeInsets.fromLTRB(10, 4, 10, 10),
-          child: Row(children: [
-            _CornerIcon(
-              icon: Icons.build_circle_rounded,
-              label: 'الخدمات المتاحة',
-              sub: '${feed?.servicesCount ?? 0} مختارة',
-              color: Brand.primary,
-              active: _panel == 'services',
-              onTap: () => setState(() => _panel = _panel == 'services' ? null : 'services'),
+            const Divider(),
+            IntrinsicHeight(
+              child: Row(children: [
+                _MiniStat(icon: Icons.assignment_rounded, value: '${feed?.available.length ?? 0}', label: 'طلبات متاحة', onTap: () => ProviderShell.goTo(1, section: 0)),
+                const VerticalDivider(width: 1),
+                _MiniStat(icon: Icons.handyman_rounded, value: '${feed?.active.length ?? 0}', label: 'طلبات جارية', onTap: () => ProviderShell.goTo(1, section: 1)),
+                const VerticalDivider(width: 1),
+                subActive
+                    ? _MiniStat(
+                        icon: Icons.event_available_rounded,
+                        value: '${math.max(0, (subEnd!.difference(DateTime.now()).inHours / 24).ceil())}',
+                        label: 'يوم اشتراك',
+                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BillingPage())),
+                      )
+                    : _MiniStat(
+                        icon: Icons.toll_rounded,
+                        value: '${feed?.balance ?? 0}',
+                        label: 'كوينز',
+                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BillingPage())),
+                      ),
+              ]),
             ),
-            const Spacer(),
-            _CornerIcon(
-              icon: tierIcon(tierIdx),
-              label: 'برنامج الولاء',
-              sub: loyaltyTiers[tierIdx].name,
-              color: Brand.coral,
-              active: _panel == 'loyalty',
-              onTap: () => setState(() => _panel = _panel == 'loyalty' ? null : 'loyalty'),
-            ),
-          ]),
-        ),
-        const Divider(),
-        IntrinsicHeight(
-          child: Row(children: [
-            _MiniStat(icon: Icons.assignment_rounded, value: '${feed?.available.length ?? 0}', label: 'طلبات متاحة', onTap: () => ProviderShell.goTo(1, section: 0)),
-            const VerticalDivider(width: 1),
-            _MiniStat(icon: Icons.handyman_rounded, value: '${feed?.active.length ?? 0}', label: 'طلبات جارية', onTap: () => ProviderShell.goTo(1, section: 1)),
-            const VerticalDivider(width: 1),
-            subActive
-                ? _MiniStat(
-                    icon: Icons.event_available_rounded,
-                    value: '${math.max(0, (subEnd!.difference(DateTime.now()).inHours / 24).ceil())}',
-                    label: 'يوم اشتراك',
-                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BillingPage())),
-                  )
-                : _MiniStat(
-                    icon: Icons.toll_rounded,
-                    value: '${feed?.balance ?? 0}',
-                    label: 'كوينز',
-                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BillingPage())),
-                  ),
           ]),
         ),
         AnimatedSize(
@@ -241,40 +228,6 @@ class _ConnectionCardState extends State<_ConnectionCard> with SingleTickerProvi
 
 IconData tierIcon(int i) => const [Icons.verified_rounded, Icons.military_tech_rounded, Icons.workspace_premium_rounded, Icons.emoji_events_rounded][math.min(math.max(i, 0), 3)];
 
-/// A broken (dashed) ring while offline — the "not connected" circle — and pulsing rings while online.
-class _RingPainter extends CustomPainter {
-  _RingPainter({required this.online, required this.t});
-  final bool online;
-  final double t;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final c = size.center(Offset.zero);
-    final r = size.width / 2 - 2;
-    if (online) {
-      for (var i = 0; i < 2; i++) {
-        final p = (t + i / 2) % 1;
-        canvas.drawCircle(c, 82 + (r - 82) * p, Paint()..color = Brand.primaryDeep.withValues(alpha: 0.25 * (1 - p)));
-      }
-    } else {
-      final paint = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 3
-        ..strokeCap = StrokeCap.round
-        ..color = Brand.mutedFg.withValues(alpha: 0.45);
-      const dashes = 20;
-      const sweep = 2 * math.pi / dashes;
-      final rot = t * 2 * math.pi / dashes;
-      for (var i = 0; i < dashes; i++) {
-        canvas.drawArc(Rect.fromCircle(center: c, radius: r - 4), i * sweep + rot, sweep * 0.55, false, paint);
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(_RingPainter old) => old.online != online || old.t != t;
-}
-
 /// An icon without a box, used in the card corners.
 class _CornerIcon extends StatelessWidget {
   const _CornerIcon({required this.icon, required this.label, required this.sub, required this.color, required this.active, required this.onTap});
@@ -293,7 +246,7 @@ class _CornerIcon extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, color: color, size: 30),
+          Icon(icon, color: color, size: 36),
           const SizedBox(width: 6),
           Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
             Text(label, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: active ? color : Brand.foreground)),

@@ -59,6 +59,7 @@ class _ProviderRegisterFormState extends State<ProviderRegisterForm> {
   String? _region;
   PickedLocation? _loc;
   final Set<String> _services = {};
+  PickedDoc? _avatar;
   PickedDoc? _idDoc;
   PickedDoc? _certDoc;
   bool _agree = false;
@@ -74,6 +75,10 @@ class _ProviderRegisterFormState extends State<ProviderRegisterForm> {
 
   void _next() {
     if (_step == 0 && !_forms[0].currentState!.validate()) return;
+    if (_step == 0 && _avatar == null) {
+      showSnack(context, 'أضف صورتك الشخصية', error: true);
+      return;
+    }
     if (_step == 1 && _services.isEmpty) {
       showSnack(context, 'اختر خدمة واحدة على الأقل', error: true);
       return;
@@ -105,7 +110,7 @@ class _ProviderRegisterFormState extends State<ProviderRegisterForm> {
         'password': _pw.text,
       },
     };
-    final files = [_idDoc!.upload('id_file'), _certDoc!.upload('cert_file')];
+    final files = [_idDoc!.upload('id_file'), _certDoc!.upload('cert_file'), if (_avatar != null) _avatar!.upload('avatar_file')];
     try {
       if (widget.applyExisting) {
         s.applyMe(await s.api.multipart('/api/provider/apply', fields, files));
@@ -162,6 +167,33 @@ class _ProviderRegisterFormState extends State<ProviderRegisterForm> {
     return Form(
       key: _forms[0],
       child: Column(children: [
+        Center(
+          child: GestureDetector(
+            onTap: () async {
+              final d = await pickDocument(context, 'الصورة الشخصية');
+              if (d != null && !d.isPdf) setState(() => _avatar = d);
+            },
+            child: Column(children: [
+              Stack(clipBehavior: Clip.none, children: [
+                CircleAvatar(
+                  radius: 48,
+                  backgroundColor: Brand.muted,
+                  backgroundImage: _avatar == null ? null : MemoryImage(_avatar!.bytes),
+                  child: _avatar == null ? const Icon(Icons.person_rounded, size: 52, color: Brand.mutedFg) : null,
+                ),
+                const Positioned(
+                  bottom: 0,
+                  left: 0,
+                  child: CircleAvatar(radius: 16, backgroundColor: Brand.primaryDeep, child: Icon(Icons.photo_camera_rounded, size: 17, color: Colors.white)),
+                ),
+              ]),
+              const SizedBox(height: 6),
+              Text(_avatar == null ? 'أضف صورتك الشخصية (مطلوبة)' : 'تغيير الصورة',
+                  style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _avatar == null ? Brand.danger : Brand.primaryDeep)),
+            ]),
+          ),
+        ),
+        const SizedBox(height: 16),
         if (!widget.applyExisting)
           Field(
             controller: _name,

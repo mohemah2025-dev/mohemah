@@ -27,7 +27,16 @@ function corsHeaders(req: Request, env: Env, url: URL): Record<string, string> {
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
-    if (!url.pathname.startsWith("/api/")) return env.ASSETS.fetch(req);
+    if (!url.pathname.startsWith("/api/")) {
+      // The provider web app now opens the Flutter web version (/partner/) once it has been published.
+      if (url.pathname === "/provider" || url.pathname.startsWith("/provider/")) {
+        const probe = await env.ASSETS.fetch(new Request(`${url.origin}/partner/flutter_bootstrap.js`));
+        if (probe.ok && (probe.headers.get("content-type") ?? "").includes("javascript")) {
+          return Response.redirect(`${url.origin}/partner/`, 302);
+        }
+      }
+      return env.ASSETS.fetch(req);
+    }
     const cors = corsHeaders(req, env, url);
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
 

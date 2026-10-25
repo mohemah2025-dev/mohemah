@@ -1,0 +1,40 @@
+name: mohemah_core
+description: Shared code for the Mohemah customer and provider apps (API, session, theme, opening animation, shared screens).
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ">=3.6.0 <4.0.0"
+  flutter: ">=3.27.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  http: ^1.2.0
+  http_parser: ^4.0.2
+  shared_preferences: ^2.2.0
+  url_launcher: ^6.2.0
+  firebase_core: ">=3.6.0 <6.0.0"
+  firebase_messaging: ">=15.1.0 <18.0.0"
+  geolocator: ">=13.0.0 <15.0.0"
+  google_maps_flutter: ^2.9.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/logo.png
+  fonts:
+    - family: Cairo
+      fonts:
+        - asset: assets/fonts/Cairo-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Cairo-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Cairo-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Cairo-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Cairo-ExtraBold.ttf
+          weight: 800

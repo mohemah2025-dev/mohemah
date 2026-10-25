@@ -18,6 +18,11 @@ function validateDoc(file: File) {
   if (file.size > DOC_MAX) fail(400, "invalid_file", "حجم المرفق الأقصى 5MB");
 }
 
+function validateAvatar(file: File) {
+  if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) fail(400, "invalid_file", "الصورة الشخصية يجب أن تكون JPG أو PNG");
+  if (file.size > 3 * 1024 * 1024) fail(400, "invalid_file", "حجم الصورة الشخصية الأقصى 3MB");
+}
+
 export async function saveProviderDoc(c: Ctx, userId: string, kind: "id" | "certificate", file: File) {
   validateDoc(file);
   const ext = DOC_TYPES[file.type];
@@ -152,6 +157,8 @@ export function registerAccountRoutes(r: Router) {
     if (!certFile) fail(400, "missing_cert_file", "أرفق الشهادة");
     validateDoc(idFile!);
     validateDoc(certFile!);
+    const avatarFile = formFile(form, "avatar_file");
+    if (avatarFile) validateAvatar(avatarFile);
     if (await first(c.env.DB, "SELECT 1 FROM users WHERE email = ?", email)) fail(409, "email_taken", "هذا البريد مسجّل مسبقاً، سجّل الدخول من تطبيق مقدم الخدمة لإكمال طلبك");
 
     const id = uid();
@@ -161,6 +168,7 @@ export function registerAccountRoutes(r: Router) {
       id, email, phone, full_name, region, gender, national_id, nationality, await hashPassword(c.env, password), JSON.stringify(services), referralCodeFor(full_name));
     await saveProviderDoc(c, id, "id", idFile!);
     await saveProviderDoc(c, id, "certificate", certFile!);
+    if (avatarFile) await run(c.env.DB, "UPDATE users SET avatar_url = ? WHERE id = ?", await savePublicImage(c, avatarFile), id);
     const token = await createSession(c.env, id, "provider", c.req.headers.get("user-agent"));
     return json({ token, ...(await mePayload(c, id, "provider")) }, 201);
   });
@@ -187,8 +195,11 @@ export function registerAccountRoutes(r: Router) {
     if (!certFile) fail(400, "missing_cert_file", "أرفق الشهادة");
     validateDoc(idFile!);
     validateDoc(certFile!);
+    const avatarFile = formFile(form, "avatar_file");
+    if (avatarFile) validateAvatar(avatarFile);
     await saveProviderDoc(c, u.id, "id", idFile!);
     await saveProviderDoc(c, u.id, "certificate", certFile!);
+    if (avatarFile) await run(c.env.DB, "UPDATE users SET avatar_url = ? WHERE id = ?", await savePublicImage(c, avatarFile), u.id);
     await run(c.env.DB,
       "UPDATE users SET national_id = ?, nationality = ?, gender = ?, region = ?, requested_services = ?, verification_status = 'pending', review_note = NULL, updated_at = ? WHERE id = ?",
       national_id, formStr(form, "nationality").slice(0, 60) || null, gender, region, JSON.stringify(services), now(), u.id);

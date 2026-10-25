@@ -95,6 +95,16 @@ def main():
 
     patch(app_dir / "ios/Runner/AppDelegate.swift", app_delegate)
 
+    def web_index(s: str) -> str:
+        s = s.replace('<html>', '<html lang="ar" dir="rtl">', 1)
+        s = re.sub(r"<title>.*?</title>", f"<title>{cfg['name']}</title>", s, count=1)
+        if maps_key and "maps.googleapis.com" not in s:
+            s = s.replace("</head>", f'  <script src="https://maps.googleapis.com/maps/api/js?key={maps_key}"></script>\n</head>', 1)
+        return s
+
+    patch(app_dir / "web/index.html", web_index)
+    patch(app_dir / "web/manifest.json", lambda s: re.sub(r'"(name|short_name)": "[^"]*"', lambda m: f'"{m.group(1)}": "{cfg["name"]}"', s))
+
     plist_path = app_dir / "ios/Runner/Info.plist"
     if plist_path.exists():
         with plist_path.open("rb") as f:

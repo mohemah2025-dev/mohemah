@@ -131,23 +131,38 @@ class _NewOrderPageState extends State<NewOrderPage> {
     final data = PublicScope.of(context);
     final parent = data.serviceById(widget.sub.serviceId);
     final both = widget.sub.deliveryMode == 'both';
+    final (fg, _) = serviceColors(widget.sub.color ?? parent?.color);
     return Scaffold(
-      appBar: AppBar(title: const Text('طلب مهمة')),
-      body: Form(
-        key: _form,
-        child: ListView(padding: const EdgeInsets.fromLTRB(16, 4, 16, 30), children: [
-          AppCard(
-            child: Row(children: [
-              ServiceIcon(icon: widget.sub.icon ?? parent?.icon, color: widget.sub.color ?? parent?.color, size: 52),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(widget.sub.name, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-                  if (parent != null) Text(parent.name, style: const TextStyle(color: Brand.mutedFg, fontSize: 12.5)),
-                ]),
-              ),
-            ]),
+      body: Column(children: [
+        // Gradient banner: task name, its icon and description.
+        PageHeader(
+          title: widget.sub.name,
+          subtitle: (widget.sub.description ?? '').isNotEmpty ? widget.sub.description! : (parent != null ? 'من خدمات ${parent.name}' : 'حدد التفاصيل وأرسل طلبك'),
+          icon: Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 14, offset: const Offset(0, 5))],
+            ),
+            child: Icon(serviceIcon(widget.sub.icon ?? parent?.icon), color: fg, size: 30),
           ),
+          bottom: parent == null
+              ? null
+              : Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                    decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(20)),
+                    child: Text(parent.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                  ),
+                ),
+        ),
+        Expanded(
+          child: Form(
+        key: _form,
+        child: ListView(padding: const EdgeInsets.fromLTRB(16, 0, 16, 30), children: [
           const SizedBox(height: 18),
           const _Label('نوع الخدمة'),
           if (both)
@@ -268,7 +283,9 @@ class _NewOrderPageState extends State<NewOrderPage> {
           const SizedBox(height: 18),
           BusyButton(label: 'إرسال الطلب', icon: Icons.send_outlined, onPressed: _submit),
         ]),
-      ),
+          ),
+        ),
+      ]),
     );
   }
 }

@@ -22,6 +22,15 @@ class HomeTab extends StatelessWidget {
     final open = store.open;
     final subs = data.subServices;
     final favs = subs.where((s) => store.favorites.contains(s.id)).toList();
+    // Distinct tasks from the customer's past orders, newest first (max 6).
+    final previous = <(SubService, CustomerOrder)>[];
+    for (final o in store.orders ?? const <CustomerOrder>[]) {
+      final id = o.subServiceId;
+      if (id == null || previous.any((p) => p.$1.id == id)) continue;
+      final sub = subs.where((x) => x.id == id).firstOrNull;
+      if (sub != null) previous.add((sub, o));
+      if (previous.length == 6) break;
+    }
     final ads = data.ads.where((a) => a.placement != 'popup_card' && (a.imageUrl ?? '').isNotEmpty).toList();
 
     return RefreshIndicator(
@@ -103,12 +112,23 @@ class HomeTab extends StatelessWidget {
                   },
                 ),
               ),
+            // 4) Services ordered before, with one-tap re-order.
+            if (previous.isNotEmpty) ...[
+              const SectionTitle('طلبتها سابقاً'),
+              SizedBox(
+                height: 128,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: previous.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 10),
+                  itemBuilder: (_, i) => _ReorderCard(sub: previous[i].$1, last: previous[i].$2),
+                ),
+              ),
+            ],
             if (open.isNotEmpty) ...[
               const SectionTitle('طلبك الجاري'),
               for (final o in open.take(2)) Padding(padding: const EdgeInsets.only(bottom: 10), child: _ActiveOrderCard(order: o)),
             ],
-            const SizedBox(height: 18),
-            const _HowItWorks(),
           ]),
         ),
       ]),
@@ -132,11 +152,7 @@ class _Header extends StatelessWidget {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(p == null ? 'أهلاً بك في مهمة' : 'مرحباً، ${p.firstName}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-              Row(children: [
-                const Icon(Icons.location_on_outlined, size: 15),
-                const SizedBox(width: 3),
-                Text(p?.region ?? 'المملكة العربية السعودية', style: TextStyle(fontSize: 12.5, color: Colors.white.withValues(alpha: 0.88))),
-              ]),
+              _CurrentLocation(fallback: p?.region),
             ]),
           ),
           IconButton(
@@ -283,38 +299,120 @@ class _ActiveOrderCard extends StatelessWidget {
   }
 }
 
-class _HowItWorks extends StatelessWidget {
-  const _HowItWorks();
+class _ReorderCard extends StatelessWidget {
+  const _ReorderCard({required this.sub, required this.last});
+  final SubService sub;
+  final CustomerOrder last;
 
   @override
   Widget build(BuildContext context) {
-    const steps = [
-      (Icons.touch_app_outlined, 'اختر الخدمة', 'حدد المهمة وهل هي حضورية أو عن بُعد'),
-      (Icons.campaign_outlined, 'يصل طلبك', 'لمقدمي الخدمة في مدينتك فوراً'),
-      (Icons.handshake_outlined, 'تابع التنفيذ', 'راسل مقدم الخدمة وقيّمه بعد الإنجاز'),
-    ];
-    return AppCard(
-      color: Brand.accent,
+    final parent = PublicScope.of(context).serviceById(sub.serviceId);
+    final (fg, bg) = serviceColors(sub.color ?? parent?.color);
+    void reorder() => Navigator.push(context, MaterialPageRoute(builder: (_) => NewOrderPage(sub: sub)));
+    return AccentBox(
+      width: 190,
+      accent: fg,
+      padding: const EdgeInsets.fromLTRB(12, 14, 12, 10),
+      onTap: reorder,
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('كيف تعمل مهمة؟', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: Brand.accentFg)),
-        const SizedBox(height: 10),
-        for (final s in steps)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 5),
-            child: Row(children: [
-              Icon(s.$1, color: Brand.accentFg),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text.rich(TextSpan(children: [
-                  TextSpan(text: '${s.$2}: ', style: const TextStyle(fontWeight: FontWeight.w800)),
-                  TextSpan(text: s.$3),
-                ]), style: const TextStyle(fontSize: 13, color: Brand.foreground)),
-              ),
+        Row(children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(color: bg.withValues(alpha: 0.6), shape: BoxShape.circle),
+            child: Icon(serviceIcon(sub.icon ?? parent?.icon), color: fg, size: 21),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(sub.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+              Text(statusLabel(last.status, mode: last.mode), maxLines: 1, style: const TextStyle(fontSize: 11, color: Brand.mutedFg)),
             ]),
           ),
-        const SizedBox(height: 4),
-        const Text('لا يأخذ التطبيق أي رسوم من طالب الخدمة، وتتفق مع مقدم الخدمة على قيمة التنفيذ.', style: TextStyle(fontSize: 12, color: Brand.mutedFg)),
+        ]),
+        const Spacer(),
+        SizedBox(
+          width: double.infinity,
+          height: 34,
+          child: OutlinedButton.icon(
+            onPressed: reorder,
+            style: OutlinedButton.styleFrom(
+              padding: EdgeInsets.zero,
+              foregroundColor: fg,
+              side: BorderSide(color: fg.withValues(alpha: 0.5)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              minimumSize: const Size(0, 34),
+            ),
+            icon: const Icon(Icons.replay_outlined, size: 17),
+            label: const Text('اطلبها مجدداً', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+          ),
+        ),
       ]),
+    );
+  }
+}
+
+/// "Current location" line in the home header: filled automatically when permission was
+/// already given, otherwise a tap asks for it.
+class _CurrentLocation extends StatefulWidget {
+  const _CurrentLocation({this.fallback});
+  final String? fallback;
+  static final ValueNotifier<PickedLocation?> place = ValueNotifier(null);
+
+  @override
+  State<_CurrentLocation> createState() => _CurrentLocationState();
+}
+
+class _CurrentLocationState extends State<_CurrentLocation> {
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_CurrentLocation.place.value == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        final loc = await quietCurrentLocation(PublicScope.of(context).regions);
+        if (loc != null) _CurrentLocation.place.value = loc;
+      });
+    }
+  }
+
+  Future<void> _locate() async {
+    setState(() => _busy = true);
+    final regions = PublicScope.of(context).regions;
+    final pos = await currentPosition(context);
+    if (pos != null) _CurrentLocation.place.value = await describeLocation(pos.latitude, pos.longitude, regions);
+    if (mounted) setState(() => _busy = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<PickedLocation?>(
+      valueListenable: _CurrentLocation.place,
+      builder: (context, loc, _) => InkWell(
+        onTap: _busy ? null : _locate,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(children: [
+            _busy
+                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : Icon(loc == null ? Icons.my_location_outlined : Icons.location_on_outlined, size: 15),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                loc?.address ?? (widget.fallback != null ? '${widget.fallback} • حدّد موقعك الحالي' : 'حدّد موقعك الحالي'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12.5, color: Colors.white.withValues(alpha: 0.9)),
+              ),
+            ),
+            const SizedBox(width: 2),
+            Icon(Icons.keyboard_arrow_down_outlined, size: 16, color: Colors.white.withValues(alpha: 0.9)),
+          ]),
+        ),
+      ),
     );
   }
 }

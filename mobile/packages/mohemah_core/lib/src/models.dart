@@ -150,6 +150,7 @@ class CustomerOrder {
   String? get subServiceName => jStr(raw['sub_service_name']);
   String get title => subServiceName ?? serviceName;
   String? get serviceId => jStr(raw['service_id']);
+  String? get subServiceId => jStr(raw['sub_service_id']);
   String get mode => jS(raw['mode'], 'in_person');
   String? get description => jStr(raw['description']);
   String? get address => jStr(raw['address']);

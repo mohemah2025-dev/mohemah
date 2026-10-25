@@ -84,6 +84,7 @@ class AccountTab extends StatelessWidget {
         const SizedBox(height: 16),
         MenuGroup(children: [
           MenuTile(icon: Icons.policy_outlined, title: 'السياسات والشروط', onTap: () => push(const PoliciesPage(audience: 'customers'))),
+          MenuTile(icon: Icons.help_outline, title: 'كيف تعمل مهمة؟', subtitle: 'خطوات الطلب بشكل مختصر', onTap: () => push(const HowItWorksPage())),
           MenuTile(icon: Icons.info_outlined, title: 'عن مهمة', onTap: () => push(const _AboutPage())),
           if (settings.supportPhone != null || settings.supportEmail != null)
             MenuTile(
@@ -163,4 +164,44 @@ class _JoinProvidersPage extends StatelessWidget {
           ),
         ]),
       );
+}
+
+/// Short explanation of how ordering works (opened from «حسابي»).
+class HowItWorksPage extends StatelessWidget {
+  const HowItWorksPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    const steps = [
+      (Icons.touch_app_outlined, 'اختر الخدمة', 'حدد المهمة وهل هي حضورية أو عن بُعد'),
+      (Icons.campaign_outlined, 'يصل طلبك', 'لمقدمي الخدمة في مدينتك فوراً'),
+      (Icons.handshake_outlined, 'تابع التنفيذ', 'راسل مقدم الخدمة وقيّمه بعد الإنجاز'),
+    ];
+    return Scaffold(
+      appBar: PageHeader.bar('كيف تعمل مهمة؟'),
+      body: ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 24), children: [
+    AppCard(
+      color: Brand.accent,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        for (final s in steps)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 5),
+            child: Row(children: [
+              Icon(s.$1, color: Brand.accentFg),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text.rich(TextSpan(children: [
+                  TextSpan(text: '${s.$2}: ', style: const TextStyle(fontWeight: FontWeight.w800)),
+                  TextSpan(text: s.$3),
+                ]), style: const TextStyle(fontSize: 13, color: Brand.foreground)),
+              ),
+            ]),
+          ),
+        const SizedBox(height: 4),
+        const Text('لا يأخذ التطبيق أي رسوم من طالب الخدمة، وتتفق مع مقدم الخدمة على قيمة التنفيذ.', style: TextStyle(fontSize: 12, color: Brand.mutedFg)),
+      ]),
+    ),
+      ]),
+    );
+  }
 }

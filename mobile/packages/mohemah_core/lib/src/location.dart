@@ -92,6 +92,19 @@ Future<Position?> currentPosition(BuildContext context) async {
   }
 }
 
+/// Current place without any prompt: only when location is on and permission was already given.
+Future<PickedLocation?> quietCurrentLocation(List<String> regions) async {
+  try {
+    if (!await Geolocator.isLocationServiceEnabled()) return null;
+    final perm = await Geolocator.checkPermission();
+    if (perm != LocationPermission.always && perm != LocationPermission.whileInUse) return null;
+    final pos = await Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium, timeLimit: Duration(seconds: 15)));
+    return describeLocation(pos.latitude, pos.longitude, regions);
+  } catch (_) {
+    return null;
+  }
+}
+
 /// Two buttons: "my current location" and "choose on Google Maps". Calls [onPicked] with the filled data.
 class LocationPicker extends StatefulWidget {
   const LocationPicker({super.key, required this.onPicked, this.picked});

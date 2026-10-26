@@ -6,7 +6,7 @@ import {
 import { ADMIN_SECTIONS, hashPassword, parsePermissions, permissionsOf, requireAdmin, requirePerm, requireUser, signFileUrl, validatePassword } from "../lib/auth";
 import { getSettings, notifyStmts, safeJson } from "../lib/domain";
 import { formFile, savePublicImage } from "./account";
-import { EMAIL_PROVIDERS, notifyExternal, SMS_PROVIDERS, testEmail, testSms } from "../lib/messaging";
+import { EMAIL_PROVIDERS, notifyExternal, SMS_PROVIDERS, testEmail, testSms, testWhatsApp } from "../lib/messaging";
 
 const ICON_RE = /^[A-Za-z0-9]{1,40}$/;
 const COLORS = ["blue", "emerald", "gold", "ruby", "teal", "graphite"] as const;
@@ -134,6 +134,8 @@ export function registerAdminRoutes(r: Router) {
       const ids = names.length ? (await all<{ id: string }>(c.env.DB, `SELECT id FROM services WHERE name IN ${inList(names.length)} OR id IN ${inList(names.length)}`, ...names, ...names)).map((x) => x.id) : [];
       batch.push(stmt(c.env.DB, "DELETE FROM provider_services WHERE provider_id = ?", id));
       ids.forEach((sid) => batch.push(stmt(c.env.DB, "INSERT OR IGNORE INTO provider_services (provider_id, service_id) VALUES (?,?)", id, sid)));
+      // Services set by the administration become the provider's approved services.
+      batch.push(stmt(c.env.DB, "UPDATE users SET approved_services = ? WHERE id = ?", JSON.stringify(ids), id));
     }
     if (active === false) batch.push(stmt(c.env.DB, "DELETE FROM sessions WHERE user_id = ?", id));
     if (batch.length) await c.env.DB.batch(batch);
@@ -271,6 +273,7 @@ export function registerAdminRoutes(r: Router) {
     await c.env.DB.batch([
       ...docStmts,
       stmt(c.env.DB, "UPDATE users SET verification_status = ?, review_note = ?, reviewed_at = ?, reviewed_by = ?, updated_at = ? WHERE id = ?", approve ? "approved" : "rejected", note, t, admin.id, t, c.params.id),
+      ...(approve ? [stmt(c.env.DB, "UPDATE users SET approved_services = ? WHERE id = ?", JSON.stringify(services), c.params.id)] : []),
       ...(approve ? [
         stmt(c.env.DB, "INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, 'provider')", c.params.id),
         ...services.map((sid) => stmt(c.env.DB, "INSERT OR IGNORE INTO provider_services (provider_id, service_id) SELECT ?, id FROM services WHERE id = ?", c.params.id, sid)),
@@ -449,16 +452,19 @@ export function registerAdminRoutes(r: Router) {
     const sched = str(b, "scheduled_at", { max: 40 });
     const scheduled_at = sched ? new Date(sched).toISOString() : null;
     const id = uid();
+    // Icon: a key from the shared icon set (e.g. "moon"), an uploaded image URL, or a legacy emoji.
+    const icon = str(b, "icon", { max: 500 });
+    const sound = bool(b, "sound") ?? true;
     const batch = [
-      stmt(c.env.DB, "INSERT INTO notifications (id, title, body, audience, category, icon, accent_color, link, scheduled_at, sent_at, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-        id, title, body, audience, category, str(b, "icon", { max: 20 }), str(b, "accent_color", { max: 20 }), str(b, "link", { max: 200 }), scheduled_at, scheduled_at ?? now(), admin.id),
+      stmt(c.env.DB, "INSERT INTO notifications (id, title, body, audience, category, icon, accent_color, link, scheduled_at, sent_at, created_by, sound) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        id, title, body, audience, category, icon, str(b, "accent_color", { max: 20 }), str(b, "link", { max: 200 }), scheduled_at, scheduled_at ?? now(), admin.id, sound ? 1 : 0),
       ...(audience === "specific" ? targets.map((t) => stmt(c.env.DB, "INSERT OR IGNORE INTO notification_targets (notification_id, user_id) SELECT ?, id FROM users WHERE id = ?", id, t)) : []),
     ];
     for (let i = 0; i < batch.length; i += 90) await c.env.DB.batch(batch.slice(i, i + 90));
     if (!scheduled_at || scheduled_at <= now()) {
       const ids = audience === "specific" ? targets : await audienceUserIds(c.env, audience);
       const app = audience === "customers" ? "customer" : audience === "providers" ? "provider" : undefined;
-      if (ids.length) c.push.push({ userIds: ids, app, message: { title, body, data: { link: str(b, "link", { max: 200 }) ?? "", notification_id: id } } });
+      if (ids.length) c.push.push({ userIds: ids, app, message: { title, body, sound, data: { link: str(b, "link", { max: 200 }) ?? "", notification_id: id, sound: sound ? "1" : "0", icon: icon ?? "", accent: str(b, "accent_color", { max: 20 }) ?? "" } } });
     }
     return json({ id }, 201);
   });
@@ -502,6 +508,12 @@ export function registerAdminRoutes(r: Router) {
     const type = str(b, "policy_type", { max: 60 }); if (type) f.policy_type = type;
     const version = str(b, "version", { max: 20 }); if (version) f.version = version;
     const pub = bool(b, "published"); if (pub !== null) f.published = pub ? 1 : 0;
+    if (Array.isArray(b.placements)) {
+      const allowed = ["registration", "account", "order", "billing", "application"];
+      const list = (b.placements as unknown[]).filter((x): x is string => typeof x === "string" && allowed.includes(x));
+      if (!list.length) fail(400, "missing_placement", "اختر مكاناً واحداً على الأقل لظهور السياسة");
+      f.placements = JSON.stringify([...new Set(list)]);
+    }
     return f;
   }
   r.get("/api/admin/policies", async (c) => { await requirePerm(c, "policies", "view"); return json(await all(c.env.DB, "SELECT * FROM policies ORDER BY updated_at DESC")); });
@@ -579,7 +591,10 @@ export function registerAdminRoutes(r: Router) {
     await requirePerm(c, "integrations", "edit");
     const b = await readJson(c.req);
     const f: Record<string, unknown> = {};
-    for (const k of ["sms_enabled", "email_enabled"] as const) { const v = bool(b, k); if (v !== null) f[k] = v ? 1 : 0; }
+    for (const k of ["sms_enabled", "email_enabled", "whatsapp_enabled"] as const) { const v = bool(b, k); if (v !== null) f[k] = v ? 1 : 0; }
+    if (b.whatsapp_phone_id !== undefined) { const v = str(b, "whatsapp_phone_id", { max: 40 }); if (v && !/^\d{6,30}$/.test(v)) fail(400, "invalid_phone_id", "معرّف رقم الهاتف أرقام فقط"); f.whatsapp_phone_id = v; }
+    if (b.whatsapp_template !== undefined) { const v = str(b, "whatsapp_template", { max: 100 }); if (v && !/^[a-z0-9_]+$/.test(v)) fail(400, "invalid_template", "اسم القالب بأحرف إنجليزية صغيرة وأرقام و _"); f.whatsapp_template = v; }
+    if (b.whatsapp_lang !== undefined) f.whatsapp_lang = str(b, "whatsapp_lang", { max: 10 }) ?? "ar";
     if (b.sms_provider !== undefined) { const v = str(b, "sms_provider", { max: 20 }); if (v && !(SMS_PROVIDERS as readonly string[]).includes(v)) fail(400, "invalid_provider", "مزود رسائل غير مدعوم"); f.sms_provider = v; }
     if (b.email_provider !== undefined) { const v = str(b, "email_provider", { max: 20 }); if (v && !(EMAIL_PROVIDERS as readonly string[]).includes(v)) fail(400, "invalid_provider", "مزود بريد غير مدعوم"); f.email_provider = v; }
     if (b.sms_sender !== undefined) f.sms_sender = str(b, "sms_sender", { max: 11 });
@@ -609,9 +624,77 @@ export function registerAdminRoutes(r: Router) {
     if (!r2.ok) fail(502, "email_failed", `فشل الإرسال: ${r2.error}`);
     return json({ ok: true });
   });
+  r.post("/api/admin/integrations/test-whatsapp", async (c) => {
+    await requirePerm(c, "integrations", "edit");
+    const to = str(await readJson(c.req), "to", { required: true, max: 20, label: "رقم الجوال" })!;
+    const p = normalizePhone(to);
+    if (!validSaudiPhone(p)) fail(400, "invalid_phone", "رقم الجوال غير صحيح");
+    const r2 = await testWhatsApp(c.env, p);
+    if (!r2.ok) fail(502, "whatsapp_failed", `فشل الإرسال: ${r2.error}`);
+    return json({ ok: true });
+  });
   r.get("/api/admin/integrations/log", async (c) => {
     await requirePerm(c, "integrations", "view");
     return json(await all(c.env.DB, "SELECT id, channel, recipient, subject, status, error, created_at FROM message_log ORDER BY created_at DESC LIMIT 100"));
+  });
+
+  /* ---------- Occasion discounts (promotions) ---------- */
+  function promoFields(b: Record<string, unknown>, partial: boolean) {
+    const f: Record<string, unknown> = {};
+    const title = str(b, "title", { required: !partial, max: 120, label: "اسم العرض" }); if (title !== null) f.title = title;
+    const kind = oneOf(b, "kind", ["percent", "free", "amount"] as const, { required: !partial, label: "نوع الخصم" }); if (kind) f.kind = kind;
+    const value = num(b, "value", { min: 0, max: 100000 }); if (value !== null) f.value = value;
+    if ((f.kind ?? b.kind) === "percent" && typeof f.value === "number" && (f.value <= 0 || f.value > 100)) fail(400, "invalid_value", "النسبة بين 1 و100");
+    if ((f.kind ?? b.kind) === "amount" && typeof f.value === "number" && f.value <= 0) fail(400, "invalid_value", "اكتب مبلغ الخصم");
+    if (f.kind === "free") f.value = 100;
+    const scope = oneOf(b, "scope", ["all", "service"] as const); if (scope) f.scope = scope;
+    if (b.service_id !== undefined) f.service_id = str(b, "service_id", { max: 64 });
+    if (f.scope === "service" && !f.service_id) fail(400, "missing_service", "اختر القسم");
+    if (f.scope === "all") f.service_id = null;
+    const to = oneOf(b, "applies_to", ["orders", "subscriptions", "topups", "all"] as const); if (to) f.applies_to = to;
+    for (const k of ["starts_at", "ends_at"] as const) {
+      const v = str(b, k, { required: !partial && k === "ends_at", max: 40 });
+      if (v) { const t = Date.parse(v); if (!Number.isFinite(t)) fail(400, "invalid_date", "تاريخ غير صحيح"); f[k] = new Date(t).toISOString(); }
+    }
+    if (!partial && !f.starts_at) f.starts_at = now();
+    if (f.starts_at && f.ends_at && String(f.ends_at) <= String(f.starts_at)) fail(400, "invalid_range", "تاريخ النهاية بعد البداية");
+    const active = bool(b, "active"); if (active !== null) f.active = active ? 1 : 0;
+    return f;
+  }
+  r.get("/api/admin/promotions", async (c) => {
+    await requirePerm(c, ["billing", "notifications"], "view");
+    return json(await all(c.env.DB, "SELECT p.*, s.name AS service_name FROM promotions p LEFT JOIN services s ON s.id = p.service_id ORDER BY p.created_at DESC LIMIT 200"));
+  });
+  r.post("/api/admin/promotions", async (c) => {
+    const admin = await requirePerm(c, "billing", "edit");
+    const b = await readJson(c.req);
+    const f = promoFields(b, false);
+    const id = uid();
+    const keys = Object.keys(f);
+    await run(c.env.DB, `INSERT INTO promotions (id, created_by, ${keys.join(", ")}) VALUES (?, ?, ${keys.map(() => "?").join(", ")})`, id, admin.id, ...keys.map((k) => f[k]));
+    // Optional announcement to providers (with sound) when the offer is created.
+    if (bool(b, "notify")) {
+      const title = str(b, "notify_title", { max: 200 }) ?? String(f.title);
+      const body = str(b, "notify_body", { max: 1000 }) ?? "عرض خاص لفترة محدودة، تفاصيله في صفحة الرصيد والاشتراك.";
+      const nid = uid();
+      await run(c.env.DB, "INSERT INTO notifications (id, title, body, audience, category, icon, accent_color, link, sent_at, created_by, sound) VALUES (?,?,?,?,?,?,?,?,?,?,1)",
+        nid, title, body, "providers", "promo", str(b, "notify_icon", { max: 500 }) ?? "percent", "#EC4899", "/provider/billing", now(), admin.id);
+      const ids = await audienceUserIds(c.env, "providers");
+      if (ids.length) c.push.push({ userIds: ids, app: "provider", message: { title, body, sound: true, data: { link: "/provider/billing", notification_id: nid, sound: "1", icon: "percent" } } });
+    }
+    return json({ id }, 201);
+  });
+  r.patch("/api/admin/promotions/:id", async (c) => {
+    await requirePerm(c, "billing", "edit");
+    const f = promoFields(await readJson(c.req), true);
+    const keys = Object.keys(f);
+    if (keys.length) await run(c.env.DB, `UPDATE promotions SET ${keys.map((k) => `${k} = ?`).join(", ")} WHERE id = ?`, ...keys.map((k) => f[k]), c.params.id);
+    return json({ ok: true });
+  });
+  r.delete("/api/admin/promotions/:id", async (c) => {
+    await requirePerm(c, "billing", "edit");
+    await run(c.env.DB, "DELETE FROM promotions WHERE id = ?", c.params.id);
+    return json({ ok: true });
   });
 
   /* ---------- Messages ---------- */

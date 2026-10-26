@@ -4,6 +4,7 @@ import {
 } from "../lib/core";
 import { requireProvider, requireUser } from "../lib/auth";
 import { notifyExternal } from "../lib/messaging";
+import { activePromotions, applyBest, describePromo } from "../lib/promotions";
 import {
   activeSubscriptionEnd, getSettings, latestSubscriptionEnd, notifyStmts, orderNo, recomputeCustomerRating,
   recomputeProviderRating,
@@ -28,6 +29,29 @@ async function getOrder(c: Ctx, id: string) {
 }
 
 const firstName = (n: string | null) => (n ?? "").trim().split(/\s+/)[0] || "عميل";
+
+/**
+ * Every 5 declined orders or 3 cancelled (after acceptance) orders within 30 days, the provider gets an in-app
+ * warning (also pushed to the phone).
+ */
+async function performanceWarning(c: Ctx, providerId: string, kind: "reject" | "release") {
+  const since = new Date(Date.now() - 30 * 86400000).toISOString();
+  const n = (await first<{ n: number }>(c.env.DB, "SELECT COUNT(*) AS n FROM order_rejections WHERE provider_id = ? AND kind = ? AND created_at >= ?", providerId, kind, since))?.n ?? 0;
+  const step = kind === "reject" ? 5 : 3;
+  if (!n || n % step !== 0) return;
+  await c.env.DB.batch(notifyStmts(c, [providerId], kind === "reject"
+    ? { title: "تنبيه أداء: طلبات مرفوضة", body: `رفضت ${n} طلبات خلال آخر 30 يوماً. كثرة الرفض تقلل ظهورك للعملاء؛ فعّل فقط الخدمات والمدينة التي تستطيع تنفيذها، أو اجعل حالتك «غير متصل» عند انشغالك.`, link: "/provider/orders", icon: "AlertTriangle", category: "alert" }
+    : { title: "تنبيه أداء: طلبات ملغاة", body: `ألغيت ${n} طلبات بعد قبولها خلال آخر 30 يوماً. الإلغاء بعد القبول يضر بالعملاء وقد يؤدي لإيقاف الحساب، اقبل فقط ما تستطيع تنفيذه.`, link: "/provider/orders", icon: "AlertTriangle", category: "alert" }));
+}
+
+/** Approved service ids of a provider (falls back to what they currently have for older accounts). */
+async function approvedServices(c: Ctx, providerId: string): Promise<string[]> {
+  const row = await first<{ approved_services: string | null }>(c.env.DB, "SELECT approved_services FROM users WHERE id = ?", providerId);
+  if (row?.approved_services) {
+    try { return (JSON.parse(row.approved_services) as unknown[]).filter((x): x is string => typeof x === "string"); } catch { /* fall through */ }
+  }
+  return (await all<{ service_id: string }>(c.env.DB, "SELECT service_id FROM provider_services WHERE provider_id = ?", providerId)).map((x) => x.service_id);
+}
 
 export function registerOrderRoutes(r: Router) {
   /* =================== Customer =================== */
@@ -200,12 +224,22 @@ export function registerOrderRoutes(r: Router) {
           WHERE o.provider_id = ?1 AND o.status IN ('accepted','arrived','in_progress') ORDER BY o.accepted_at DESC`, u.id),
       first<{ n: number }>(c.env.DB, "SELECT COUNT(*) AS n FROM provider_services WHERE provider_id = ?", u.id),
     ]);
+    const promos = await activePromotions(c.env);
+    const svcNames = promos.some((x) => x.service_id)
+      ? Object.fromEntries((await all<{ id: string; name: string }>(c.env.DB, "SELECT id, name FROM services")).map((x) => [x.id, x.name]))
+      : {} as Record<string, string>;
+    // Remember which orders reached this provider (for the admin performance report).
+    if (available.length) {
+      await c.env.DB.batch(available.map((o) => stmt(c.env.DB, "INSERT OR IGNORE INTO order_offers (order_id, provider_id) VALUES (?,?)", o.id, u.id)));
+    }
     return json({
+      promotions: promos.map((x) => ({ id: x.id, title: x.title, text: describePromo(x, x.service_id ? svcNames[x.service_id] : null), ends_at: x.ends_at })),
       online: !!p.is_online, region: p.region, services_count: svc?.n ?? 0, balance: p.coin_balance, billing_mode: p.billing_mode,
       subscription_end: await activeSubscriptionEnd(c.env, u.id),
       available: available.map((o) => ({
         id: o.id, order_no: orderNo(o.order_no), service_name: o.service_name, sub_service_name: o.sub_service_name, mode: o.mode,
-        description: o.description, region: o.region, scheduled_at: o.scheduled_at, coin_cost: o.coin_cost, created_at: o.created_at,
+        description: o.description, region: o.region, scheduled_at: o.scheduled_at, coin_cost: applyBest(promos, "orders", o.coin_cost, o.service_id, true).price,
+        original_coin_cost: o.coin_cost, created_at: o.created_at,
         customer: { name: firstName(o.customer_name), rating: o.c_rating, rating_count: o.c_rating_count },
       })),
       active: active.map((o) => ({
@@ -257,7 +291,15 @@ export function registerOrderRoutes(r: Router) {
     }
 
     if (!s.billing_coins_enabled) return json({ success: false, error: "subscription_required" }, 402);
-    const cost = o.coin_cost;
+    // Occasion discounts reduce (or waive) the coins charged for accepting.
+    const cost = applyBest(await activePromotions(c.env), "orders", o.coin_cost, o.service_id, true).price;
+    if (cost === 0) {
+      await run(c.env.DB, "UPDATE orders SET status = 'accepted', provider_id = ?, accepted_at = ?, billing_mode = 'coins', charged_coins = 0, updated_at = ? WHERE id = ? AND status = 'pending'", u.id, t, t, o.id);
+      const after0 = await getOrder(c, o.id);
+      if (after0.provider_id !== u.id || after0.accepted_at !== t) fail(409, "not_pending", "قبل هذا الطلب مقدم خدمة آخر");
+      if (notifyCustomer.length) { await c.env.DB.batch(notifyCustomer); smsAccepted(); }
+      return json({ success: true, mode: "coins", charged: 0, balance: p.coin_balance });
+    }
     if (p.coin_balance < cost) return json({ success: false, error: "insufficient_balance", balance: p.coin_balance, required: cost }, 402);
     const mine = "EXISTS (SELECT 1 FROM orders WHERE id = ?2 AND provider_id = ?1 AND accepted_at = ?3)";
     await c.env.DB.batch([
@@ -281,7 +323,8 @@ export function registerOrderRoutes(r: Router) {
 
   r.post("/api/orders/:id/reject", async (c) => {
     const u = await requireProvider(c);
-    await run(c.env.DB, "INSERT OR IGNORE INTO order_rejections (order_id, provider_id) SELECT id, ? FROM orders WHERE id = ?", u.id, c.params.id);
+    const res = await run(c.env.DB, "INSERT OR IGNORE INTO order_rejections (order_id, provider_id, kind) SELECT id, ?, 'reject' FROM orders WHERE id = ?", u.id, c.params.id);
+    if (res.meta.changes) await performanceWarning(c, u.id, "reject");
     return json({ ok: true });
   });
 
@@ -311,12 +354,14 @@ export function registerOrderRoutes(r: Router) {
     const o = await getOrder(c, c.params.id);
     if (o.provider_id !== u.id || !["accepted", "arrived"].includes(o.status)) fail(409, "cannot_release", "لا يمكن الاعتذار عن هذا الطلب الآن");
     const reason = str(await readJson(c.req), "reason", { max: 300 });
+    if (!reason || reason.trim().length < 3) fail(400, "missing_reason", "اكتب سبب إلغاء الطلب");
     const t = now();
     await c.env.DB.batch([
       stmt(c.env.DB, "UPDATE orders SET status = 'pending', provider_id = NULL, accepted_at = NULL, arrived_at = NULL, billing_mode = NULL, charged_coins = 0, cancel_reason = ?, updated_at = ? WHERE id = ? AND provider_id = ? AND status IN ('accepted','arrived')", reason, t, o.id, u.id),
-      stmt(c.env.DB, "INSERT OR IGNORE INTO order_rejections (order_id, provider_id) VALUES (?,?)", o.id, u.id),
+      stmt(c.env.DB, "INSERT OR REPLACE INTO order_rejections (order_id, provider_id, kind, reason, created_at) VALUES (?,?,'release',?,?)", o.id, u.id, reason, t),
       ...(o.customer_id ? notifyStmts(c, [o.customer_id], { title: "جارٍ البحث عن مقدم خدمة آخر", body: `اعتذر مقدم الخدمة عن طلب ${orderLabel(o)}، وطلبك متاح الآن لمقدمي الخدمة الآخرين.`, link: "/orders", icon: "RefreshCw" }) : []),
     ]);
+    await performanceWarning(c, u.id, "release");
     return json({ ok: true });
   });
 
@@ -377,10 +422,18 @@ export function registerOrderRoutes(r: Router) {
     const u = await requireUser(c, { app: "provider" });
     return json((await all<{ service_id: string }>(c.env.DB, "SELECT service_id FROM provider_services WHERE provider_id = ?", u.id)).map((x) => x.service_id));
   });
+  /** Services the administration approved for this provider (only these can be switched on). */
+  r.get("/api/provider/services/allowed", async (c) => {
+    const u = await requireUser(c, { app: "provider" });
+    return json(await approvedServices(c, u.id));
+  });
   r.put("/api/provider/services", async (c) => {
     const u = await requireProvider(c);
     const ids = strArray(await readJson(c.req), "ids", 60);
-    const valid = ids.length ? (await all<{ id: string }>(c.env.DB, `SELECT id FROM services WHERE active = 1 AND id IN ${inList(ids.length)}`, ...ids)).map((x) => x.id) : [];
+    const allowed = new Set(await approvedServices(c, u.id));
+    const wanted = ids.filter((id) => allowed.has(id));
+    if (wanted.length < ids.length) fail(403, "service_not_approved", "يمكنك تفعيل الخدمات المعتمدة لك فقط، تواصل مع الإدارة لإضافة خدمة");
+    const valid = wanted.length ? (await all<{ id: string }>(c.env.DB, `SELECT id FROM services WHERE active = 1 AND id IN ${inList(wanted.length)}`, ...wanted)).map((x) => x.id) : [];
     await c.env.DB.batch([
       stmt(c.env.DB, "DELETE FROM provider_services WHERE provider_id = ?", u.id),
       ...valid.map((id) => stmt(c.env.DB, "INSERT OR IGNORE INTO provider_services (provider_id, service_id) VALUES (?,?)", u.id, id)),
@@ -396,10 +449,14 @@ export function registerOrderRoutes(r: Router) {
       providerProfile(c, u.id),
       all(c.env.DB, "SELECT id, name, provider_key, fee_percent, test_mode FROM payment_gateways WHERE active = 1 AND (test_mode = 1 OR provider_key IN ('moyasar','tap')) ORDER BY sort_order"),
     ]);
+    const billPromos = await activePromotions(c.env);
+    const promoSub = (v: number) => applyBest(billPromos, "subscriptions", v).price;
     return json({
       billing_coins_enabled: !!s.billing_coins_enabled, billing_subscription_enabled: !!s.billing_subscription_enabled,
-      sub_price_1m: s.sub_price_1m, sub_price_3m: s.sub_price_3m, sub_price_6m: s.sub_price_6m, sub_price_12m: s.sub_price_12m,
-      vat_percent: s.vat_percent, test_payments_enabled: !!s.test_payments_enabled, coin_price: s.coin_price ?? 1,
+      sub_price_1m: promoSub(s.sub_price_1m), sub_price_3m: promoSub(s.sub_price_3m), sub_price_6m: promoSub(s.sub_price_6m), sub_price_12m: promoSub(s.sub_price_12m),
+      sub_price_original: { 1: s.sub_price_1m, 3: s.sub_price_3m, 6: s.sub_price_6m, 12: s.sub_price_12m },
+      vat_percent: s.vat_percent, test_payments_enabled: !!s.test_payments_enabled, coin_price: applyBest(billPromos, "topups", s.coin_price ?? 1).price,
+      promotions: billPromos.map((x) => ({ id: x.id, title: x.title, text: describePromo(x), ends_at: x.ends_at })),
       balance: p.coin_balance, billing_mode: p.billing_mode,
       subscription_end: await activeSubscriptionEnd(c.env, u.id), latest_end: await latestSubscriptionEnd(c.env, u.id), gateways,
     });

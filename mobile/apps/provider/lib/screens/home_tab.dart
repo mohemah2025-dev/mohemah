@@ -36,12 +36,8 @@ class ProviderHomeTab extends StatelessWidget {
                   const Icon(Icons.workspace_premium_outlined, size: 15, color: Brand.mint),
                   const SizedBox(width: 3),
                   Text('مستوى ${tier.name}', style: TextStyle(fontSize: 12.5, color: Colors.white.withValues(alpha: 0.88))),
-                  if (p.region != null) ...[
-                    const SizedBox(width: 10),
-                    const Icon(Icons.location_on_outlined, size: 15),
-                    Text(p.region!, style: TextStyle(fontSize: 12.5, color: Colors.white.withValues(alpha: 0.88))),
-                  ],
                 ]),
+                CurrentLocationLine(fallback: p.region),
               ]),
             ),
             IconButton(
@@ -54,6 +50,13 @@ class ProviderHomeTab extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
           child: Column(children: [
             if (store.error != null && store.feed == null) ErrorRetry(message: store.error!, onRetry: store.refresh),
+            if ((store.feed?.promotions ?? const []).isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: PromoBanner(promos: store.feed!.promotions, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BillingPage()))),
+              ),
+            for (final o in store.incoming.where((x) => store.minimized.contains(x.id)))
+              Padding(padding: const EdgeInsets.only(bottom: 12), child: _MinimizedIncoming(order: o)),
             const _ConnectionCard(),
             const SizedBox(height: 14),
             if (store.feed != null && store.feed!.active.isNotEmpty)
@@ -350,6 +353,7 @@ class MyServicesPanel extends StatefulWidget {
 
 class _MyServicesPanelState extends State<MyServicesPanel> {
   Set<String>? _mine;
+  Set<String>? _allowed;
   bool _saving = false;
 
   @override
@@ -360,8 +364,14 @@ class _MyServicesPanelState extends State<MyServicesPanel> {
 
   Future<void> _load() async {
     try {
-      final ids = jStrings(await ProviderScope.read(context).api.get('/api/provider/services'));
-      if (mounted) setState(() => _mine = ids.toSet());
+      final api = ProviderScope.read(context).api;
+      final res = await Future.wait([api.get('/api/provider/services'), api.get('/api/provider/services/allowed')]);
+      if (mounted) {
+        setState(() {
+          _mine = jStrings(res[0]).toSet();
+          _allowed = jStrings(res[1]).toSet();
+        });
+      }
     } catch (_) {
       if (mounted) setState(() => _mine = <String>{});
     }
@@ -392,16 +402,18 @@ class _MyServicesPanelState extends State<MyServicesPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final services = PublicScope.of(context).services;
+    final allowed = _allowed;
+    // Only the services the administration approved for this provider (chosen at registration).
+    final services = PublicScope.of(context).services.where((sv) => allowed == null || allowed.contains(sv.id) || (_mine?.contains(sv.id) ?? false)).toList();
     final mine = _mine;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Text('اضغط على الخدمة لتفعيلها أو إيقافها${_saving ? ' — جارٍ الحفظ…' : ''}',
+      Text('خدماتك المعتمدة — اضغط لتفعيلها أو إيقافها${_saving ? ' — جارٍ الحفظ…' : ''}',
           style: const TextStyle(fontSize: 12, color: Brand.mutedFg)),
       const SizedBox(height: 10),
       if (mine == null)
         const Loading()
       else if (services.isEmpty)
-        const Text('لا توجد خدمات بعد.', style: TextStyle(color: Brand.mutedFg))
+        const Text('لا توجد خدمات معتمدة لك بعد، تواصل مع الإدارة.', style: TextStyle(color: Brand.mutedFg))
       else
         Wrap(
           spacing: 14,
@@ -409,6 +421,10 @@ class _MyServicesPanelState extends State<MyServicesPanel> {
           alignment: WrapAlignment.center,
           children: [for (final sv in services) _ServiceCheck(service: sv, on: mine.contains(sv.id), onTap: () => _toggle(sv.id))],
         ),
+      if (mine != null && services.isNotEmpty) ...[
+        const SizedBox(height: 10),
+        const Text('لإضافة خدمة جديدة تواصل مع الإدارة لاعتمادها.', textAlign: TextAlign.center, style: TextStyle(fontSize: 11.5, color: Brand.mutedFg)),
+      ],
     ]);
   }
 }
@@ -548,6 +564,67 @@ class DemandChart extends StatelessWidget {
           ]),
         ),
       ]),
+    );
+  }
+}
+
+/// A minimised new order: a blinking bar at the top of the home page; tapping opens the full card again.
+class _MinimizedIncoming extends StatefulWidget {
+  const _MinimizedIncoming({required this.order});
+  final OfferedOrder order;
+  @override
+  State<_MinimizedIncoming> createState() => _MinimizedIncomingState();
+}
+
+class _MinimizedIncomingState extends State<_MinimizedIncoming> with SingleTickerProviderStateMixin {
+  late final AnimationController _blink = AnimationController(vsync: this, duration: const Duration(milliseconds: 700))..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _blink.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final store = ProviderScope.of(context);
+    final o = widget.order;
+    final at = store.incomingAt[o.id] ?? DateTime.now();
+    final left = math.max(0, (incomingTtl - DateTime.now().difference(at)).inSeconds);
+    return AnimatedBuilder(
+      animation: _blink,
+      builder: (context, child) => Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [BoxShadow(color: Brand.success.withValues(alpha: 0.25 + 0.35 * _blink.value), blurRadius: 8 + 10 * _blink.value, spreadRadius: 1)],
+        ),
+        child: child,
+      ),
+      child: Material(
+        borderRadius: BorderRadius.circular(18),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => store.restore(o.id),
+          child: Ink(
+            decoration: const BoxDecoration(gradient: Brand.providerGradient),
+            padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+            child: Row(children: [
+              FadeTransition(
+                opacity: Tween(begin: 0.35, end: 1.0).animate(_blink),
+                child: const Icon(Icons.notifications_active_outlined, color: Colors.white, size: 26),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('طلب جديد: ${o.title}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15)),
+                  Text('${o.region ?? ''}${o.region != null ? ' • ' : ''}متبقي $left ث — اضغط للعرض', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                ]),
+              ),
+              const Icon(Icons.keyboard_double_arrow_down_rounded, color: Colors.white, size: 26),
+            ]),
+          ),
+        ),
+      ),
     );
   }
 }

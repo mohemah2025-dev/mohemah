@@ -4,6 +4,7 @@ import {
 } from "../lib/core";
 import { requireProvider, requireUser } from "../lib/auth";
 import { notifyExternal } from "../lib/messaging";
+import { activePromotions, applyBest, describePromo } from "../lib/promotions";
 import {
   activeSubscriptionEnd, getSettings, latestSubscriptionEnd, notifyStmts, orderNo, recomputeCustomerRating,
   recomputeProviderRating,
@@ -214,16 +215,22 @@ export function registerOrderRoutes(r: Router) {
           WHERE o.provider_id = ?1 AND o.status IN ('accepted','arrived','in_progress') ORDER BY o.accepted_at DESC`, u.id),
       first<{ n: number }>(c.env.DB, "SELECT COUNT(*) AS n FROM provider_services WHERE provider_id = ?", u.id),
     ]);
+    const promos = await activePromotions(c.env);
+    const svcNames = promos.some((x) => x.service_id)
+      ? Object.fromEntries((await all<{ id: string; name: string }>(c.env.DB, "SELECT id, name FROM services")).map((x) => [x.id, x.name]))
+      : {} as Record<string, string>;
     // Remember which orders reached this provider (for the admin performance report).
     if (available.length) {
       await c.env.DB.batch(available.map((o) => stmt(c.env.DB, "INSERT OR IGNORE INTO order_offers (order_id, provider_id) VALUES (?,?)", o.id, u.id)));
     }
     return json({
+      promotions: promos.map((x) => ({ id: x.id, title: x.title, text: describePromo(x, x.service_id ? svcNames[x.service_id] : null), ends_at: x.ends_at })),
       online: !!p.is_online, region: p.region, services_count: svc?.n ?? 0, balance: p.coin_balance, billing_mode: p.billing_mode,
       subscription_end: await activeSubscriptionEnd(c.env, u.id),
       available: available.map((o) => ({
         id: o.id, order_no: orderNo(o.order_no), service_name: o.service_name, sub_service_name: o.sub_service_name, mode: o.mode,
-        description: o.description, region: o.region, scheduled_at: o.scheduled_at, coin_cost: o.coin_cost, created_at: o.created_at,
+        description: o.description, region: o.region, scheduled_at: o.scheduled_at, coin_cost: applyBest(promos, "orders", o.coin_cost, o.service_id, true).price,
+        original_coin_cost: o.coin_cost, created_at: o.created_at,
         customer: { name: firstName(o.customer_name), rating: o.c_rating, rating_count: o.c_rating_count },
       })),
       active: active.map((o) => ({
@@ -275,7 +282,15 @@ export function registerOrderRoutes(r: Router) {
     }
 
     if (!s.billing_coins_enabled) return json({ success: false, error: "subscription_required" }, 402);
-    const cost = o.coin_cost;
+    // Occasion discounts reduce (or waive) the coins charged for accepting.
+    const cost = applyBest(await activePromotions(c.env), "orders", o.coin_cost, o.service_id, true).price;
+    if (cost === 0) {
+      await run(c.env.DB, "UPDATE orders SET status = 'accepted', provider_id = ?, accepted_at = ?, billing_mode = 'coins', charged_coins = 0, updated_at = ? WHERE id = ? AND status = 'pending'", u.id, t, t, o.id);
+      const after0 = await getOrder(c, o.id);
+      if (after0.provider_id !== u.id || after0.accepted_at !== t) fail(409, "not_pending", "قبل هذا الطلب مقدم خدمة آخر");
+      if (notifyCustomer.length) { await c.env.DB.batch(notifyCustomer); smsAccepted(); }
+      return json({ success: true, mode: "coins", charged: 0, balance: p.coin_balance });
+    }
     if (p.coin_balance < cost) return json({ success: false, error: "insufficient_balance", balance: p.coin_balance, required: cost }, 402);
     const mine = "EXISTS (SELECT 1 FROM orders WHERE id = ?2 AND provider_id = ?1 AND accepted_at = ?3)";
     await c.env.DB.batch([
@@ -417,10 +432,14 @@ export function registerOrderRoutes(r: Router) {
       providerProfile(c, u.id),
       all(c.env.DB, "SELECT id, name, provider_key, fee_percent, test_mode FROM payment_gateways WHERE active = 1 AND (test_mode = 1 OR provider_key IN ('moyasar','tap')) ORDER BY sort_order"),
     ]);
+    const billPromos = await activePromotions(c.env);
+    const promoSub = (v: number) => applyBest(billPromos, "subscriptions", v).price;
     return json({
       billing_coins_enabled: !!s.billing_coins_enabled, billing_subscription_enabled: !!s.billing_subscription_enabled,
-      sub_price_1m: s.sub_price_1m, sub_price_3m: s.sub_price_3m, sub_price_6m: s.sub_price_6m, sub_price_12m: s.sub_price_12m,
-      vat_percent: s.vat_percent, test_payments_enabled: !!s.test_payments_enabled, coin_price: s.coin_price ?? 1,
+      sub_price_1m: promoSub(s.sub_price_1m), sub_price_3m: promoSub(s.sub_price_3m), sub_price_6m: promoSub(s.sub_price_6m), sub_price_12m: promoSub(s.sub_price_12m),
+      sub_price_original: { 1: s.sub_price_1m, 3: s.sub_price_3m, 6: s.sub_price_6m, 12: s.sub_price_12m },
+      vat_percent: s.vat_percent, test_payments_enabled: !!s.test_payments_enabled, coin_price: applyBest(billPromos, "topups", s.coin_price ?? 1).price,
+      promotions: billPromos.map((x) => ({ id: x.id, title: x.title, text: describePromo(x), ends_at: x.ends_at })),
       balance: p.coin_balance, billing_mode: p.billing_mode,
       subscription_end: await activeSubscriptionEnd(c.env, u.id), latest_end: await latestSubscriptionEnd(c.env, u.id), gateways,
     });

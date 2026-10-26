@@ -94,7 +94,7 @@ class _NewOrderPageState extends State<NewOrderPage> {
 
   Future<void> _useGps() async {
     setState(() => _locating = true);
-    final regions = PublicScope.read(context).regions;
+    final regions = PublicScope.of(context).regions;
     final pos = await currentPosition(context);
     if (pos != null) _setLocation(await describeLocation(pos.latitude, pos.longitude, regions), 'gps');
     if (mounted) setState(() => _locating = false);

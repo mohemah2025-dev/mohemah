@@ -31,12 +31,25 @@ class _CustomerShellState extends State<CustomerShell> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      OrdersScope.read(context).onStatusChange = (o) {
+      final store = OrdersScope.read(context);
+      // Jobs finished while the app was closed are confirmed and rated on the next opening.
+      store.addListener(() {
+        for (final o in store.orders ?? const <CustomerOrder>[]) {
+          final done = o.completedAt;
+          if (o.status == 'completed' && o.rating == null && done != null && DateTime.now().difference(done).inDays < 3) _askCompletion(o);
+        }
+      });
+      store.onStatusChange = (o) {
         HapticFeedback.mediumImpact();
         SystemSound.play(SystemSoundType.alert);
         // Acceptance is the moment the customer waits for: announce it clearly on screen.
         if (o.status == 'accepted') {
           _showAccepted(o);
+          return;
+        }
+        // The provider marked the job done: the customer confirms, then rates.
+        if (o.status == 'completed' && o.rating == null) {
+          _askCompletion(o);
           return;
         }
         final msg = switch (o.status) {
@@ -50,6 +63,49 @@ class _CustomerShellState extends State<CustomerShell> {
         rootMessenger.currentState?.showSnackBar(SnackBar(content: Text(msg)));
       };
     });
+  }
+
+  static final Set<String> _asked = {};
+
+  Future<void> _askCompletion(CustomerOrder o) async {
+    if (_asked.contains(o.id)) return;
+    final nav = rootNavigator.currentContext;
+    if (nav == null) return;
+    _asked.add(o.id);
+    final done = await showDialog<bool>(
+      context: nav,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.task_alt_outlined, color: Brand.success, size: 44),
+        title: const Text('هل تم الانتهاء من الطلب؟', textAlign: TextAlign.center),
+        content: Text('أفاد مقدم الخدمة${o.providerName != null ? ' ${o.providerName}' : ''} بأنه أنهى «${o.title}».', textAlign: TextAlign.center),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('لا، لم ينتهِ')),
+          FilledButton(style: FilledButton.styleFrom(backgroundColor: Brand.success), onPressed: () => Navigator.pop(ctx, true), child: const Text('نعم، تم الانتهاء')),
+        ],
+      ),
+    );
+    if (done == null) return;
+    if (!done) {
+      rootMessenger.currentState?.showSnackBar(const SnackBar(content: Text('راسل مقدم الخدمة من صفحة الطلب، أو تواصل مع الإدارة من «حسابي»')));
+      CustomerShell.goTo(2);
+      rootNavigator.currentState?.push(MaterialPageRoute(builder: (_) => OrderDetailPage(orderId: o.id)));
+      return;
+    }
+    final ctx = rootNavigator.currentContext;
+    if (ctx == null || !ctx.mounted) return;
+    final r = await askRating(ctx, title: 'قيّم مقدم الخدمة');
+    if (r == null || !mounted) return;
+    try {
+      final store = OrdersScope.read(context);
+      await store.session.api.post('/api/orders/${o.id}/rate', {'rating': r.$1, if ((r.$2 ?? '').trim().isNotEmpty) 'review': r.$2!.trim()});
+      await store.refresh();
+      rootMessenger.currentState?.showSnackBar(const SnackBar(content: Text('شكراً لتقييمك')));
+    } catch (e) {
+      final c2 = rootNavigator.currentContext;
+      if (c2 != null && c2.mounted) showError(c2, e);
+    }
   }
 
   void _showAccepted(CustomerOrder o) {

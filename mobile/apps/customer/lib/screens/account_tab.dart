@@ -41,6 +41,8 @@ class AccountTab extends StatelessWidget {
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(p.fullName, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                  if (p.memberNo != null)
+                    Text('رقم العضوية #${p.memberNo}', textDirection: TextDirection.rtl, style: const TextStyle(fontSize: 12, color: Brand.mutedFg, fontWeight: FontWeight.w700)),
                   if (p.email != null) Text(p.email!, textDirection: TextDirection.ltr, style: const TextStyle(color: Brand.mutedFg, fontSize: 12.5)),
                   if (p.phone != null) Text(p.phone!, textDirection: TextDirection.ltr, style: const TextStyle(color: Brand.mutedFg, fontSize: 12.5)),
                 ]),
@@ -126,7 +128,7 @@ class _AboutPage extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(gradient: Brand.gradient, borderRadius: BorderRadius.circular(28)),
-              child: Image.asset('assets/logo.png', package: 'mohemah_core', height: 70),
+              child: const AppLogo(height: 70),
             ),
           ),
           const SizedBox(height: 18),

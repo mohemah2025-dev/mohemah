@@ -41,6 +41,9 @@ class Profile {
   List<String> get requestedServices => jStrings(raw['requested_services']);
   String? get referralCode => jStr(raw['referral_code']);
   DateTime? get createdAt => jDate(raw['created_at']);
+
+  /// Easy member number shown to the user and used by the support team (#1001…).
+  int? get memberNo => raw['member_no'] == null ? null : jInt(raw['member_no']);
 }
 
 class AppSettings {

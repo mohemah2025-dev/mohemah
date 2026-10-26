@@ -8,24 +8,79 @@ import { api, errMsg, fileUrl } from "@/lib/api";
 import { Field, inputCls, LoginForm } from "@/components/RegistrationForms";
 import { toast } from "sonner";
 
-const nav: { to: string; label: string; icon: typeof LayoutDashboard; section: AdminSection; exact?: boolean }[] = [
-  { to: "/admin", label: "الرئيسية", icon: LayoutDashboard, section: "dashboard", exact: true },
-  { to: "/admin/analytics", label: "تحليل الطلبات", icon: BarChart3, section: "analytics" },
-  { to: "/admin/customers", label: "طالبو الخدمات", icon: Users, section: "customers" },
-  { to: "/admin/providers", label: "مقدمو الخدمات", icon: UserCog, section: "providers" },
-  { to: "/admin/services", label: "الخدمات", icon: Wrench, section: "services" },
-  { to: "/admin/finance", label: "المالية", icon: Wallet, section: "finance" },
-  { to: "/admin/billing", label: "الاشتراكات والتحصيل", icon: ShieldCheck, section: "billing" },
-  { to: "/admin/promotions", label: "العروض والخصومات", icon: BadgePercent, section: "billing" },
-  { to: "/admin/gateways", label: "بوابات الدفع", icon: CreditCard, section: "gateways" },
-  { to: "/admin/notifications", label: "الإشعارات", icon: Bell, section: "notifications" },
-  { to: "/admin/messages", label: "الرسائل", icon: MessageSquare, section: "messages" },
-  { to: "/admin/integrations", label: "الرسائل والبريد وواتساب", icon: Mail, section: "integrations" },
-  { to: "/admin/ads", label: "المساحات الإعلانية", icon: Megaphone, section: "ads" },
-  { to: "/admin/policies", label: "السياسات والشروط", icon: FileText, section: "policies" },
-  { to: "/admin/staff", label: "المستخدمون والصلاحيات", icon: Shield, section: "staff" },
-  { to: "/admin/settings", label: "الإعدادات", icon: Settings, section: "settings" },
+const nav: { to: string; label: string; icon: typeof LayoutDashboard; section: AdminSection; exact?: boolean; group: string }[] = [
+  { to: "/admin", label: "الرئيسية", icon: LayoutDashboard, section: "dashboard", group: "الرئيسية", exact: true },
+  { to: "/admin/analytics", label: "تحليل الطلبات", icon: BarChart3, section: "analytics", group: "الرئيسية" },
+  { to: "/admin/customers", label: "طالبو الخدمات", icon: Users, section: "customers", group: "المستخدمون" },
+  { to: "/admin/providers", label: "مقدمو الخدمات", icon: UserCog, section: "providers", group: "المستخدمون" },
+  { to: "/admin/services", label: "الخدمات", icon: Wrench, section: "services", group: "الخدمات والمحتوى" },
+  { to: "/admin/finance", label: "المالية", icon: Wallet, section: "finance", group: "المالية" },
+  { to: "/admin/billing", label: "الاشتراكات والتحصيل", icon: ShieldCheck, section: "billing", group: "المالية" },
+  { to: "/admin/promotions", label: "العروض والخصومات", icon: BadgePercent, section: "billing", group: "المالية" },
+  { to: "/admin/gateways", label: "بوابات الدفع", icon: CreditCard, section: "gateways", group: "المالية" },
+  { to: "/admin/notifications", label: "الإشعارات", icon: Bell, section: "notifications", group: "التواصل" },
+  { to: "/admin/messages", label: "الرسائل", icon: MessageSquare, section: "messages", group: "التواصل" },
+  { to: "/admin/integrations", label: "الرسائل والبريد وواتساب", icon: Mail, section: "integrations", group: "التواصل" },
+  { to: "/admin/ads", label: "المساحات الإعلانية", icon: Megaphone, section: "ads", group: "الخدمات والمحتوى" },
+  { to: "/admin/policies", label: "السياسات والشروط", icon: FileText, section: "policies", group: "الخدمات والمحتوى" },
+  { to: "/admin/staff", label: "المستخدمون والصلاحيات", icon: Shield, section: "staff", group: "الإدارة والإعدادات" },
+  { to: "/admin/settings", label: "الإعدادات", icon: Settings, section: "settings", group: "الإدارة والإعدادات" },
 ];
+
+const GROUP_ORDER = ["الرئيسية", "المستخدمون", "الخدمات والمحتوى", "المالية", "التواصل", "الإدارة والإعدادات"];
+
+/** Sidebar links grouped by category, in a fixed order. */
+function NavGroups({ items, path, onPick, large = false }: { items: typeof nav; path: string; onPick?: () => void; large?: boolean }) {
+  return (
+    <>
+      {GROUP_ORDER.map((g) => {
+        const list = items.filter((n) => n.group === g);
+        if (!list.length) return null;
+        return (
+          <div key={g} className="mb-3">
+            <p className="px-3 mb-1 text-[10px] font-bold tracking-wide text-muted-foreground/80">{g}</p>
+            <div className="space-y-0.5">
+              {list.map((n) => {
+                const active = n.exact ? path === n.to || path === `${n.to}/` : path.startsWith(n.to);
+                const Icon = n.icon;
+                return (
+                  <Link key={n.to} to={n.to} onClick={onPick}
+                    className={`relative flex items-center gap-3 px-3 ${large ? "py-3 text-sm" : "py-2 text-xs"} rounded-lg transition ${active ? "admin-nav-active font-bold" : "hover:bg-mohemah-light text-foreground"}`}>
+                    <Icon className="w-4 h-4" /><span>{n.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+/** Applies the identity colour (settings → primary colour) to the admin panel and the logo to the browser tab. */
+function useAdminBranding(color: string | undefined, logo: string | undefined, appName: string | undefined) {
+  useEffect(() => {
+    const root = document.documentElement;
+    if (color && /^#[0-9a-f]{6}$/i.test(color)) {
+      root.style.setProperty("--brand", color);
+      root.style.setProperty("--primary", color);
+      root.style.setProperty("--mohemah-blue", color);
+      root.style.setProperty("--ring", color);
+    }
+    if (appName) document.title = `لوحة تحكم ${appName}`;
+    if (logo) {
+      const href = fileUrl(logo);
+      let link = document.querySelector<HTMLLinkElement>("link[rel~='icon']");
+      if (!link) { link = document.createElement("link"); link.rel = "icon"; document.head.appendChild(link); }
+      link.href = href;
+      let apple = document.querySelector<HTMLLinkElement>("link[rel='apple-touch-icon']");
+      if (!apple) { apple = document.createElement("link"); apple.rel = "apple-touch-icon"; document.head.appendChild(apple); }
+      apple.href = href;
+    }
+    return () => { ["--brand", "--primary", "--mohemah-blue", "--ring"].forEach((v) => root.style.removeProperty(v)); };
+  }, [color, logo, appName]);
+}
 
 /** Section of the current admin path (longest matching nav entry). */
 function sectionOf(path: string): AdminSection | null {
@@ -108,31 +163,23 @@ function AdminShell({ children }: { children?: ReactNode }) {
   const displayName = profile?.full_name || profile?.username || user?.email || "المالك";
   const [menuOpen, setMenuOpen] = useState(false);
   const { settings } = useAdmin();
+  useAdminBranding(settings.primaryColor, settings.logoUrl, settings.appName);
   const initials = (displayName || "م").trim().slice(0, 2).toUpperCase();
 
   return (
     <div dir="rtl" className="min-h-screen bg-background flex">
       <aside className="admin-sidebar w-56 shrink-0 bg-card border-l border-border sticky top-0 hidden md:flex flex-col">
-        <div className="p-5 border-b border-border">
+        <div className="p-5 admin-brand-head">
           <div className="flex items-center gap-2">
-            <div className="w-10 h-10 shrink-0 rounded-lg bg-accent grid place-items-center text-primary font-bold">{settings.logoUrl ? <img src={fileUrl(settings.logoUrl)} alt="شعار الجهة" className="size-9 object-contain" /> : "م"}</div>
+            <div className="w-10 h-10 shrink-0 rounded-lg bg-white/95 grid place-items-center text-primary font-bold shadow">{settings.logoUrl ? <img src={fileUrl(settings.logoUrl)} alt="شعار الجهة" className="size-9 object-contain" /> : "م"}</div>
             <div className="min-w-0">
-              <p className="text-sm font-bold truncate">لوحة تحكم {settings.appName}</p>
-              <p className="text-[11px] text-muted-foreground">Admin Panel</p>
+              <p className="text-sm font-bold truncate text-white">لوحة تحكم {settings.appName}</p>
+              <p className="text-[11px] text-white/75">Admin Panel</p>
             </div>
           </div>
         </div>
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-          {visibleNav.map((n) => {
-            const active = n.exact ? path === n.to : path.startsWith(n.to);
-            const Icon = n.icon;
-            return (
-              <Link key={n.to} to={n.to}
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs transition ${active ? "bg-accent text-primary font-bold" : "hover:bg-mohemah-light text-foreground"}`}>
-                <Icon className="w-4 h-4" /><span>{n.label}</span>
-              </Link>
-            );
-          })}
+        <nav className="flex-1 p-3 overflow-y-auto">
+          <NavGroups items={visibleNav} path={path} />
         </nav>
         <Button variant="unstyled" size="unstyled" onClick={async () => { await signOut(); navigate({ to: "/admin" }); }}
           className="m-3 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-sm bg-mohemah-light hover:bg-red-50 hover:text-red-600 transition">
@@ -144,7 +191,7 @@ function AdminShell({ children }: { children?: ReactNode }) {
         {menuOpen && <div className="fixed inset-0 z-50 bg-foreground/30 md:hidden" onClick={() => setMenuOpen(false)}>
           <aside className="w-64 max-w-[85vw] h-dvh bg-card p-4 overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4"><p className="font-bold">إدارة مهمة</p><Button variant="ghost" size="icon" aria-label="إغلاق القائمة" onClick={() => setMenuOpen(false)}><X /></Button></div>
-            <nav className="space-y-1">{visibleNav.map(n => { const Icon = n.icon; const active = n.exact ? path === n.to : path.startsWith(n.to); return <Link key={n.to} to={n.to} onClick={() => setMenuOpen(false)} className={`flex items-center gap-3 p-3 rounded-lg text-sm ${active ? "bg-accent text-primary font-bold" : "text-foreground"}`}><Icon className="size-4" />{n.label}</Link>; })}</nav>
+            <nav><NavGroups items={visibleNav} path={path} onPick={() => setMenuOpen(false)} large /></nav>
             <Button variant="secondary" className="w-full mt-4" onClick={async () => { await signOut(); navigate({ to: "/admin" }); }}><LogOut />تسجيل الخروج</Button>
           </aside>
         </div>}

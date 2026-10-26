@@ -3,6 +3,8 @@ import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
 
+import 'branding.dart';
+
 import 'theme.dart';
 
 /// Opening animation: slanted slides sweep in from both sides and overlap,
@@ -121,7 +123,7 @@ class _SlidesSplashState extends State<SlidesSplash> with SingleTickerProviderSt
                               border: Border.all(color: Colors.white.withValues(alpha: 0.35), width: 1.2),
                               boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 30, offset: const Offset(0, 14))],
                             ),
-                            child: Image.asset('assets/logo.png', package: 'mohemah_core', fit: BoxFit.contain),
+                            child: const AppLogo(),
                           ),
                         ),
                       ),

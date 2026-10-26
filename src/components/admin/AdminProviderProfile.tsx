@@ -11,7 +11,7 @@ import { AccountActionDialog, type AccountAction } from "./AccountActionDialog";
 const adm = <T,>(path: string, opts: { method?: string; body?: unknown } = {}) => api<T>(path, { ...opts, app: "admin" });
 
 interface Profile {
-  user: { id: string; full_name: string | null; phone: string | null; email: string | null; region: string | null; gender: string | null; nationality: string | null; avatar_url: string | null;
+  user: { id: string; member_no?: number | null; full_name: string | null; phone: string | null; email: string | null; region: string | null; gender: string | null; nationality: string | null; avatar_url: string | null;
     rating: number; rating_count: number; coin_balance: number; is_active: number; is_online: number; suspend_reason: string | null; created_at: string; reviewed_at: string | null; last_seen_at: string | null };
   days: number;
   services: { id: string; name: string; icon: string | null; color: string | null; enabled: boolean }[];
@@ -154,7 +154,7 @@ export function AdminProviderProfilePage() {
         <div className="flex items-center gap-3">
           {u.avatar_url ? <img src={fileUrl(u.avatar_url)} alt="" className="w-16 h-16 rounded-full object-cover" /> : <div className="w-16 h-16 rounded-full bg-mohemah-light grid place-items-center text-xl font-bold">{(u.full_name ?? "؟").slice(0, 1)}</div>}
           <div>
-            <h1 className="text-xl font-bold">{u.full_name}</h1>
+            <h1 className="text-xl font-bold">{u.full_name} {u.member_no && <span className="text-sm text-muted-foreground font-normal" dir="ltr">#{u.member_no}</span>}</h1>
             <p className="text-xs text-muted-foreground" dir="ltr" style={{ textAlign: "right" }}>{u.phone} · {u.email}</p>
             <p className="text-xs text-muted-foreground">{u.region ?? "—"} · {u.nationality ?? ""} · انضم {dt(u.reviewed_at ?? u.created_at)}</p>
             <div className="flex flex-wrap gap-1.5 mt-1 text-[11px]">

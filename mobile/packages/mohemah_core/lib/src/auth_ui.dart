@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import 'branding.dart';
 import 'package:flutter/services.dart';
 
 import 'public_data.dart';
@@ -231,7 +233,7 @@ class AuthScaffold extends StatelessWidget {
                       : null,
                 ),
               ),
-              Image.asset('assets/logo.png', package: 'mohemah_core', height: 64),
+              const AppLogo(height: 64),
               const SizedBox(height: 10),
               Text(title, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w800)),
               Padding(

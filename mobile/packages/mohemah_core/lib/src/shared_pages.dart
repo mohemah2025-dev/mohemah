@@ -99,33 +99,38 @@ class SupportMessagesPage extends StatefulWidget {
 
 class _SupportMessagesPageState extends State<SupportMessagesPage> {
   List<ChatMessage>? _items;
+  Map<String, dynamic>? _thread;
   final _ctrl = TextEditingController();
   String? _error;
+  Timer? _timer;
+  int _stars = 0;
+  final _note = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _load();
+    _timer = Timer.periodic(const Duration(seconds: 15), (_) => _load());
   }
 
   @override
   void dispose() {
+    _timer?.cancel();
     _ctrl.dispose();
+    _note.dispose();
     super.dispose();
   }
 
   Future<void> _load() async {
     final s = SessionScope.read(context);
     try {
-      final list = jList(await s.api.get('/api/me/messages')).map(ChatMessage.new).toList();
+      final d = jMap(await s.api.get('/api/me/support'));
       if (!mounted) return;
       setState(() {
-        _items = list;
+        _thread = d['thread'] is Map ? jMap(d['thread']) : null;
+        _items = jList(d['messages']).map(ChatMessage.new).toList();
         _error = null;
       });
-      for (final m in list.where((m) => m.recipientId == s.profile?.id && m.readAt == null)) {
-        unawaited(s.api.post('/api/me/messages/${m.id}/read').catchError((_) => null));
-      }
     } catch (e) {
       if (mounted) setState(() => _error = errMsg(e));
     }
@@ -136,8 +141,33 @@ class _SupportMessagesPageState extends State<SupportMessagesPage> {
     if (text.isEmpty) return;
     final api = SessionScope.read(context).api;
     try {
-      await api.post('/api/me/messages', {'body': text});
+      await api.post('/api/me/support', {'body': text});
       _ctrl.clear();
+      await _load();
+    } catch (e) {
+      if (mounted) showError(context, e);
+    }
+  }
+
+  Future<void> _close() async {
+    final ok = await confirm(context, title: 'إنهاء المحادثة', message: 'هل تمت معالجة طلبك؟ يمكنك تقييم المحادثة بعد إنهائها.', ok: 'إنهاء');
+    if (!ok || !mounted) return;
+    try {
+      await SessionScope.read(context).api.post('/api/me/support/close');
+      await _load();
+    } catch (e) {
+      if (mounted) showError(context, e);
+    }
+  }
+
+  Future<void> _rate() async {
+    if (_stars == 0) {
+      showSnack(context, 'اختر عدد النجوم', error: true);
+      return;
+    }
+    try {
+      await SessionScope.read(context).api.post('/api/me/support/rate', {'rating': _stars, 'note': _note.text.trim()});
+      if (mounted) showSnack(context, 'شكراً لتقييمك');
       await _load();
     } catch (e) {
       if (mounted) showError(context, e);
@@ -148,9 +178,52 @@ class _SupportMessagesPageState extends State<SupportMessagesPage> {
   Widget build(BuildContext context) {
     final me = SessionScope.of(context).profile?.id;
     final items = _items;
+    final t = _thread;
+    final closed = t?['status'] == 'closed';
+    final needsRating = closed && t?['rating'] == null;
+    final assigned = jStr(t?['assigned_name']);
     return Scaffold(
-      appBar: AppBar(title: const Text('مراسلة الإدارة')),
+      appBar: PageHeader.bar('مراسلة الإدارة',
+          trailing: t != null && !closed
+              ? TextButton.icon(
+                  onPressed: _close,
+                  style: TextButton.styleFrom(foregroundColor: Colors.white),
+                  icon: const Icon(Icons.check_circle_outline, size: 18),
+                  label: const Text('إنهاء'),
+                )
+              : null),
       body: Column(children: [
+        if (t != null)
+          Container(
+            width: double.infinity,
+            color: closed ? Brand.muted : Brand.primary.withValues(alpha: 0.07),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Text(
+              closed
+                  ? (t['closed_by'] == 'auto' ? 'أُغلقت المحادثة تلقائياً لعدم الرد. اكتب رسالة لفتح محادثة جديدة.' : 'انتهت المحادثة. اكتب رسالة لفتح محادثة جديدة.')
+                  : (assigned != null ? 'يتابع محادثتك: $assigned' : 'سيرد عليك فريق الإدارة قريباً'),
+              style: const TextStyle(fontSize: 12.5, color: Brand.mutedFg, fontWeight: FontWeight.w600),
+            ),
+          ),
+        if (needsRating)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: AppCard(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                const Text('قيّم المحادثة مع الإدارة', style: TextStyle(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 6),
+                Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  for (var i = 1; i <= 5; i++)
+                    IconButton(
+                      onPressed: () => setState(() => _stars = i),
+                      icon: Icon(i <= _stars ? Icons.star_rounded : Icons.star_outline_rounded, color: const Color(0xFFF2B01E), size: 34),
+                    ),
+                ]),
+                TextField(controller: _note, maxLength: 300, decoration: const InputDecoration(hintText: 'ملاحظة (اختياري)')),
+                FilledButton(onPressed: _rate, child: const Text('إرسال التقييم')),
+              ]),
+            ),
+          ),
         Expanded(
           child: _error != null && items == null
               ? ErrorRetry(message: _error!, onRetry: _load)

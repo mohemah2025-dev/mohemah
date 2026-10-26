@@ -163,7 +163,7 @@ export function AdminCustomersPage() {
   const [q, setQ] = useState("");
   const [editing, setEditing] = useState<AdminCustomer | null>(null);
   const [open, setOpen] = useState(false);
-  const list = customers.filter((c) => c.name.includes(q) || c.phone.includes(q));
+  const list = customers.filter((c) => c.name.includes(q) || c.phone.includes(q) || String(c.memberNo ?? "").includes(q.replace("#", "")));
   const serviceNames = services.map((s) => s.name);
   return (
     <div>
@@ -178,7 +178,7 @@ export function AdminCustomersPage() {
           <tbody>
             {list.map((c) => (
               <tr key={c.id} className="border-t border-border hover:bg-mohemah-light/40">
-                <td className="p-3 text-muted-foreground">{c.id}</td>
+                <td className="p-3 text-muted-foreground font-bold" dir="ltr">{c.memberNo ? `#${c.memberNo}` : "—"}</td>
                 <td className="p-3 font-bold">{c.name}</td>
                 <td className="p-3">{c.phone}</td>
                 <td className="p-3">{c.region}</td>
@@ -257,14 +257,14 @@ export function AdminProvidersPage() {
   const [open, setOpen] = useState(false);
   const serviceNames = services.map((s) => s.name);
   const [pq, setPq] = useState("");
-  const shown = providers.filter((p) => !pq.trim() || p.name.includes(pq.trim()) || p.phone.includes(pq.trim()));
+  const shown = providers.filter((p) => !pq.trim() || p.name.includes(pq.trim()) || p.phone.includes(pq.trim()) || String(p.memberNo ?? "").includes(pq.trim().replace("#", "")));
   return (
     <div>
       <PageHeader title="مقدمو الخدمات" subtitle={`${providers.length} مقدم خدمة`}
         action={<button onClick={() => { setEditing(null); setOpen(true); }} className="mohemah-btn-coral text-sm px-4 py-2 rounded-xl flex items-center gap-2"><Plus className="w-4 h-4" /> إضافة مقدم</button>} />
       <AdminProviderApplications onChanged={refreshAll} />
       <PendingServiceRequests />
-      <input value={pq} onChange={(e) => setPq(e.target.value)} placeholder="ابحث باسم مقدم الخدمة أو جواله، ثم اضغط الاسم لفتح ملفه وتحليل عمله" className="admin-input mb-3 max-w-xl" />
+      <input value={pq} onChange={(e) => setPq(e.target.value)} placeholder="ابحث بالاسم أو الجوال أو الرقم (#1001)، ثم اضغط الاسم لفتح ملفه وتحليل عمله" className="admin-input mb-3 max-w-xl" />
       <div className="bg-card border border-border rounded-2xl overflow-x-auto">
         <table className="w-full text-sm text-right min-w-[900px]">
           <thead className="bg-mohemah-light text-xs text-muted-foreground">
@@ -273,7 +273,7 @@ export function AdminProvidersPage() {
           <tbody>
             {shown.map((p) => (
               <tr key={p.id} className="border-t border-border hover:bg-mohemah-light/40">
-                <td className="p-3 text-muted-foreground">{p.id}</td>
+                <td className="p-3 text-muted-foreground font-bold" dir="ltr">{p.memberNo ? `#${p.memberNo}` : "—"}</td>
                 <td className="p-3 font-bold"><Link to="/admin/provider-profile/$id" params={{ id: p.id }} className="text-mohemah-blue hover:underline">{p.name}</Link></td>
                 <td className="p-3">{p.phone}</td>
                 <td className="p-3">{p.region}</td>

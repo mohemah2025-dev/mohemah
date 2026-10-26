@@ -39,6 +39,8 @@ class ProviderAccountTab extends StatelessWidget {
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(p.fullName, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                  if (p.memberNo != null)
+                    Text('رقم العضوية #${p.memberNo}', textDirection: TextDirection.rtl, style: const TextStyle(fontSize: 12, color: Brand.mutedFg, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 2),
                 Row(children: [
                   Stars(value: p.rating, size: 15),

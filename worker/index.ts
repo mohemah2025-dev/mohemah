@@ -5,6 +5,7 @@ import { registerAdminRoutes } from "./routes/admin";
 import { registerPaymentRoutes } from "./routes/payments";
 import { registerAnalyticsRoutes } from "./routes/analytics";
 import { registerProviderRoutes } from "./routes/providers";
+import { registerSupportRoutes } from "./routes/support";
 import { ensureSchema } from "./lib/migrate";
 import { flushPush, type PushJob } from "./lib/push";
 
@@ -15,6 +16,7 @@ registerAdminRoutes(router);
 registerPaymentRoutes(router);
 registerAnalyticsRoutes(router);
 registerProviderRoutes(router);
+registerSupportRoutes(router);
 
 function corsHeaders(req: Request, env: Env, url: URL): Record<string, string> {
   const origin = req.headers.get("origin");

@@ -75,7 +75,7 @@ export type UserRow = {
   id: string; email: string | null; username: string | null; phone: string | null; full_name: string | null; region: string | null;
   gender: string | null; avatar_url: string | null; bio: string | null; coin_balance: number; rating: number; rating_count: number;
   customer_rating: number; is_active: number; is_online: number; billing_mode: string; national_id: string | null; nationality: string | null;
-  verification_status: string; review_note: string | null; requested_services: string; referral_code: string | null; created_at: string;
+  verification_status: string; review_note: string | null; requested_services: string; referral_code: string | null; created_at: string; member_no?: number | null;
 };
 
 export function serializeProfile(u: UserRow) {
@@ -84,7 +84,7 @@ export function serializeProfile(u: UserRow) {
     avatar_url: u.avatar_url, bio: u.bio, coin_balance: u.coin_balance, rating: u.rating, rating_count: u.rating_count,
     customer_rating: u.customer_rating, is_active: !!u.is_active, is_online: !!u.is_online, billing_mode: u.billing_mode,
     national_id: u.national_id, nationality: u.nationality, verification_status: u.verification_status, review_note: u.review_note,
-    requested_services: safeJson<string[]>(u.requested_services, []), referral_code: u.referral_code, created_at: u.created_at,
+    requested_services: safeJson<string[]>(u.requested_services, []), referral_code: u.referral_code, created_at: u.created_at, member_no: u.member_no ?? null,
   };
 }
 

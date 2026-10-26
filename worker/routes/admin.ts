@@ -76,7 +76,7 @@ export function registerAdminRoutes(r: Router) {
     const [users, roles, provSvcs, orderStats] = await Promise.all([
       all<Record<string, unknown> & { id: string }>(c.env.DB,
         `SELECT id, full_name, email, username, phone, region, gender, rating, rating_count, coin_balance, is_active, is_online,
-                verification_status, admin_permissions, created_at, updated_at, last_seen_at FROM users ORDER BY created_at DESC LIMIT 5000`),
+                verification_status, admin_permissions, member_no, created_at, updated_at, last_seen_at FROM users ORDER BY created_at DESC LIMIT 5000`),
       all<{ user_id: string; role: string }>(c.env.DB, "SELECT user_id, role FROM user_roles"),
       all<{ provider_id: string; name: string }>(c.env.DB, "SELECT ps.provider_id, s.name FROM provider_services ps JOIN services s ON s.id = ps.service_id"),
       all<{ customer_id: string; service_name: string; n: number }>(c.env.DB, "SELECT customer_id, service_name, COUNT(*) AS n FROM orders WHERE customer_id IS NOT NULL GROUP BY customer_id, service_name"),
@@ -732,6 +732,6 @@ export function registerAdminRoutes(r: Router) {
   });
   r.get("/api/admin/people", async (c) => {
     await requirePerm(c, ["messages", "notifications", "billing", "staff"], "view");
-    return json(await all(c.env.DB, "SELECT id, full_name, phone, email FROM users ORDER BY created_at DESC LIMIT 2000"));
+    return json(await all(c.env.DB, "SELECT id, full_name, phone, email, member_no FROM users ORDER BY created_at DESC LIMIT 2000"));
   });
 }

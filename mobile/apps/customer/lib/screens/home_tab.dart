@@ -150,7 +150,7 @@ class _Header extends StatelessWidget {
     return GradientHeader(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Image.asset('assets/logo.png', package: 'mohemah_core', height: 34),
+          const AppLogo(height: 34),
           const SizedBox(width: 10),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

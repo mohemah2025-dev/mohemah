@@ -3,7 +3,7 @@ import { useAdmin, AdminAd, AdminNotification, AdminPolicy, NOTIFICATION_PRESETS
 import { Bell, Megaphone, Plus, Trash2, Send, Image as ImageIcon, FileText, Sparkles, Calendar, Pencil, Eye, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { uploadAdminImage } from "@/lib/adminStore";
-import { errMsg } from "@/lib/api";
+import { api, errMsg } from "@/lib/api";
 import { NOTIF_ICONS, NotifIcon } from "@/lib/notifIcons";
 import { Volume2, VolumeX } from "lucide-react";
 
@@ -57,7 +57,7 @@ function audienceLabel(a: AdminNotification["audience"] | AdminPolicy["audience"
 
 /* =========================== Notifications =========================== */
 export function AdminNotificationsPage() {
-  const { notifications, sendNotification, removeNotification, customers, providers } = useAdmin();
+  const { notifications, sendNotification, removeNotification, customers, providers, services } = useAdmin();
   const [open, setOpen] = useState(false);
   const [preset, setPreset] = useState<typeof NOTIFICATION_PRESETS[number] | null>(null);
 
@@ -140,6 +140,7 @@ export function AdminNotificationsPage() {
       {open && (
         <NotificationDialog
           preset={preset}
+          services={services.map((x) => ({ id: x.id, name: x.name }))}
           customers={customers.map((c) => ({ id: c.id, label: c.name }))}
           providers={providers.map((p) => ({ id: p.id, label: p.name }))}
           onClose={() => { setOpen(false); setPreset(null); }}
@@ -150,8 +151,9 @@ export function AdminNotificationsPage() {
   );
 }
 
-function NotificationDialog({ preset, customers, providers, onClose, onSend }: {
+function NotificationDialog({ preset, services, customers, providers, onClose, onSend }: {
   preset: typeof NOTIFICATION_PRESETS[number] | null;
+  services: { id: string; name: string }[];
   customers: { id: string; label: string }[];
   providers: { id: string; label: string }[];
   onClose: () => void;
@@ -164,6 +166,14 @@ function NotificationDialog({ preset, customers, providers, onClose, onSend }: {
   const [category, setCategory] = useState<NotifCategory>(preset?.category ?? "عام");
   const [icon, setIcon] = useState(preset?.icon ?? "bell");
   const [sound, setSound] = useState(true);
+  // Promotional notification can apply a real discount at the same time (prices change immediately in the apps).
+  const [discount, setDiscount] = useState(false);
+  const [dKind, setDKind] = useState<"percent" | "free" | "amount">("percent");
+  const [dValue, setDValue] = useState(50);
+  const [dTarget, setDTarget] = useState<"orders" | "subscriptions" | "topups" | "all">("orders");
+  const [dScope, setDScope] = useState("");
+  const [dEnd, setDEnd] = useState(() => new Date(Date.now() + 3 * 86400000 - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16));
+  const [busy, setBusy] = useState(false);
   const iconFile = useRef<HTMLInputElement>(null);
   const uploadIcon = (f?: File) => {
     if (!f) return;
@@ -252,6 +262,21 @@ function NotificationDialog({ preset, customers, providers, onClose, onSend }: {
             </Field>
           </div>
 
+          {category === "ترويجي" && (
+            <div className="border border-pink-200 bg-pink-50/60 rounded-xl p-3 space-y-2">
+              <label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={discount} onChange={(e) => setDiscount(e.target.checked)} />تطبيق خصم فعلي مع الإشعار (تتغير الأسعار في التطبيقات فوراً)</label>
+              {discount && (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  <select value={dKind} onChange={(e) => setDKind(e.target.value as typeof dKind)} className="admin-input"><option value="percent">نسبة مئوية</option><option value="free">مجاني بالكامل</option><option value="amount">مبلغ محدد</option></select>
+                  {dKind !== "free" && <input type="number" min={1} max={dKind === "percent" ? 100 : undefined} value={dValue} onChange={(e) => setDValue(Number(e.target.value))} className="admin-input" placeholder={dKind === "percent" ? "النسبة %" : "المبلغ"} />}
+                  <select value={dTarget} onChange={(e) => setDTarget(e.target.value as typeof dTarget)} className="admin-input"><option value="orders">قبول الطلبات (الكوينز)</option><option value="subscriptions">الاشتراكات</option><option value="topups">شحن الكوينز</option><option value="all">الكل</option></select>
+                  <select value={dScope} onChange={(e) => setDScope(e.target.value)} className="admin-input"><option value="">كل الأقسام</option>{services.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>
+                  <label className="text-[11px] text-muted-foreground col-span-2 md:col-span-1">ينتهي<input type="datetime-local" value={dEnd} onChange={(e) => setDEnd(e.target.value)} className="admin-input mt-1" /></label>
+                </div>
+              )}
+            </div>
+          )}
+
           {audience === "specific" && (
             <Field label="اختر المستلمين">
               <div className="max-h-44 overflow-auto border border-border rounded-xl p-2 space-y-1">
@@ -271,7 +296,21 @@ function NotificationDialog({ preset, customers, providers, onClose, onSend }: {
         <div className="flex gap-2 mt-5">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-mohemah-light text-sm font-bold">إلغاء</button>
           <button
-            onClick={() => title && body && onSend({ title, body, audience, scope, category, icon, accentColor, sound, scheduledAt: scheduledAt || undefined, targetIds: audience === "specific" ? targets : undefined })}
+            disabled={busy}
+            onClick={async () => {
+              if (!title || !body) return;
+              if (discount) {
+                setBusy(true);
+                try {
+                  await api("/api/admin/promotions", { app: "admin", body: {
+                    title, kind: dKind, value: dKind === "free" ? 100 : dValue, scope: dScope ? "service" : "all", service_id: dScope || null, applies_to: dTarget,
+                    starts_at: scheduledAt ? new Date(scheduledAt).toISOString() : new Date().toISOString(), ends_at: new Date(dEnd).toISOString(), notify: false,
+                  } });
+                } catch (e) { setBusy(false); return toast.error(errMsg(e)); }
+                setBusy(false);
+              }
+              onSend({ title, body, audience, scope, category, icon, accentColor, sound, scheduledAt: scheduledAt || undefined, targetIds: audience === "specific" ? targets : undefined });
+            }}
             className="flex-1 py-2.5 rounded-xl mohemah-btn-coral text-sm font-bold flex items-center justify-center gap-2"
           >
             <Send className="w-4 h-4" /> {scheduledAt ? "جدولة الإرسال" : "إرسال الآن"}

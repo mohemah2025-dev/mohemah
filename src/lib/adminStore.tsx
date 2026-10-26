@@ -34,6 +34,8 @@ export interface MainService {
 
 export interface AdminCustomer {
   id: string;
+  /** Easy member number (#1001…). */
+  memberNo?: number | null;
   name: string;
   phone: string;
   region: string;
@@ -45,6 +47,7 @@ export interface AdminCustomer {
 
 export interface AdminProviderRow {
   id: string;
+  memberNo?: number | null;
   name: string;
   phone: string;
   region: string;
@@ -291,6 +294,7 @@ type ApiUser = {
   gender: string | null; rating: number; coin_balance: number; is_active: boolean; roles: string[]; services: string[];
   orders_count: number; favorite_service: string | null; updated_at: string; last_seen_at: string | null;
   permissions?: AdminPermissions | null;
+  member_no?: number | null;
 };
 type ApiService = { id: string; name: string; description: string | null; icon: string; color: string; coin_price: number; active: number; sort_order: number };
 type ApiSub = { id: string; service_id: string; name: string; description: string | null; details: string | null; estimated_duration: string | null; requires_photos: number; icon: string; color: string; coin_price: number | null; delivery_mode: string; active: number; sort_order: number };
@@ -372,10 +376,10 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         });
       }
       if (p.roles.includes("provider")) {
-        ps.push({ id: p.id, name, phone: p.phone ?? "—", region, gender, services: p.services, rating: Number(p.rating ?? 0), coinBalance: p.coin_balance, status: p.is_active ? "نشط" : "موقوف" });
+        ps.push({ id: p.id, memberNo: p.member_no ?? null, name, phone: p.phone ?? "—", region, gender, services: p.services, rating: Number(p.rating ?? 0), coinBalance: p.coin_balance, status: p.is_active ? "نشط" : "موقوف" });
       }
       if (p.roles.includes("customer")) {
-        cs.push({ id: p.id, name, phone: p.phone ?? "—", region, gender, ordersCount: p.orders_count, lastActive: lastActiveLabel(p.last_seen_at ?? p.updated_at), favoriteService: p.favorite_service ?? undefined });
+        cs.push({ id: p.id, memberNo: p.member_no ?? null, name, phone: p.phone ?? "—", region, gender, ordersCount: p.orders_count, lastActive: lastActiveLabel(p.last_seen_at ?? p.updated_at), favoriteService: p.favorite_service ?? undefined });
       }
     });
     setCustomers(cs);

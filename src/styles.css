@@ -372,3 +372,29 @@
 .pay-mark-visa { background: var(--pay-visa); font-style: italic; letter-spacing: .06em; }
 .pay-mark-stc { background: var(--pay-stc); }
 .pay-mark-default { background: var(--muted); color: var(--foreground); }
+
+/* ===== Admin panel identity (colour from Settings → primary colour) ===== */
+.admin-sidebar { --brand-c: var(--brand, var(--primary)); }
+.admin-brand-head {
+  background: linear-gradient(135deg, var(--brand, var(--primary)), color-mix(in oklab, var(--brand, var(--primary)) 70%, #0b1d3a));
+}
+.admin-nav-active {
+  background: color-mix(in oklab, var(--brand, var(--primary)) 12%, transparent);
+  color: var(--brand, var(--primary));
+}
+.admin-nav-active::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--brand, var(--primary));
+}
+.admin-content .bg-card {
+  border-top: 3px solid color-mix(in oklab, var(--brand, var(--primary)) 45%, transparent);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04), 0 6px 18px -10px color-mix(in oklab, var(--brand, var(--primary)) 35%, transparent);
+}
+.admin-content .bg-card .bg-card { border-top-width: 1px; box-shadow: none; }
+.admin-content h1 { color: color-mix(in oklab, var(--brand, var(--primary)) 70%, var(--foreground)); }

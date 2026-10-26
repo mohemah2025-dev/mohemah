@@ -17,3 +17,4 @@ export 'src/theme.dart';
 export 'src/widgets.dart';
 export 'src/attachments.dart';
 export 'src/nav_bar.dart';
+export 'src/branding.dart';

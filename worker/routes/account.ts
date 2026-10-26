@@ -8,6 +8,7 @@ import {
   ADMIN_SECTIONS, parsePermissions, type AdminPermissions,
 } from "../lib/auth";
 import { deleteFiles, getFile, putFile } from "../lib/storage";
+import { userWrites } from "./support";
 import { activeSubscriptionEnd, getSettings, publicSettings, referralCodeFor, serializeProfile, type UserRow } from "../lib/domain";
 
 export const DOC_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "application/pdf": "pdf" };
@@ -472,19 +473,8 @@ export function registerAccountRoutes(r: Router) {
     const u = await requireUser(c);
     const b = await readJson(c.req);
     const body = str(b, "body", { required: true, max: 2000, label: "الرسالة" })!;
-    const subject = str(b, "subject", { max: 200 });
-    let recipient = str(b, "recipient_id", { max: 64 });
-    // Users may only write to administration: reply to an admin sender, or reach the owner by default.
-    if (recipient) {
-      const ok = await first(c.env.DB, "SELECT 1 FROM user_roles WHERE user_id = ? AND role IN ('admin','staff')", recipient);
-      if (!ok) fail(403, "forbidden", "يمكن مراسلة الإدارة فقط");
-    } else {
-      recipient = (await first<{ user_id: string }>(c.env.DB, "SELECT user_id FROM user_roles WHERE role = 'admin' ORDER BY created_at LIMIT 1"))?.user_id ?? null;
-      if (!recipient) fail(503, "no_admin", "لا يوجد حساب إدارة بعد");
-    }
-    const id = uid();
-    await run(c.env.DB, "INSERT INTO messages (id, sender_id, recipient_id, subject, body) VALUES (?,?,?,?,?)", id, u.id, recipient, subject, body);
-    return json({ id }, 201);
+    // Goes into the user's conversation with the administration (see routes/support.ts).
+    return json({ id: await userWrites(c, u.id, body, str(b, "subject", { max: 200 })) }, 201);
   });
   r.post("/api/me/messages/:id/read", async (c) => {
     const u = await requireUser(c);

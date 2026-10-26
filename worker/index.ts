@@ -3,6 +3,8 @@ import { registerAccountRoutes } from "./routes/account";
 import { registerOrderRoutes } from "./routes/orders";
 import { registerAdminRoutes } from "./routes/admin";
 import { registerPaymentRoutes } from "./routes/payments";
+import { registerAnalyticsRoutes } from "./routes/analytics";
+import { registerProviderRoutes } from "./routes/providers";
 import { ensureSchema } from "./lib/migrate";
 import { flushPush, type PushJob } from "./lib/push";
 
@@ -11,6 +13,8 @@ registerAccountRoutes(router);
 registerOrderRoutes(router);
 registerAdminRoutes(router);
 registerPaymentRoutes(router);
+registerAnalyticsRoutes(router);
+registerProviderRoutes(router);
 
 function corsHeaders(req: Request, env: Env, url: URL): Record<string, string> {
   const origin = req.headers.get("origin");

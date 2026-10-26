@@ -29,6 +29,7 @@ const nav: { to: string; label: string; icon: typeof LayoutDashboard; section: A
 
 /** Section of the current admin path (longest matching nav entry). */
 function sectionOf(path: string): AdminSection | null {
+  if (path.startsWith("/admin/provider-profile")) return "providers";
   const hit = nav.filter((n) => (n.exact ? path === n.to || path === `${n.to}/` : path.startsWith(n.to))).sort((a, b) => b.to.length - a.to.length)[0];
   return hit?.section ?? null;
 }

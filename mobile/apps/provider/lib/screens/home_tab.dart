@@ -6,6 +6,7 @@ import 'package:mohemah_core/mohemah_core.dart';
 
 import '../provider_store.dart';
 import 'billing_page.dart';
+import 'my_services_page.dart';
 import 'shell.dart';
 
 class ProviderHomeTab extends StatelessWidget {
@@ -373,7 +374,13 @@ class _MyServicesPanelState extends State<MyServicesPanel> {
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _mine = <String>{});
+      // Never offer services that were not approved: on error show nothing to add.
+      if (mounted) {
+        setState(() {
+          _mine ??= <String>{};
+          _allowed ??= <String>{};
+        });
+      }
     }
   }
 
@@ -404,62 +411,34 @@ class _MyServicesPanelState extends State<MyServicesPanel> {
   Widget build(BuildContext context) {
     final allowed = _allowed;
     // Only the services the administration approved for this provider (chosen at registration).
-    final services = PublicScope.of(context).services.where((sv) => allowed == null || allowed.contains(sv.id) || (_mine?.contains(sv.id) ?? false)).toList();
+    final services = PublicScope.of(context).services.where((sv) => allowed != null && allowed.contains(sv.id)).toList();
     final mine = _mine;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Text('خدماتك المعتمدة — اضغط لتفعيلها أو إيقافها${_saving ? ' — جارٍ الحفظ…' : ''}',
           style: const TextStyle(fontSize: 12, color: Brand.mutedFg)),
       const SizedBox(height: 10),
-      if (mine == null)
+      if (mine == null || allowed == null)
         const Loading()
       else if (services.isEmpty)
         const Text('لا توجد خدمات معتمدة لك بعد، تواصل مع الإدارة.', style: TextStyle(color: Brand.mutedFg))
       else
-        Wrap(
-          spacing: 14,
-          runSpacing: 14,
-          alignment: WrapAlignment.center,
-          children: [for (final sv in services) _ServiceCheck(service: sv, on: mine.contains(sv.id), onTap: () => _toggle(sv.id))],
+        GridView.count(
+          crossAxisCount: 3,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 10,
+          crossAxisSpacing: 10,
+          childAspectRatio: 0.82,
+          children: [
+            for (final sv in services)
+              ServiceToggleTile(name: sv.name, icon: sv.icon, color: sv.color, on: mine.contains(sv.id), onTap: _saving ? null : () => _toggle(sv.id)),
+          ],
         ),
       if (mine != null && services.isNotEmpty) ...[
         const SizedBox(height: 10),
         const Text('لإضافة خدمة جديدة تواصل مع الإدارة لاعتمادها.', textAlign: TextAlign.center, style: TextStyle(fontSize: 11.5, color: Brand.mutedFg)),
       ],
     ]);
-  }
-}
-
-/// A service icon with a check mark when selected.
-class _ServiceCheck extends StatelessWidget {
-  const _ServiceCheck({required this.service, required this.on, required this.onTap});
-  final Service service;
-  final bool on;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: service.name,
-      child: GestureDetector(
-        onTap: onTap,
-        child: SizedBox(
-          width: 64,
-          child: Column(children: [
-            Stack(clipBehavior: Clip.none, children: [
-              AnimatedOpacity(duration: const Duration(milliseconds: 200), opacity: on ? 1 : 0.4, child: ServiceIcon(icon: service.icon, color: service.color, size: 54)),
-              if (on)
-                const Positioned(
-                  top: -4,
-                  left: -4,
-                  child: CircleAvatar(radius: 11, backgroundColor: Brand.success, child: Icon(Icons.check_outlined, size: 15, color: Colors.white)),
-                ),
-            ]),
-            const SizedBox(height: 4),
-            Text(service.name, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(fontSize: 10.5)),
-          ]),
-        ),
-      ),
-    );
   }
 }
 

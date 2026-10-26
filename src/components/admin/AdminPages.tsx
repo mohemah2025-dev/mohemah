@@ -1,13 +1,15 @@
 import { ActivityTrendChart, ServiceDemandChart } from "./AdminOverviewCharts";
 import { ServiceIcon } from "@/components/ServiceAppearance";
 import { AdminProviderApplications } from "@/components/ProviderApplication";
+import { AdminProviderPerformance } from "./AdminProviderPerformance";
+import { AccountActionDialog, type AccountAction } from "./AccountActionDialog";
 import { ADMIN_SECTIONS, useAuth, type AdminPermissions, type PermLevel } from "@/lib/AuthContext";
-import { errMsg } from "@/lib/api";
+import { api, errMsg } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "@tanstack/react-router";
 import { useAdmin, MainService, SubService, REGIONS_LIST, AdminCustomer, AdminProviderRow, uploadAdminImage, type StaffMember } from "@/lib/adminStore";
-import { ArrowLeft, Plus, Pencil, Trash2, TrendingUp, TrendingDown, Coins, Users, UserCheck, Star, Wrench, MapPin, ArrowDownCircle, ArrowUpCircle, Upload, Download, Save, LoaderCircle } from "lucide-react";
+import { ArrowLeft, Plus, Pencil, Trash2, TrendingUp, TrendingDown, Coins, Users, UserCheck, Star, Wrench, MapPin, ArrowDownCircle, ArrowUpCircle, Upload, Download, Save, LoaderCircle, Ban, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 
 const REGIONS = ["الكل", ...REGIONS_LIST];
@@ -156,7 +158,8 @@ function FilterSelect({ label, value, onChange, options }: { label: string; valu
 
 /* ============ Customers ============ */
 export function AdminCustomersPage() {
-  const { customers, services, addCustomer, updateCustomer, removeCustomer } = useAdmin();
+  const { customers, services, addCustomer, updateCustomer, refreshAll } = useAdmin();
+  const [act, setAct] = useState<{ id: string; name: string; action: AccountAction } | null>(null);
   const [q, setQ] = useState("");
   const [editing, setEditing] = useState<AdminCustomer | null>(null);
   const [open, setOpen] = useState(false);
@@ -185,13 +188,16 @@ export function AdminCustomersPage() {
                 <td className="p-3 text-muted-foreground">{c.lastActive}</td>
                 <td className="p-3 flex gap-1">
                   <button onClick={() => { setEditing(c); setOpen(true); }} className="p-2 rounded-lg bg-mohemah-light"><Pencil className="w-3.5 h-3.5" /></button>
-                  <button onClick={() => { removeCustomer(c.id); toast.success("تم الحذف"); }} className="p-2 rounded-lg bg-red-50 text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
+                  <button title="تعليق الحساب" onClick={() => setAct({ id: c.id, name: c.name, action: "suspend" })} className="p-2 rounded-lg bg-amber-50 text-amber-700"><Ban className="w-3.5 h-3.5" /></button>
+                  <button title="إعادة التفعيل" onClick={() => setAct({ id: c.id, name: c.name, action: "reactivate" })} className="p-2 rounded-lg bg-emerald-50 text-emerald-700"><RotateCcw className="w-3.5 h-3.5" /></button>
+                  <button title="حذف الحساب" onClick={() => setAct({ id: c.id, name: c.name, action: "delete" })} className="p-2 rounded-lg bg-red-50 text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      {act && <AccountActionDialog userId={act.id} userName={act.name} action={act.action} onClose={() => setAct(null)} onDone={() => { setAct(null); refreshAll(); }} />}
       {open && <CustomerDialog initial={editing ?? undefined} serviceNames={serviceNames}
         onClose={() => { setOpen(false); setEditing(null); }}
         onSave={(d) => {
@@ -255,6 +261,7 @@ export function AdminProvidersPage() {
       <PageHeader title="مقدمو الخدمات" subtitle={`${providers.length} مقدم خدمة`}
         action={<button onClick={() => { setEditing(null); setOpen(true); }} className="mohemah-btn-coral text-sm px-4 py-2 rounded-xl flex items-center gap-2"><Plus className="w-4 h-4" /> إضافة مقدم</button>} />
       <AdminProviderApplications onChanged={refreshAll} />
+      <PendingServiceRequests />
       <div className="bg-card border border-border rounded-2xl overflow-x-auto">
         <table className="w-full text-sm text-right min-w-[900px]">
           <thead className="bg-mohemah-light text-xs text-muted-foreground">
@@ -264,7 +271,7 @@ export function AdminProvidersPage() {
             {providers.map((p) => (
               <tr key={p.id} className="border-t border-border hover:bg-mohemah-light/40">
                 <td className="p-3 text-muted-foreground">{p.id}</td>
-                <td className="p-3 font-bold">{p.name}</td>
+                <td className="p-3 font-bold"><Link to="/admin/provider-profile/$id" params={{ id: p.id }} className="text-mohemah-blue hover:underline">{p.name}</Link></td>
                 <td className="p-3">{p.phone}</td>
                 <td className="p-3">{p.region}</td>
                 <td className="p-3">{p.services.join("، ")}</td>
@@ -281,6 +288,7 @@ export function AdminProvidersPage() {
           </tbody>
         </table>
       </div>
+      <AdminProviderPerformance />
       {open && <ProviderDialog initial={editing ?? undefined} serviceNames={serviceNames}
         onClose={() => { setOpen(false); setEditing(null); }}
         onSave={(d) => {
@@ -456,13 +464,33 @@ export function AdminFinancePage() {
   );
 }
 
+/* ============ Pending "add a service" requests ============ */
+function PendingServiceRequests() {
+  const [list, setList] = useState<{ id: string; provider_id: string; provider_name: string | null; service_name: string; created_at: string }[]>([]);
+  useEffect(() => { api<typeof list>("/api/admin/service-requests?status=pending", { app: "admin" }).then(setList).catch(() => {}); }, []);
+  if (!list.length) return null;
+  return (
+    <section className="mb-4 border-2 border-sky-200 bg-sky-50 rounded-2xl p-4">
+      <h2 className="font-bold text-sm mb-2">طلبات إضافة خدمة بانتظار المراجعة ({list.length})</h2>
+      <ul className="space-y-1.5 text-xs">
+        {list.map((r) => (
+          <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 bg-card rounded-lg px-3 py-2">
+            <span><b>{r.provider_name ?? "—"}</b> يطلب إضافة «{r.service_name}»</span>
+            <Link to="/admin/provider-profile/$id" params={{ id: r.provider_id }} className="text-mohemah-blue font-bold hover:underline">مراجعة الملف والشهادة</Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 /* ============ Staff ============ */
 const LEVELS: { v: PermLevel; label: string }[] = [{ v: "none", label: "بدون" }, { v: "view", label: "عرض" }, { v: "edit", label: "تعديل" }];
 
 /** Default page permissions for a new supervisor (everything except administration pages). */
 function defaultAccess(): AdminPermissions {
   const p = Object.fromEntries(ADMIN_SECTIONS.map((x) => [x.key, "edit"])) as AdminPermissions;
-  p.gateways = "view"; p.settings = "view"; p.integrations = "none"; p.staff = "none";
+  p.analytics = "view"; p.gateways = "view"; p.settings = "view"; p.integrations = "none"; p.staff = "none";
   return p;
 }
 

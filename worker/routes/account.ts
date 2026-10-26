@@ -10,11 +10,11 @@ import {
 import { deleteFiles, getFile, putFile } from "../lib/storage";
 import { activeSubscriptionEnd, getSettings, publicSettings, referralCodeFor, serializeProfile, type UserRow } from "../lib/domain";
 
-const DOC_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "application/pdf": "pdf" };
+export const DOC_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "application/pdf": "pdf" };
 const IMG_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/svg+xml": "svg" };
 const DOC_MAX = 5 * 1024 * 1024;
 
-function validateDoc(file: File) {
+export function validateDoc(file: File) {
   if (!DOC_TYPES[file.type]) fail(400, "invalid_file", "المرفقات: صورة (JPG/PNG/WEBP) أو PDF فقط");
   if (file.size > DOC_MAX) fail(400, "invalid_file", "حجم المرفق الأقصى 5MB");
 }
@@ -254,7 +254,10 @@ export function registerAccountRoutes(r: Router) {
       if (await verifyPassword(password, cand.password_hash)) { user = cand; break; }
     }
     if (!user) fail(401, "invalid_credentials", "بيانات الدخول أو كلمة المرور غير صحيحة");
-    if (!user!.is_active) fail(403, "account_suspended", "تم إيقاف هذا الحساب، تواصل مع الدعم");
+    if (!user!.is_active) {
+      const why = (await first<{ suspend_reason: string | null }>(c.env.DB, "SELECT suspend_reason FROM users WHERE id = ?", user!.id))?.suspend_reason;
+      fail(403, "account_suspended", `تم تعليق هذا الحساب${why ? `: ${why}` : ""}. تواصل مع الدعم`);
+    }
     const roles = (await all<{ role: string }>(c.env.DB, "SELECT role FROM user_roles WHERE user_id = ?", user!.id)).map((r) => r.role);
     if (app === "admin" && !roles.some((r) => r === "admin" || r === "staff")) fail(403, "not_admin", "هذا الحساب لا يملك صلاحية لوحة التحكم");
     if (app === "customer" && !roles.includes("customer")) await run(c.env.DB, "INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, 'customer')", user!.id);

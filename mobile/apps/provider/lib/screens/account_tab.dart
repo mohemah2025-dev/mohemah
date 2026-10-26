@@ -4,6 +4,7 @@ import 'package:mohemah_core/mohemah_core.dart';
 
 import '../provider_store.dart';
 import 'billing_page.dart';
+import 'my_services_page.dart';
 import 'home_tab.dart';
 
 class ProviderAccountTab extends StatelessWidget {
@@ -59,6 +60,8 @@ class ProviderAccountTab extends StatelessWidget {
             subtitle: session.hasActiveSubscription ? 'اشتراك فعّال حتى ${fmtDate(session.subscriptionEnd)}' : '${store.feed?.balance ?? p.coinBalance} كوين',
             onTap: () => push(const BillingPage()),
           ),
+          MenuTile(icon: Icons.home_repair_service_outlined, title: 'خدماتي المعتمدة', subtitle: 'تفعيل الخدمات وطلب إضافة خدمة جديدة', onTap: () => push(const MyServicesPage())),
+          MenuTile(icon: Icons.workspace_premium_outlined, title: 'خطاب خبرة', subtitle: 'إصدار وطباعة خطاب رسمي من التطبيق', onTap: () => openExperienceLetter(context)),
           MenuTile(icon: Icons.receipt_long_outlined, title: 'سجل العمليات', onTap: () => push(const TransactionsPage())),
           MenuTile(icon: Icons.star_rounded, title: 'تقييماتي', onTap: () => push(const RatingsPage())),
         ]),

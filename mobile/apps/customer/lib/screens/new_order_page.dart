@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:mohemah_core/mohemah_core.dart';
@@ -31,6 +32,11 @@ class _NewOrderPageState extends State<NewOrderPage> {
   DateTime? _date;
   TimeOfDay? _time;
   PickedLocation? _gps;
+  final _extra = TextEditingController();
+  String? _locSource; // gps | map | saved
+  bool _locating = false;
+  final List<PickedImage> _images = [];
+  Uint8List? _voice;
 
   DateTime? get _when => !_scheduled || _date == null || _time == null ? null : DateTime(_date!.year, _date!.month, _date!.day, _time!.hour, _time!.minute);
 
@@ -44,6 +50,7 @@ class _NewOrderPageState extends State<NewOrderPage> {
   void dispose() {
     _desc.dispose();
     _address.dispose();
+    _extra.dispose();
     super.dispose();
   }
 
@@ -57,7 +64,10 @@ class _NewOrderPageState extends State<NewOrderPage> {
       setState(() {
         _addresses = list;
         final def = list.where((a) => a.isDefault).toList();
-        if (_picked == null && def.isNotEmpty) _pick(def.first);
+        if (_picked == null && _gps == null && def.isNotEmpty) {
+          _pick(def.first);
+          _locSource = 'saved';
+        }
       });
     } catch (_) {}
   }
@@ -70,6 +80,75 @@ class _NewOrderPageState extends State<NewOrderPage> {
     } else {
       _address.clear();
     }
+  }
+
+  void _setLocation(PickedLocation l, String source) {
+    setState(() {
+      _locSource = source;
+      _gps = l;
+      _picked = null;
+      _address.text = l.address;
+      if (l.region != null) _region = l.region;
+    });
+  }
+
+  Future<void> _useGps() async {
+    setState(() => _locating = true);
+    final regions = PublicScope.read(context).regions;
+    final pos = await currentPosition(context);
+    if (pos != null) _setLocation(await describeLocation(pos.latitude, pos.longitude, regions), 'gps');
+    if (mounted) setState(() => _locating = false);
+  }
+
+  Future<void> _useMap() async {
+    final l = await Navigator.push<PickedLocation>(context, MaterialPageRoute(builder: (_) => MapPickerPage(initial: _gps)));
+    if (l != null) _setLocation(l, 'map');
+  }
+
+  Future<void> _useSaved() async {
+    if (!await ensureSignedIn(context) || !mounted) return;
+    if (_addresses.isEmpty) await _loadAddresses();
+    if (!mounted) return;
+    final a = await showModalBottomSheet<Object>(
+      context: context,
+      builder: (c) => SafeArea(
+        child: ListView(shrinkWrap: true, padding: const EdgeInsets.fromLTRB(16, 0, 16, 16), children: [
+          const Text('عناويني المحفوظة', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 8),
+          if (_addresses.isEmpty) const Padding(padding: EdgeInsets.all(12), child: Text('لا توجد عناوين محفوظة بعد.', style: TextStyle(color: Brand.mutedFg))),
+          for (final x in _addresses)
+            ListTile(
+              leading: const Icon(Icons.place_outlined, color: Brand.primary),
+              title: Text(x.label, style: const TextStyle(fontWeight: FontWeight.w700)),
+              subtitle: Text(x.address, maxLines: 2, overflow: TextOverflow.ellipsis),
+              onTap: () => Navigator.pop(c, x),
+            ),
+          TextButton.icon(onPressed: () => Navigator.pop(c, 'manage'), icon: const Icon(Icons.add_location_alt_outlined), label: const Text('إضافة أو إدارة العناوين')),
+        ]),
+      ),
+    );
+    if (!mounted) return;
+    if (a == 'manage') {
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => const AddressesPage()));
+      if (mounted) await _loadAddresses();
+      return;
+    }
+    if (a is Address) {
+      setState(() {
+        _locSource = 'saved';
+        _gps = null;
+        _pick(a);
+      });
+    }
+  }
+
+  Future<void> _addImage() async {
+    if (_images.length >= 4) {
+      showSnack(context, 'الحد الأقصى 4 صور', error: true);
+      return;
+    }
+    final d = await pickPhoto(context);
+    if (d != null) setState(() => _images.add(d));
   }
 
   Future<void> _pickDate() async {
@@ -99,6 +178,14 @@ class _NewOrderPageState extends State<NewOrderPage> {
       showSnack(context, 'اختر موعداً لاحقاً', error: true);
       return;
     }
+    if (_mode == 'in_person' && _address.text.trim().isEmpty) {
+      showSnack(context, 'حدد موقع تنفيذ الخدمة: موقعك الحالي أو موقع آخر أو عنوان محفوظ', error: true);
+      return;
+    }
+    if (_region == null) {
+      showSnack(context, 'اختر المدينة', error: true);
+      return;
+    }
     if (!await ensureSignedIn(context, reason: 'سجّل دخولك لإرسال طلبك') || !mounted) return;
     final s = SessionScope.read(context);
     final store = OrdersScope.read(context);
@@ -108,11 +195,22 @@ class _NewOrderPageState extends State<NewOrderPage> {
         'mode': _mode,
         'description': _desc.text.trim(),
         'region': _region,
-        if (_mode == 'in_person') 'address': _address.text.trim(),
+        if (_mode == 'in_person') 'address': [_address.text.trim(), _extra.text.trim()].where((x) => x.isNotEmpty).join(' — '),
         if (_mode == 'in_person' && (_picked?.lat ?? _gps?.lat) != null) 'lat': _picked?.lat ?? _gps!.lat,
         if (_mode == 'in_person' && (_picked?.lng ?? _gps?.lng) != null) 'lng': _picked?.lng ?? _gps!.lng,
         if (_when != null) 'scheduled_at': _when!.toUtc().toIso8601String(),
       }));
+      // Photos and the voice note go up right after the order is created.
+      if (_images.isNotEmpty || _voice != null) {
+        try {
+          await s.api.multipart('/api/orders/${jS(res['id'])}/attachments', const {}, [
+            for (final img in _images) img.upload('files'),
+            if (_voice != null) UploadFile(field: 'files', filename: 'voice.wav', bytes: _voice!, contentType: 'audio/wav'),
+          ]);
+        } catch (e) {
+          if (mounted) showSnack(context, 'أُرسل الطلب لكن تعذّر رفع المرفقات: ${errMsg(e)}', error: true);
+        }
+      }
       unawaited(store.refresh());
       if (!mounted) return;
       await showModalBottomSheet<void>(
@@ -176,56 +274,52 @@ class _NewOrderPageState extends State<NewOrderPage> {
             maxLength: 1000,
             validator: (v) => v.length < 5 ? 'اكتب شرحاً مختصراً للطلب' : null,
           ),
-          RegionField(value: _region, onChanged: (v) => setState(() => _region = v)),
+          // Photos and a voice note help the provider understand the job.
+          const _Label('صور أو رسالة صوتية (اختياري)'),
+          _AttachBox(
+            images: _images,
+            voice: _voice,
+            onAddImage: _addImage,
+            onRemoveImage: (i) => setState(() => _images.removeAt(i)),
+            onVoice: (v) => setState(() => _voice = v),
+          ),
+          const SizedBox(height: 14),
           if (_mode == 'in_person') ...[
-            const _Label('عنوان تنفيذ الخدمة'),
-            LocationPicker(
-              picked: _gps,
-              onPicked: (l) => setState(() {
-                _gps = l;
-                _picked = null;
-                _address.text = l.address;
-                if (l.region != null) _region = l.region;
-              }),
-            ),
-            if (_addresses.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Wrap(spacing: 8, runSpacing: 8, children: [
-                  for (final a in _addresses)
-                    ChoiceChip(
-                      label: Text(a.label),
-                      avatar: const Icon(Icons.place_outlined, size: 17),
-                      selected: _picked?.id == a.id,
-                      onSelected: (_) => setState(() => _pick(a)),
-                    ),
-                  ChoiceChip(label: const Text('عنوان آخر…'), selected: _picked == null, onSelected: (_) => setState(() => _pick(null))),
+            const _Label('موقع تنفيذ الخدمة'),
+            Row(children: [
+              Expanded(child: _LocOption(icon: Icons.my_location_outlined, label: 'موقعي الحالي', selected: _locSource == 'gps', busy: _locating, onTap: _useGps)),
+              const SizedBox(width: 8),
+              if (mapsEnabled) ...[
+                Expanded(child: _LocOption(icon: Icons.map_outlined, label: 'موقع آخر', selected: _locSource == 'map', onTap: _useMap)),
+                const SizedBox(width: 8),
+              ],
+              Expanded(child: _LocOption(icon: Icons.bookmark_border_outlined, label: 'عنوان محفوظ', selected: _locSource == 'saved', onTap: _useSaved)),
+            ]),
+            if (_address.text.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              AppCard(
+                padding: const EdgeInsets.all(12),
+                child: Row(children: [
+                  const Icon(Icons.place_outlined, color: Brand.success),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(_address.text, style: const TextStyle(fontWeight: FontWeight.w700, height: 1.5)),
+                      if (_region != null) Text(_region!, style: const TextStyle(fontSize: 12, color: Brand.mutedFg)),
+                    ]),
+                  ),
                 ]),
               ),
-            TextFormField(
-              controller: _address,
-              minLines: 1,
-              maxLines: 3,
-              maxLength: 300,
-              onChanged: (_) {
-                if (_picked != null && _address.text != _picked!.address) setState(() => _picked = null);
-              },
-              validator: (v) => _mode == 'in_person' && (v ?? '').trim().isEmpty ? 'حدد عنوان تنفيذ الخدمة' : null,
-              decoration: const InputDecoration(hintText: 'الحي، الشارع، رقم المبنى…', prefixIcon: Icon(Icons.place_outlined, color: Brand.mutedFg)),
-            ),
-            Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: TextButton.icon(
-                onPressed: () async {
-                  if (!await ensureSignedIn(context) || !context.mounted) return;
-                  await Navigator.push(context, MaterialPageRoute(builder: (_) => const AddressesPage()));
-                  if (mounted) await _loadAddresses();
-                },
-                icon: const Icon(Icons.add_location_alt_outlined, size: 19),
-                label: const Text('إدارة عناويني المحفوظة'),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _extra,
+                maxLength: 120,
+                decoration: const InputDecoration(hintText: 'تفاصيل إضافية: رقم المبنى، الدور، علامة مميزة… (اختياري)', prefixIcon: Icon(Icons.apartment_outlined, color: Brand.mutedFg)),
               ),
-            ),
+            ],
           ],
+          // City is filled from the location; asked only when it could not be determined.
+          if (_region == null) RegionField(value: _region, onChanged: (v) => setState(() => _region = v)),
           const SizedBox(height: 6),
           const _Label('موعد التنفيذ'),
           Row(children: [
@@ -388,4 +482,136 @@ class _RipplePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_RipplePainter old) => old.t != t;
+}
+
+/// One of the location choices (current location / another place / saved address).
+class _LocOption extends StatelessWidget {
+  const _LocOption({required this.icon, required this.label, required this.selected, required this.onTap, this.busy = false});
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final bool busy;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: selected ? Brand.primary.withValues(alpha: 0.08) : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: busy ? null : onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
+            decoration: BoxDecoration(borderRadius: BorderRadius.circular(14), border: Border.all(color: selected ? Brand.primary : const Color(0xFFD9DEE5), width: selected ? 1.6 : 1)),
+            child: Column(children: [
+              busy ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)) : Icon(icon, color: selected ? Brand.primary : Brand.mutedFg),
+              const SizedBox(height: 6),
+              Text(label, textAlign: TextAlign.center, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: selected ? Brand.primary : Brand.foreground)),
+            ]),
+          ),
+        ),
+      );
+}
+
+/// Photo thumbnails with an add button, and a hold-free record / stop voice note control.
+class _AttachBox extends StatefulWidget {
+  const _AttachBox({required this.images, required this.voice, required this.onAddImage, required this.onRemoveImage, required this.onVoice});
+  final List<PickedImage> images;
+  final Uint8List? voice;
+  final VoidCallback onAddImage;
+  final ValueChanged<int> onRemoveImage;
+  final ValueChanged<Uint8List?> onVoice;
+  @override
+  State<_AttachBox> createState() => _AttachBoxState();
+}
+
+class _AttachBoxState extends State<_AttachBox> {
+  final _rec = VoiceNoteRecorder();
+  bool _recording = false;
+  int _secs = 0;
+  Timer? _tick;
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    _rec.dispose();
+    super.dispose();
+  }
+
+  Future<void> _toggle() async {
+    if (_recording) return _stop();
+    final ok = await _rec.start(onLimit: _stop);
+    if (!ok) {
+      if (mounted) showSnack(context, 'اسمح للتطبيق باستخدام الميكروفون من إعدادات الجوال', error: true);
+      return;
+    }
+    setState(() {
+      _recording = true;
+      _secs = 0;
+    });
+    _tick = Timer.periodic(const Duration(seconds: 1), (_) => setState(() => _secs++));
+  }
+
+  Future<void> _stop() async {
+    _tick?.cancel();
+    final bytes = await _rec.stop();
+    if (!mounted) return;
+    setState(() => _recording = false);
+    if (bytes != null) widget.onVoice(bytes);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      SizedBox(
+        height: 78,
+        child: ListView(scrollDirection: Axis.horizontal, children: [
+          for (var i = 0; i < widget.images.length; i++)
+            Padding(
+              padding: const EdgeInsetsDirectional.only(end: 8),
+              child: Stack(children: [
+                ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.memory(widget.images[i].bytes, width: 78, height: 78, fit: BoxFit.cover)),
+                PositionedDirectional(
+                  top: 2,
+                  end: 2,
+                  child: InkWell(
+                    onTap: () => widget.onRemoveImage(i),
+                    child: const CircleAvatar(radius: 11, backgroundColor: Colors.black54, child: Icon(Icons.close, size: 14, color: Colors.white)),
+                  ),
+                ),
+              ]),
+            ),
+          if (widget.images.length < 4)
+            InkWell(
+              onTap: widget.onAddImage,
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                width: 78,
+                decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFD9DEE5)), color: Colors.white),
+                child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  Icon(Icons.add_a_photo_outlined, color: Brand.primary),
+                  SizedBox(height: 4),
+                  Text('إضافة صورة', style: TextStyle(fontSize: 11)),
+                ]),
+              ),
+            ),
+        ]),
+      ),
+      const SizedBox(height: 10),
+      if (widget.voice != null && !_recording)
+        Row(children: [
+          const Icon(Icons.graphic_eq, color: Brand.success),
+          const SizedBox(width: 6),
+          Expanded(child: Text('رسالة صوتية مسجلة (${(widget.voice!.length / 32000).round()} ث)', style: const TextStyle(fontWeight: FontWeight.w700))),
+          TextButton.icon(onPressed: () => widget.onVoice(null), icon: const Icon(Icons.delete_outline, color: Brand.danger), label: const Text('حذف', style: TextStyle(color: Brand.danger))),
+        ])
+      else
+        OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(foregroundColor: _recording ? Brand.danger : null, side: BorderSide(color: _recording ? Brand.danger : const Color(0xFFD9DEE5))),
+          onPressed: _toggle,
+          icon: Icon(_recording ? Icons.stop_circle_outlined : Icons.mic_none_outlined),
+          label: Text(_recording ? 'إيقاف التسجيل (${_secs}ث / 90)' : 'تسجيل رسالة صوتية'),
+        ),
+    ]);
+  }
 }

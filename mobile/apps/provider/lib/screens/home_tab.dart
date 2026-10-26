@@ -434,10 +434,15 @@ class _MyServicesPanelState extends State<MyServicesPanel> {
               ServiceToggleTile(name: sv.name, icon: sv.icon, color: sv.color, on: mine.contains(sv.id), onTap: _saving ? null : () => _toggle(sv.id)),
           ],
         ),
-      if (mine != null && services.isNotEmpty) ...[
-        const SizedBox(height: 10),
-        const Text('لإضافة خدمة جديدة تواصل مع الإدارة لاعتمادها.', textAlign: TextAlign.center, style: TextStyle(fontSize: 11.5, color: Brand.mutedFg)),
-      ],
+      const SizedBox(height: 10),
+      OutlinedButton.icon(
+        onPressed: () async {
+          await Navigator.push(context, MaterialPageRoute(builder: (_) => const MyServicesPage(openRequest: true)));
+          if (mounted) await _load();
+        },
+        icon: const Icon(Icons.add_business_outlined),
+        label: const Text('طلب إضافة خدمة'),
+      ),
     ]);
   }
 }

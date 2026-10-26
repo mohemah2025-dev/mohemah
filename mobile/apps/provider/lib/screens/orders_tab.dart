@@ -130,6 +130,7 @@ class OfferCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(o.description!, maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(height: 1.55, fontSize: 13.5)),
         ],
+        if (o.attachments.isNotEmpty) ...[const SizedBox(height: 8), AttachmentStrip(items: o.attachments)],
         const SizedBox(height: 8),
         Row(children: [
           const Icon(Icons.person_outlined, size: 17, color: Brand.mutedFg),
@@ -325,6 +326,7 @@ class JobDetailPage extends StatelessWidget {
           AppCard(
             child: Column(children: [
               if ((j.description ?? '').isNotEmpty) InfoRow(icon: Icons.notes_outlined, label: 'شرح الطلب', value: j.description!),
+              if (j.attachments.isNotEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: AttachmentStrip(items: j.attachments)),
               if (j.region != null) InfoRow(icon: Icons.location_city_outlined, label: 'المدينة', value: j.region!),
               if ((j.address ?? '').isNotEmpty)
                 InfoRow(

@@ -14,7 +14,7 @@ import re
 import sys
 
 APPS = {
-    "customer": {"id": "sa.mohemah.app", "name": "مهمة", "camera": False},
+    "customer": {"id": "sa.mohemah.app", "name": "مهمة", "camera": True},
     "provider": {"id": "sa.mohemah.partner", "name": "مهمة شريك", "camera": True},
 }
 
@@ -51,6 +51,8 @@ def main():
             '<uses-permission android:name="android.permission.INTERNET"/>',
             '<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>',
             '<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>',
+            # Voice notes attached to orders.
+            '<uses-permission android:name="android.permission.RECORD_AUDIO"/>',
         ]
         if cfg["camera"]:
             perms.append('<uses-feature android:name="android.hardware.camera" android:required="false"/>')
@@ -119,9 +121,10 @@ def main():
         if "remote-notification" not in modes:
             plist["UIBackgroundModes"] = modes + ["remote-notification"]
         plist["NSLocationWhenInUseUsageDescription"] = "نستخدم موقعك لتعبئة العنوان والمدينة تلقائياً."
+        plist["NSMicrophoneUsageDescription"] = "نحتاج الميكروفون لتسجيل رسالة صوتية توضح طلبك."
         if cfg["camera"]:
-            plist["NSCameraUsageDescription"] = "نحتاج الكاميرا لتصوير الهوية أو الشهادة أو صورتك الشخصية."
-            plist["NSPhotoLibraryUsageDescription"] = "نحتاج الوصول للصور لإرفاق الهوية أو الشهادة أو صورتك الشخصية."
+            plist["NSCameraUsageDescription"] = "نحتاج الكاميرا لتصوير الهوية أو الشهادة أو صور الطلب."
+            plist["NSPhotoLibraryUsageDescription"] = "نحتاج الوصول للصور لإرفاق الهوية أو الشهادة أو صور الطلب."
         with plist_path.open("wb") as f:
             plistlib.dump(plist, f)
         print(f"patched: {plist_path}")

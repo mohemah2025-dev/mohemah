@@ -120,37 +120,21 @@ class _CustomerShellState extends State<CustomerShell> {
       builder: (context, index, _) => Scaffold(
         body: IndexedStack(index: index, children: const [HomeTab(), ServicesTab(), OrdersTab(), AccountTab()]),
         // Five slots: the middle one is the (+) "request a service" button.
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: index >= 2 ? index + 1 : index,
-          onDestinationSelected: (i) {
+        bottomNavigationBar: MohemahNavBar(
+          index: index >= 2 ? index + 1 : index,
+          onTap: (i) {
             if (i == 2) {
               showRequestSheet(context);
               return;
             }
             CustomerShell.tab.value = i > 2 ? i - 1 : i;
           },
-          destinations: [
-            const NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'الرئيسية'),
-            const NavigationDestination(icon: Icon(Icons.grid_view_outlined), selectedIcon: Icon(Icons.grid_view), label: 'الخدمات'),
-            NavigationDestination(
-              icon: Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  gradient: Brand.gradient,
-                  shape: BoxShape.circle,
-                  boxShadow: [BoxShadow(color: Brand.primary.withValues(alpha: 0.35), blurRadius: 12, offset: const Offset(0, 5))],
-                ),
-                child: const Icon(Icons.add, color: Colors.white, size: 30),
-              ),
-              label: 'اطلب خدمة',
-            ),
-            NavigationDestination(
-              icon: Badge(isLabelVisible: openCount > 0, label: Text('$openCount'), child: const Icon(Icons.receipt_long_outlined)),
-              selectedIcon: Badge(isLabelVisible: openCount > 0, label: Text('$openCount'), child: const Icon(Icons.receipt_long)),
-              label: 'طلباتي',
-            ),
-            const NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'حسابي'),
+          items: [
+            const NavItem(icon: Icons.home_outlined, activeIcon: Icons.home_rounded, label: 'الرئيسية'),
+            const NavItem(icon: Icons.grid_view_outlined, activeIcon: Icons.grid_view_rounded, label: 'الخدمات'),
+            const NavItem(icon: Icons.add_rounded, activeIcon: Icons.add_rounded, label: 'اطلب خدمة', action: true),
+            NavItem(icon: Icons.receipt_long_outlined, activeIcon: Icons.receipt_long_rounded, label: 'طلباتي', badge: openCount),
+            const NavItem(icon: Icons.person_outline, activeIcon: Icons.person_rounded, label: 'حسابي'),
           ],
         ),
       ),

@@ -511,7 +511,7 @@ export function registerAccountRoutes(r: Router) {
   });
   r.get("/api/files/doc", async (c) => {
     const k = c.url.searchParams.get("k") ?? "";
-    if (!k.startsWith("docs/") || !(await verifyFileSignature(c.env, k, c.url.searchParams.get("e") ?? "", c.url.searchParams.get("s") ?? ""))) fail(403, "forbidden", "الرابط منتهي أو غير صالح");
+    if (!/^(docs|letters|orders)\//.test(k) || !(await verifyFileSignature(c.env, k, c.url.searchParams.get("e") ?? "", c.url.searchParams.get("s") ?? ""))) fail(403, "forbidden", "الرابط منتهي أو غير صالح");
     const obj = await getFile(c.env, k);
     if (!obj) return fail(404, "not_found");
     const h = new Headers({ "content-type": obj.contentType });

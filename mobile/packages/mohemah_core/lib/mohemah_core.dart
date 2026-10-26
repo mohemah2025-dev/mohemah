@@ -15,3 +15,5 @@ export 'src/shared_pages.dart';
 export 'src/splash.dart';
 export 'src/theme.dart';
 export 'src/widgets.dart';
+export 'src/attachments.dart';
+export 'src/nav_bar.dart';

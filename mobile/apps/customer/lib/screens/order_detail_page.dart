@@ -58,6 +58,7 @@ class OrderDetailPage extends StatelessWidget {
               const SizedBox(height: 8),
               const Divider(),
               if ((o.description ?? '').isNotEmpty) InfoRow(icon: Icons.notes_outlined, label: 'شرح الطلب', value: o.description!),
+              if (o.attachments.isNotEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: AttachmentStrip(items: o.attachments)),
               if (o.region != null) InfoRow(icon: Icons.location_city_outlined, label: 'المدينة', value: o.region!),
               if ((o.address ?? '').isNotEmpty) InfoRow(icon: Icons.place_outlined, label: 'العنوان', value: o.address!),
               InfoRow(icon: Icons.schedule_outlined, label: 'موعد التنفيذ', value: o.scheduledAt == null ? 'في أقرب وقت' : fmtDateTime(o.scheduledAt)),

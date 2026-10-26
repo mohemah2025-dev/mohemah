@@ -2,7 +2,8 @@ import {
   all, fail, first, json, now, num, oneOf, readJson, REGIONS, run, stmt, str, strArray, uid, inList,
   type Ctx, type Router,
 } from "../lib/core";
-import { requireProvider, requireUser } from "../lib/auth";
+import { requireProvider, requireUser, signFileUrl } from "../lib/auth";
+import { putFile } from "../lib/storage";
 import { notifyExternal } from "../lib/messaging";
 import { activePromotions, applyBest, describePromo } from "../lib/promotions";
 import {
@@ -51,6 +52,25 @@ async function approvedServices(c: Ctx, providerId: string): Promise<string[]> {
     try { return (JSON.parse(row.approved_services) as unknown[]).filter((x): x is string => typeof x === "string"); } catch { /* fall through */ }
   }
   return (await all<{ service_id: string }>(c.env.DB, "SELECT service_id FROM provider_services WHERE provider_id = ?", providerId)).map((x) => x.service_id);
+}
+
+const ATTACH_TYPES: Record<string, { kind: "image" | "audio"; ext: string }> = {
+  "image/jpeg": { kind: "image", ext: "jpg" }, "image/png": { kind: "image", ext: "png" }, "image/webp": { kind: "image", ext: "webp" },
+  "audio/wav": { kind: "audio", ext: "wav" }, "audio/x-wav": { kind: "audio", ext: "wav" }, "audio/mpeg": { kind: "audio", ext: "mp3" },
+  "audio/mp4": { kind: "audio", ext: "m4a" }, "audio/aac": { kind: "audio", ext: "aac" }, "audio/webm": { kind: "audio", ext: "webm" },
+};
+
+/** Signed links to the photos / voice notes of these orders (valid for an hour). */
+async function attachmentsFor(c: Ctx, orderIds: string[]) {
+  const out: Record<string, { id: string; kind: string; url: string; content_type: string }[]> = {};
+  if (!orderIds.length) return out;
+  for (let i = 0; i < orderIds.length; i += 90) {
+    const chunk = orderIds.slice(i, i + 90);
+    const rows = await all<{ id: string; order_id: string; kind: string; r2_key: string; content_type: string }>(c.env.DB,
+      `SELECT id, order_id, kind, r2_key, content_type FROM order_attachments WHERE order_id IN ${inList(chunk.length)} ORDER BY created_at`, ...chunk);
+    for (const a of rows) (out[a.order_id] ||= []).push({ id: a.id, kind: a.kind, content_type: a.content_type, url: await signFileUrl(c.env, a.r2_key, 3600) });
+  }
+  return out;
 }
 
 export function registerOrderRoutes(r: Router) {
@@ -111,6 +131,7 @@ export function registerOrderRoutes(r: Router) {
               (SELECT COUNT(*) FROM messages m WHERE m.order_id = o.id AND m.recipient_id = ?1 AND m.read_at IS NULL) AS unread
          FROM orders o LEFT JOIN users p ON p.id = o.provider_id
         WHERE o.customer_id = ?1 ORDER BY o.created_at DESC LIMIT 100`, u.id);
+    const files = await attachmentsFor(c, rows.map((o) => o.id));
     return json(rows.map((o) => {
       const showContact = ACTIVE.includes(o.status);
       return {
@@ -118,10 +139,38 @@ export function registerOrderRoutes(r: Router) {
         sub_service_name: o.sub_service_name, mode: o.mode, description: o.description, address: o.address, region: o.region,
         scheduled_at: o.scheduled_at, status: o.status, rating: o.rating, review: o.review, cancelled_by: o.cancelled_by, cancel_reason: o.cancel_reason,
         created_at: o.created_at, accepted_at: o.accepted_at, arrived_at: o.arrived_at, started_at: o.started_at, completed_at: o.completed_at, cancelled_at: o.cancelled_at,
-        unread: o.unread,
+        unread: o.unread, attachments: files[o.id] ?? [],
         provider: o.provider_id ? { id: o.provider_id, name: o.p_name, rating: o.p_rating, rating_count: o.p_rating_count, nationality: o.p_nationality, avatar_url: o.p_avatar, phone: showContact ? o.p_phone : null } : null,
       };
     }));
+  });
+
+  /** Photos (up to 4) and one voice note for an order (multipart field "files", repeated). */
+  r.post("/api/orders/:id/attachments", async (c) => {
+    const u = await requireUser(c, { app: "customer" });
+    const o = await getOrder(c, c.params.id);
+    if (o.customer_id !== u.id) fail(403, "forbidden", "هذا الطلب ليس لك");
+    if (!["pending", "accepted"].includes(o.status)) fail(409, "closed", "لا يمكن إضافة مرفقات لهذا الطلب الآن");
+    const form = await c.req.formData();
+    const files = (form.getAll("files") as unknown[]).filter((f): f is File => typeof f === "object" && f !== null && "arrayBuffer" in (f as object) && (f as File).size > 0);
+    if (!files.length) fail(400, "no_files", "اختر صورة أو سجّل رسالة صوتية");
+    const have = await all<{ kind: string }>(c.env.DB, "SELECT kind FROM order_attachments WHERE order_id = ?", o.id);
+    let images = have.filter((x) => x.kind === "image").length;
+    let audios = have.filter((x) => x.kind === "audio").length;
+    const added: string[] = [];
+    for (const f of files) {
+      const t = ATTACH_TYPES[f.type];
+      if (!t) fail(400, "invalid_file", "المرفقات: صور JPG/PNG/WEBP أو تسجيل صوتي");
+      if (f.size > 6 * 1024 * 1024) fail(400, "too_large", "حجم المرفق الأقصى 6MB");
+      if (t!.kind === "image" && ++images > 4) fail(400, "too_many", "الحد الأقصى 4 صور للطلب");
+      if (t!.kind === "audio" && ++audios > 1) fail(400, "too_many", "رسالة صوتية واحدة للطلب");
+      const id = uid();
+      const key = `orders/${o.id}/${id}.${t!.ext}`;
+      await putFile(c.env, key, f);
+      await run(c.env.DB, "INSERT INTO order_attachments (id, order_id, kind, r2_key, content_type, size) VALUES (?,?,?,?,?,?)", id, o.id, t!.kind, key, f.type, f.size);
+      added.push(id);
+    }
+    return json({ ok: true, added: added.length }, 201);
   });
 
   r.post("/api/orders/:id/cancel", async (c) => {
@@ -224,6 +273,7 @@ export function registerOrderRoutes(r: Router) {
           WHERE o.provider_id = ?1 AND o.status IN ('accepted','arrived','in_progress') ORDER BY o.accepted_at DESC`, u.id),
       first<{ n: number }>(c.env.DB, "SELECT COUNT(*) AS n FROM provider_services WHERE provider_id = ?", u.id),
     ]);
+    const files = await attachmentsFor(c, [...available.map((o) => o.id), ...active.map((o) => o.id)]);
     const promos = await activePromotions(c.env);
     const svcNames = promos.some((x) => x.service_id)
       ? Object.fromEntries((await all<{ id: string; name: string }>(c.env.DB, "SELECT id, name FROM services")).map((x) => [x.id, x.name]))
@@ -239,14 +289,14 @@ export function registerOrderRoutes(r: Router) {
       available: available.map((o) => ({
         id: o.id, order_no: orderNo(o.order_no), service_name: o.service_name, sub_service_name: o.sub_service_name, mode: o.mode,
         description: o.description, region: o.region, scheduled_at: o.scheduled_at, coin_cost: applyBest(promos, "orders", o.coin_cost, o.service_id, true).price,
-        original_coin_cost: o.coin_cost, created_at: o.created_at,
+        original_coin_cost: o.coin_cost, created_at: o.created_at, attachments: files[o.id] ?? [],
         customer: { name: firstName(o.customer_name), rating: o.c_rating, rating_count: o.c_rating_count },
       })),
       active: active.map((o) => ({
         id: o.id, order_no: orderNo(o.order_no), service_name: o.service_name, sub_service_name: o.sub_service_name, mode: o.mode,
         description: o.description, region: o.region, address: o.address, lat: o.lat, lng: o.lng, scheduled_at: o.scheduled_at,
         status: o.status, coin_cost: o.coin_cost, charged_coins: o.charged_coins, billing_mode: o.billing_mode, created_at: o.created_at,
-        accepted_at: o.accepted_at, arrived_at: o.arrived_at, started_at: o.started_at, unread: o.unread,
+        accepted_at: o.accepted_at, arrived_at: o.arrived_at, started_at: o.started_at, unread: o.unread, attachments: files[o.id] ?? [],
         customer: { id: o.customer_id, name: o.customer_name, phone: o.customer_phone, rating: o.c_rating },
       })),
     });

@@ -90,18 +90,15 @@ class _ProviderShellState extends State<ProviderShell> {
       valueListenable: ProviderShell.tab,
       builder: (context, index, _) => Scaffold(
         body: IndexedStack(index: index, children: const [ProviderHomeTab(), ProviderOrdersTab(), ActivityTab(), ProviderAccountTab()]),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: index,
-          onDestinationSelected: (i) => ProviderShell.tab.value = i,
-          destinations: [
-            const NavigationDestination(icon: Icon(Icons.radio_button_checked_outlined), selectedIcon: Icon(Icons.radio_button_checked_rounded), label: 'الرئيسية'),
-            NavigationDestination(
-              icon: Badge(isLabelVisible: available + active > 0, label: Text('${available + active}'), child: const Icon(Icons.assignment_outlined)),
-              selectedIcon: Badge(isLabelVisible: available + active > 0, label: Text('${available + active}'), child: const Icon(Icons.assignment_outlined)),
-              label: 'الطلبات',
-            ),
-            const NavigationDestination(icon: Icon(Icons.insights_outlined), selectedIcon: Icon(Icons.insights_outlined), label: 'نشاطي'),
-            const NavigationDestination(icon: Icon(Icons.person_outline_rounded), selectedIcon: Icon(Icons.person_outlined), label: 'حسابي'),
+        bottomNavigationBar: MohemahNavBar(
+          index: index,
+          gradient: Brand.providerGradient,
+          onTap: (i) => ProviderShell.tab.value = i,
+          items: [
+            const NavItem(icon: Icons.radio_button_checked_outlined, activeIcon: Icons.power_settings_new_rounded, label: 'الرئيسية'),
+            NavItem(icon: Icons.assignment_outlined, activeIcon: Icons.assignment_rounded, label: 'الطلبات', badge: available + active),
+            const NavItem(icon: Icons.insights_outlined, activeIcon: Icons.insights_rounded, label: 'نشاطي'),
+            const NavItem(icon: Icons.person_outline, activeIcon: Icons.person_rounded, label: 'حسابي'),
           ],
         ),
       ),
@@ -272,6 +269,7 @@ class _IncomingOrderDialogState extends State<IncomingOrderDialog> {
                         const SizedBox(height: 4),
                         Text(o.description!, style: const TextStyle(height: 1.7, fontSize: 14)),
                       ],
+                      if (o.attachments.isNotEmpty) ...[const SizedBox(height: 10), AttachmentStrip(items: o.attachments)],
                       const SizedBox(height: 6),
                       const Text('العنوان الكامل ورقم العميل يظهران بعد القبول.', style: TextStyle(fontSize: 11.5, color: Brand.mutedFg)),
                     ]),

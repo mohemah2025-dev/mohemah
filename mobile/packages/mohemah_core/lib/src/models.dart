@@ -160,6 +160,7 @@ class ChatMessage {
 class CustomerOrder {
   CustomerOrder(this.raw);
   final Map<String, dynamic> raw;
+  List<OrderAttachment> get attachments => jList(raw['attachments']).map(OrderAttachment.new).toList();
   String get id => jS(raw['id']);
   int get orderNo => jInt(raw['order_no']);
   String get serviceName => jS(raw['service_name']);
@@ -198,6 +199,7 @@ class CustomerOrder {
 class OfferedOrder {
   OfferedOrder(this.raw);
   final Map<String, dynamic> raw;
+  List<OrderAttachment> get attachments => jList(raw['attachments']).map(OrderAttachment.new).toList();
   String get id => jS(raw['id']);
   int get orderNo => jInt(raw['order_no']);
   String get serviceName => jS(raw['service_name']);
@@ -218,6 +220,7 @@ class OfferedOrder {
 class ActiveJob {
   ActiveJob(this.raw);
   final Map<String, dynamic> raw;
+  List<OrderAttachment> get attachments => jList(raw['attachments']).map(OrderAttachment.new).toList();
   String get id => jS(raw['id']);
   int get orderNo => jInt(raw['order_no']);
   String get serviceName => jS(raw['service_name']);
@@ -353,4 +356,14 @@ class ProviderStats {
   /// Orders created per hour of day (0–23) for the provider's services in the last 30 days.
   Map<int, int> get demandByHour => {for (final r in jList(raw['demand_by_hour'])) jInt(r['hour']): jInt(r['count'])};
   List<Map<String, dynamic>> get recent => jList(raw['recent']);
+}
+
+/// A photo or voice note attached to an order (signed link, valid for an hour).
+class OrderAttachment {
+  OrderAttachment(this.raw);
+  final Map<String, dynamic> raw;
+  String get id => jS(raw['id']);
+  String get kind => jS(raw['kind'], 'image');
+  String get url => jS(raw['url']);
+  bool get isAudio => kind == 'audio';
 }

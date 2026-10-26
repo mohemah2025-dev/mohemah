@@ -58,7 +58,10 @@ class ServiceToggleTile extends StatelessWidget {
 
 /// «خدماتي المعتمدة»: approved services (on/off), add-service requests and a form to request a new service.
 class MyServicesPage extends StatefulWidget {
-  const MyServicesPage({super.key});
+  const MyServicesPage({super.key, this.openRequest = false});
+
+  /// Opens the "request a service" form right away.
+  final bool openRequest;
   @override
   State<MyServicesPage> createState() => _MyServicesPageState();
 }
@@ -76,8 +79,10 @@ class _MyServicesPageState extends State<MyServicesPage> {
 
   Future<void> _load() async {
     try {
+      final first = _data == null;
       final d = jMap(await ProviderScope.read(context).api.get('/api/provider/my-services'));
       if (mounted) setState(() => _data = d);
+      if (first && widget.openRequest && mounted) await _request();
     } catch (e) {
       if (mounted) setState(() => _error = errMsg(e));
     }
@@ -124,6 +129,30 @@ class _MyServicesPageState extends State<MyServicesPage> {
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 100), children: [
+                // Request new services: choose them, attach the proof, the administration reviews.
+                Material(
+                  borderRadius: BorderRadius.circular(18),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    onTap: _request,
+                    child: Ink(
+                      decoration: const BoxDecoration(gradient: Brand.providerGradient),
+                      padding: const EdgeInsets.all(16),
+                      child: const Row(children: [
+                        Icon(Icons.add_business_outlined, color: Colors.white, size: 30),
+                        SizedBox(width: 12),
+                        Expanded(
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text('طلب خدمات جديدة', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16)),
+                            Text('اختر الخدمة وأرفق الشهادة أو الإثبات لتراجعها الإدارة', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                          ]),
+                        ),
+                        Icon(Icons.chevron_left, color: Colors.white),
+                      ]),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
                 Text('اضغط على الخدمة لتفعيلها أو إيقافها${_saving ? ' — جارٍ الحفظ…' : ''}', style: const TextStyle(fontSize: 12, color: Brand.mutedFg)),
                 const SizedBox(height: 10),
                 if (approved.isEmpty)

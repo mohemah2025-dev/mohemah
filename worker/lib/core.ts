@@ -16,6 +16,8 @@ export interface Env {
   SMS_API_KEY?: string;
   /** E-mail provider key (Resend / SendGrid). */
   EMAIL_API_KEY?: string;
+  /** WhatsApp Cloud API permanent access token (Meta). */
+  WHATSAPP_TOKEN?: string;
 }
 
 export type App = "customer" | "provider" | "admin";

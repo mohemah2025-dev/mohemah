@@ -295,14 +295,14 @@ class _LoginFormState extends State<LoginForm> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Field(
             controller: _id,
-            label: 'البريد الإلكتروني',
-            hint: 'name@example.com',
-            icon: Icons.alternate_email_outlined,
+            label: 'البريد أو اسم المستخدم أو رقم الجوال',
+            hint: 'name@example.com / 05XXXXXXXX',
+            icon: Icons.person_outline,
             keyboard: TextInputType.emailAddress,
             ltr: true,
             textInputAction: TextInputAction.next,
-            autofill: const [AutofillHints.email, AutofillHints.username],
-            validator: (v) => requiredField(v, 'البريد الإلكتروني'),
+            autofill: const [AutofillHints.email, AutofillHints.username, AutofillHints.telephoneNumber],
+            validator: (v) => requiredField(v, 'البريد أو اسم المستخدم أو رقم الجوال'),
           ),
           Field(
             controller: _pw,

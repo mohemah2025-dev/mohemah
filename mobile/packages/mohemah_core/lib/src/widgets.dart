@@ -4,7 +4,9 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'api.dart';
 import 'app_root.dart';
+import 'config.dart';
 import 'format.dart';
+import 'models.dart';
 import 'theme.dart';
 
 void showSnack(BuildContext context, String message, {bool error = false}) {
@@ -404,7 +406,7 @@ class Avatar extends StatelessWidget {
     return CircleAvatar(
       radius: radius,
       backgroundColor: onLight ? color.withValues(alpha: 0.12) : color,
-      foregroundImage: (u != null && u.isNotEmpty) ? NetworkImage(u) : null,
+      foregroundImage: (u != null && u.isNotEmpty) ? NetworkImage(absUrl(u)) : null,
       child: letter,
     );
   }
@@ -513,6 +515,113 @@ class PageHeader extends StatelessWidget {
           ),
         ),
       ]),
+    );
+  }
+}
+
+/// Notification icon set shared with the admin panel (same keys), plus uploaded images and legacy emoji.
+const Map<String, IconData> notifIconMap = {
+  'bell': Icons.notifications_outlined,
+  'megaphone': Icons.campaign_outlined,
+  'gift': Icons.card_giftcard_outlined,
+  'percent': Icons.percent_outlined,
+  'tag': Icons.sell_outlined,
+  'moon': Icons.nightlight_outlined,
+  'mosque': Icons.mosque_outlined,
+  'star': Icons.star_outline_rounded,
+  'sparkles': Icons.auto_awesome_outlined,
+  'party': Icons.celebration_outlined,
+  'flag': Icons.flag_outlined,
+  'palm': Icons.park_outlined,
+  'calendar': Icons.event_available_outlined,
+  'heart': Icons.favorite_outline,
+  'trophy': Icons.emoji_events_outlined,
+  'check': Icons.check_circle_outline,
+  'sun': Icons.wb_sunny_outlined,
+  'coffee': Icons.local_cafe_outlined,
+  'alert': Icons.warning_amber_outlined,
+  'wrench': Icons.build_outlined,
+  // keys used by order notifications created by the server
+  'CheckCircle2': Icons.check_circle_outline,
+  'XCircle': Icons.cancel_outlined,
+  'DoorOpen': Icons.door_front_door_outlined,
+  'Wrench': Icons.build_outlined,
+  'CircleCheck': Icons.task_alt_outlined,
+  'RefreshCw': Icons.autorenew_outlined,
+  'AlertTriangle': Icons.warning_amber_outlined,
+};
+
+Color _hex(String? v, Color fallback) {
+  final h = (v ?? '').replaceAll('#', '');
+  if (h.length != 6) return fallback;
+  final n = int.tryParse(h, radix: 16);
+  return n == null ? fallback : Color(0xFF000000 | n);
+}
+
+/// Round tinted badge for a notification (icon key, uploaded image or emoji) in its accent colour.
+class NotifBadge extends StatelessWidget {
+  const NotifBadge({super.key, this.icon, this.accent, this.size = 42});
+  final String? icon;
+  final String? accent;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _hex(accent, Brand.primary);
+    final v = (icon ?? '').trim();
+    Widget child;
+    if (v.startsWith('http') || v.startsWith('/api/files')) {
+      child = ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.network(absUrl(v), width: size * 0.62, height: size * 0.62, fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) => Icon(Icons.notifications_outlined, color: color, size: size * 0.5)));
+    } else if (notifIconMap.containsKey(v)) {
+      child = Icon(notifIconMap[v], color: color, size: size * 0.52);
+    } else if (v.isNotEmpty && v.runes.length <= 4) {
+      child = Text(v, style: TextStyle(fontSize: size * 0.45));
+    } else {
+      child = Icon(Icons.notifications_outlined, color: color, size: size * 0.52);
+    }
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(size * 0.32)),
+      alignment: Alignment.center,
+      child: child,
+    );
+  }
+}
+
+/// Pink banner announcing active occasion discounts.
+class PromoBanner extends StatelessWidget {
+  const PromoBanner({super.key, required this.promos, this.onTap});
+  final List<Promo> promos;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    if (promos.isEmpty) return const SizedBox.shrink();
+    final p = promos.first;
+    final end = p.endsAt?.toLocal();
+    return Material(
+      borderRadius: BorderRadius.circular(18),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Ink(
+          decoration: const BoxDecoration(gradient: LinearGradient(colors: [Color(0xFFEC4899), Color(0xFFF97316)])),
+          padding: const EdgeInsets.all(14),
+          child: Row(children: [
+            const Icon(Icons.percent_outlined, color: Colors.white, size: 28),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(p.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15)),
+                Text(p.text, style: const TextStyle(color: Colors.white, fontSize: 12.5)),
+                if (end != null) Text('حتى ${end.year}/${end.month}/${end.day}${promos.length > 1 ? ' • +${promos.length - 1} عرض آخر' : ''}', style: const TextStyle(color: Colors.white70, fontSize: 11)),
+              ]),
+            ),
+          ]),
+        ),
+      ),
     );
   }
 }

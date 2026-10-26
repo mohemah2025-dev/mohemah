@@ -30,7 +30,21 @@ class ProviderStore extends ChangeNotifier {
   /// New orders waiting for a decision (shown one at a time as a pop-up).
   final List<OfferedOrder> incoming = [];
   final Map<String, DateTime> incomingAt = {};
+
+  /// Incoming orders the provider minimised: shown as a blinking bar on the home page instead of the pop-up.
+  final Set<String> minimized = {};
   void Function(OfferedOrder order)? onIncoming;
+
+  void minimize(String id) {
+    minimized.add(id);
+    notifyListeners();
+  }
+
+  /// Opens a minimised order's card again.
+  void restore(String id) {
+    minimized.remove(id);
+    notifyListeners();
+  }
 
   Api get api => session.api;
 
@@ -44,6 +58,7 @@ class ProviderStore extends ChangeNotifier {
     history = null;
     _seen.clear();
     incoming.clear();
+    minimized.clear();
     _primed = false;
     if (key != null) {
       refresh();
@@ -71,6 +86,7 @@ class ProviderStore extends ChangeNotifier {
       _seen.addAll(ids);
       _primed = true;
       incoming.removeWhere((o) => !ids.contains(o.id) || now.difference(incomingAt[o.id] ?? now) > incomingTtl);
+      minimized.removeWhere((id) => !incoming.any((o) => o.id == id));
       feed = f;
       error = null;
     } catch (e) {
@@ -107,6 +123,7 @@ class ProviderStore extends ChangeNotifier {
 
   void dismissIncoming(String id) {
     incoming.removeWhere((o) => o.id == id);
+    minimized.remove(id);
     notifyListeners();
   }
 
@@ -141,7 +158,7 @@ class ProviderStore extends ChangeNotifier {
   }
 
   Future<void> release(String id, String? reason) async {
-    await api.post('/api/orders/$id/release', {if (reason != null && reason.isNotEmpty) 'reason': reason});
+    await api.post('/api/orders/$id/release', {'reason': reason?.trim() ?? ''});
     await refresh();
   }
 

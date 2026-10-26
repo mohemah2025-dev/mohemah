@@ -208,6 +208,7 @@ class _BillingPageState extends State<BillingPage> {
                         child: Text('الاشتراك الفعّال يغطي قبول الطلبات دائماً.', style: TextStyle(fontSize: 11.5, color: Brand.mutedFg)),
                       ),
                     ],
+                    if (b.promotions.isNotEmpty) ...[const SizedBox(height: 12), PromoBanner(promos: b.promotions)],
                     if (b.coinsEnabled) ...[
                       const SectionTitle('شحن الكوينز'),
                       GridView.count(
@@ -233,7 +234,7 @@ class _BillingPageState extends State<BillingPage> {
                     ],
                     if (b.subscriptionEnabled) ...[
                       const SectionTitle('باقات الاشتراك'),
-                      for (final e in b.plans.entries.where((e) => e.value > 0))
+                      for (final e in b.plans.entries.where((e) => (b.plansOriginal[e.key] ?? 0) > 0))
                         Padding(
                           padding: const EdgeInsets.only(bottom: 10),
                           child: AppCard(
@@ -252,13 +253,18 @@ class _BillingPageState extends State<BillingPage> {
                                     Text('وفّر ${((1 - e.value / (b.plans[1]! * e.key)) * 100).round()}%', style: const TextStyle(fontSize: 11.5, color: Brand.success, fontWeight: FontWeight.w700)),
                                 ]),
                               ),
-                              Text('${fmtNum(e.value)} ر.س', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: Brand.primaryDeep)),
+                              Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                                if ((b.plansOriginal[e.key] ?? 0) > e.value)
+                                  Text('${fmtNum(b.plansOriginal[e.key]!)} ر.س', style: const TextStyle(fontSize: 11.5, color: Brand.mutedFg, decoration: TextDecoration.lineThrough)),
+                                Text(e.value == 0 ? 'مجاناً' : '${fmtNum(e.value)} ر.س', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: Brand.primaryDeep)),
+                              ]),
                             ]),
                           ),
                         ),
                     ],
                     if (!b.coinsEnabled && !b.subscriptionEnabled)
                       const EmptyState(icon: Icons.money_off_outlined, title: 'قبول الطلبات مجاني حالياً'),
+                    const PolicyLink(audience: 'providers', placement: 'billing', prefix: 'بالشحن أو الاشتراك أنت توافق على '),
                   ]),
                 ),
     );

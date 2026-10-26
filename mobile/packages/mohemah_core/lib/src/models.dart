@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 // Typed views over the Worker's JSON. Parsing is lenient: D1 returns numbers
 // for booleans (0/1) and may return null for optional columns.
 
@@ -101,6 +103,18 @@ class Policy {
   String get audience => jS(raw['audience'], 'all');
   String? get type => jStr(raw['policy_type']);
   DateTime? get updatedAt => jDate(raw['updated_at']);
+
+  /// registration | account | order | billing | application (set by the administration).
+  List<String> get placements {
+    final v = raw['placements'];
+    if (v is List) return v.map((e) => '$e').toList();
+    if (v is String && v.isNotEmpty) {
+      try {
+        return (jsonDecode(v) as List).map((e) => '$e').toList();
+      } catch (_) {}
+    }
+    return const ['registration', 'account'];
+  }
 }
 
 class Address {
@@ -122,6 +136,8 @@ class AppNotification {
   String get title => jS(raw['title']);
   String get body => jS(raw['body']);
   String? get icon => jStr(raw['icon']);
+  String? get accent => jStr(raw['accent_color']);
+  String? get category => jStr(raw['category']);
   String? get link => jStr(raw['link']);
   DateTime? get at => jDate(raw['at']);
   bool get read => jBool(raw['read']);
@@ -235,6 +251,7 @@ class ProviderFeed {
   DateTime? get subscriptionEnd => jDate(raw['subscription_end']);
   List<OfferedOrder> get available => jList(raw['available']).map(OfferedOrder.new).toList();
   List<ActiveJob> get active => jList(raw['active']).map(ActiveJob.new).toList();
+  List<Promo> get promotions => jList(raw['promotions']).map(Promo.new).toList();
 }
 
 class HistoryOrder {
@@ -282,6 +299,25 @@ class Billing {
         6: jDouble(raw['sub_price_6m']),
         12: jDouble(raw['sub_price_12m']),
       };
+
+  /// Prices before an occasion discount (to show them crossed out).
+  Map<int, double> get plansOriginal {
+    final m = raw['sub_price_original'];
+    if (m is! Map) return plans;
+    return {for (final k in const [1, 3, 6, 12]) k: jDouble(m['$k'])};
+  }
+
+  List<Promo> get promotions => jList(raw['promotions']).map(Promo.new).toList();
+}
+
+/// An active occasion discount (text prepared by the server).
+class Promo {
+  Promo(this.raw);
+  final Map<String, dynamic> raw;
+  String get id => jS(raw['id']);
+  String get title => jS(raw['title']);
+  String get text => jS(raw['text']);
+  DateTime? get endsAt => jDate(raw['ends_at']);
 }
 
 class CoinTx {

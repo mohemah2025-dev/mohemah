@@ -5,6 +5,7 @@ import 'package:mohemah_core/mohemah_core.dart';
 import '../orders_store.dart';
 import 'account_tab.dart';
 import 'home_tab.dart';
+import 'order_detail_page.dart';
 import 'orders_tab.dart';
 import 'services_tab.dart';
 
@@ -31,10 +32,13 @@ class _CustomerShellState extends State<CustomerShell> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       OrdersScope.read(context).onStatusChange = (o) {
-        // With push enabled the notification itself announces the change.
-        if (Push.configured) return;
         HapticFeedback.mediumImpact();
         SystemSound.play(SystemSoundType.alert);
+        // Acceptance is the moment the customer waits for: announce it clearly on screen.
+        if (o.status == 'accepted') {
+          _showAccepted(o);
+          return;
+        }
         final msg = switch (o.status) {
           'accepted' => 'تم قبول طلبك «${o.title}»',
           'arrived' => 'وصل مقدم الخدمة لطلب «${o.title}»',
@@ -46,6 +50,66 @@ class _CustomerShellState extends State<CustomerShell> {
         rootMessenger.currentState?.showSnackBar(SnackBar(content: Text(msg)));
       };
     });
+  }
+
+  void _showAccepted(CustomerOrder o) {
+    final nav = rootNavigator.currentContext;
+    if (nav == null) return;
+    showDialog<void>(
+      context: nav,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.all(24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+        clipBehavior: Clip.antiAlias,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(20, 26, 20, 22),
+            decoration: const BoxDecoration(gradient: Brand.gradient),
+            child: Column(children: [
+              Container(
+                width: 76,
+                height: 76,
+                decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                child: const Icon(Icons.check_rounded, color: Brand.success, size: 48),
+              ),
+              const SizedBox(height: 12),
+              const Text('تم قبول طلبك', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800)),
+            ]),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+            child: Column(children: [
+              Text('«${o.title}»', textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 6),
+              Text(
+                o.providerName != null ? 'قبل ${o.providerName} طلبك، ويمكنك متابعته ومراسلته من صفحة الطلب.' : 'قبل مقدم الخدمة طلبك، ويمكنك متابعته ومراسلته من صفحة الطلب.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Brand.mutedFg, height: 1.6),
+              ),
+            ]),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Row(children: [
+              Expanded(child: TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('لاحقاً'))),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 2,
+                child: FilledButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    CustomerShell.goTo(2);
+                    rootNavigator.currentState?.push(MaterialPageRoute(builder: (_) => OrderDetailPage(orderId: o.id)));
+                  },
+                  child: const Text('عرض الطلب'),
+                ),
+              ),
+            ]),
+          ),
+        ]),
+      ),
+    );
   }
 
   @override

@@ -64,6 +64,11 @@ class _MohemahAppState extends State<MohemahApp> with WidgetsBindingObserver {
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     Push.onOpen = (d) => widget.onPushOpen?.call(d);
     Push.onForeground = (title, body, d) {
+      // The phone does not play the notification sound while the app is open: play it here (unless silent).
+      if ('${d['sound'] ?? '1'}' != '0') {
+        SystemSound.play(SystemSoundType.alert);
+        HapticFeedback.mediumImpact();
+      }
       final handled = widget.onPushMessage?.call(d) ?? false;
       if (!handled && title.isNotEmpty) {
         rootMessenger.currentState?.showSnackBar(SnackBar(content: Text(body.isEmpty ? title : '$title\n$body')));

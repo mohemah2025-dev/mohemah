@@ -89,6 +89,7 @@ class _ApplicationPageState extends State<ApplicationPage> {
           await _loadDocs();
         },
         child: ListView(padding: const EdgeInsets.fromLTRB(18, 6, 18, 30), children: [
+          const PolicyLink(audience: 'providers', placement: 'application', prefix: 'اطّلع على '),
           Row(children: [
             Avatar(name: p.fullName, url: p.avatarUrl, radius: 26, color: Brand.primaryDeep),
             const SizedBox(width: 12),

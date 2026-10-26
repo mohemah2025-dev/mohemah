@@ -8,6 +8,7 @@ export type Settings = {
   vat_percent: number; test_payments_enabled: number; coin_price: number;
   sms_enabled: number; sms_provider: string | null; sms_sender: string | null; sms_username: string | null;
   email_enabled: number; email_provider: string | null; email_from: string | null; email_from_name: string | null;
+  whatsapp_enabled: number; whatsapp_phone_id: string | null; whatsapp_template: string | null; whatsapp_lang: string | null;
 };
 
 export async function getSettings(env: Env) {

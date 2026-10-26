@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { ReactNode, useEffect, useState } from "react";
 import { Link, Outlet, useRouterState, useNavigate } from "@tanstack/react-router";
-import { LayoutDashboard, Users, UserCog, Wrench, Wallet, Shield, Settings, Bell, Menu, X, MessageSquare, Search, Megaphone, FileText, LogOut, ShieldCheck, CreditCard, Mail, Lock } from "lucide-react";
+import { LayoutDashboard, Users, UserCog, Wrench, Wallet, Shield, Settings, Bell, Menu, X, MessageSquare, Search, Megaphone, FileText, LogOut, ShieldCheck, CreditCard, Mail, Lock, BarChart3, BadgePercent } from "lucide-react";
 import { AdminProvider, useAdmin } from "@/lib/adminStore";
 import { useAuth, type AdminSection, type MePayload } from "@/lib/AuthContext";
 import { api, errMsg, fileUrl } from "@/lib/api";
@@ -10,15 +10,17 @@ import { toast } from "sonner";
 
 const nav: { to: string; label: string; icon: typeof LayoutDashboard; section: AdminSection; exact?: boolean }[] = [
   { to: "/admin", label: "الرئيسية", icon: LayoutDashboard, section: "dashboard", exact: true },
+  { to: "/admin/analytics", label: "تحليل الطلبات", icon: BarChart3, section: "analytics" },
   { to: "/admin/customers", label: "طالبو الخدمات", icon: Users, section: "customers" },
   { to: "/admin/providers", label: "مقدمو الخدمات", icon: UserCog, section: "providers" },
   { to: "/admin/services", label: "الخدمات", icon: Wrench, section: "services" },
   { to: "/admin/finance", label: "المالية", icon: Wallet, section: "finance" },
   { to: "/admin/billing", label: "الاشتراكات والتحصيل", icon: ShieldCheck, section: "billing" },
+  { to: "/admin/promotions", label: "العروض والخصومات", icon: BadgePercent, section: "billing" },
   { to: "/admin/gateways", label: "بوابات الدفع", icon: CreditCard, section: "gateways" },
   { to: "/admin/notifications", label: "الإشعارات", icon: Bell, section: "notifications" },
   { to: "/admin/messages", label: "الرسائل", icon: MessageSquare, section: "messages" },
-  { to: "/admin/integrations", label: "الرسائل النصية والبريد", icon: Mail, section: "integrations" },
+  { to: "/admin/integrations", label: "الرسائل والبريد وواتساب", icon: Mail, section: "integrations" },
   { to: "/admin/ads", label: "المساحات الإعلانية", icon: Megaphone, section: "ads" },
   { to: "/admin/policies", label: "السياسات والشروط", icon: FileText, section: "policies" },
   { to: "/admin/staff", label: "المستخدمون والصلاحيات", icon: Shield, section: "staff" },

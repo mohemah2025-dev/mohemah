@@ -12,6 +12,8 @@ export type PushMessage = {
   body: string;
   /** Extra data for the app when the notification is opened (e.g. { type: "order", order_id }). */
   data?: Record<string, string>;
+  /** false = silent notification (no sound). */
+  sound?: boolean;
 };
 
 export type PushJob = { userIds: string[]; app?: "customer" | "provider"; message: PushMessage };
@@ -74,8 +76,8 @@ async function sendOne(env: Env, sa: ServiceAccount, bearer: string, token: stri
         token,
         notification: { title: m.title.slice(0, 200), body: m.body.slice(0, 500) },
         data: m.data ?? {},
-        android: { priority: "HIGH", notification: { sound: "default", default_vibrate_timings: true } },
-        apns: { headers: { "apns-priority": "10" }, payload: { aps: { sound: "default" } } },
+        android: { priority: "HIGH", notification: m.sound === false ? { default_vibrate_timings: true } : { sound: "default", default_vibrate_timings: true } },
+        apns: { headers: { "apns-priority": "10" }, payload: { aps: m.sound === false ? {} : { sound: "default" } } },
       },
     }),
   });

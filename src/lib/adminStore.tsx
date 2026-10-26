@@ -97,6 +97,8 @@ export interface AdminNotification {
   category: NotifCategory;
   icon?: string;
   accentColor?: string;
+  /** Play the notification sound on the phone. */
+  sound?: boolean;
   scheduledAt?: string;
   sentAt: string;
 }
@@ -123,7 +125,18 @@ export interface AdminPolicy {
   version: string;
   updatedAt: string;
   published: boolean;
+  /** Where it appears in the apps. */
+  placements: PolicyPlacement[];
 }
+
+export type PolicyPlacement = "registration" | "account" | "order" | "billing" | "application";
+export const POLICY_PLACEMENTS: { key: PolicyPlacement; label: string; who: "customers" | "providers" | "all" }[] = [
+  { key: "registration", label: "صفحة التسجيل (موافقة قبل إنشاء الحساب)", who: "all" },
+  { key: "account", label: "صفحة حسابي ← السياسات والشروط", who: "all" },
+  { key: "order", label: "صفحة إرسال الطلب (طالب الخدمة)", who: "customers" },
+  { key: "billing", label: "صفحة الرصيد والاشتراك (مقدم الخدمة)", who: "providers" },
+  { key: "application", label: "طلب الانضمام والمستندات (مقدم الخدمة)", who: "providers" },
+];
 
 export interface AdminSettings {
   appName: string;
@@ -170,34 +183,31 @@ function lastActiveLabel(iso: string | null | undefined): string {
 
 /* ============================ Notification presets ============================ */
 export const NOTIFICATION_PRESETS: { key: string; category: NotifCategory; icon: string; accentColor: string; title: string; body: string }[] = [
-  { key: "eid_fitr", category: "ديني", icon: "🌙", accentColor: "#10B981",
+  { key: "eid_fitr", category: "ديني", icon: "moon", accentColor: "#10B981",
     title: "كل عام وأنتم بخير بعيد الفطر المبارك",
     body: "تتقدم أسرة تطبيق مهمة بأطيب التهاني بمناسبة عيد الفطر السعيد، أعاده الله علينا وعليكم باليُمن والبركات." },
-  { key: "eid_adha", category: "ديني", icon: "🕋", accentColor: "#0EA5E9",
+  { key: "eid_adha", category: "ديني", icon: "mosque", accentColor: "#0EA5E9",
     title: "عيد أضحى مبارك",
     body: "نسأل الله أن يتقبل منكم صالح الأعمال، وكل عام وأنتم بخير بمناسبة عيد الأضحى المبارك." },
-  { key: "ramadan", category: "ديني", icon: "🌙", accentColor: "#7C3AED",
+  { key: "ramadan", category: "ديني", icon: "moon", accentColor: "#7C3AED",
     title: "رمضان كريم",
     body: "بلغكم الله شهر رمضان وأعانكم على صيامه وقيامه، تقبل الله منا ومنكم صالح الأعمال." },
-  { key: "hijri_new", category: "ديني", icon: "🕌", accentColor: "#F59E0B",
+  { key: "hijri_new", category: "ديني", icon: "star", accentColor: "#F59E0B",
     title: "بمناسبة العام الهجري الجديد",
     body: "نسأل الله أن يجعله عام خير وبركة على الأمة الإسلامية، كل عام وأنتم بخير." },
-  { key: "mawlid", category: "ديني", icon: "✨", accentColor: "#0D9488",
-    title: "بمناسبة المولد النبوي",
-    body: "اللهم صلِّ وسلم على نبينا محمد وعلى آله وصحبه أجمعين." },
-  { key: "arafah", category: "ديني", icon: "🤲", accentColor: "#16A34A",
+  { key: "arafah", category: "ديني", icon: "sun", accentColor: "#16A34A",
     title: "تذكير بيوم عرفة",
     body: "لا تنسوا فضل صيام يوم عرفة الذي يكفّر السنة الماضية والباقية." },
-  { key: "saudi_national", category: "وطني", icon: "🇸🇦", accentColor: "#006C35",
+  { key: "saudi_national", category: "وطني", icon: "flag", accentColor: "#006C35",
     title: "كل عام والمملكة بخير",
     body: "بمناسبة اليوم الوطني للمملكة العربية السعودية، نرفع أسمى آيات التهاني والتبريكات لمقام خادم الحرمين الشريفين وسمو ولي عهده الأمين، وللشعب السعودي الكريم. هي لنا دار 🇸🇦." },
-  { key: "founding_day", category: "وطني", icon: "🌴", accentColor: "#8B5E3C",
+  { key: "founding_day", category: "وطني", icon: "palm", accentColor: "#8B5E3C",
     title: "يوم التأسيس - يوم بدينا",
     body: "نحتفي بثلاثة قرون من المجد والتأسيس، كل عام وأنتم بخير في يوم التأسيس." },
-  { key: "promo", category: "ترويجي", icon: "🎁", accentColor: "#EC4899",
+  { key: "promo", category: "ترويجي", icon: "gift", accentColor: "#EC4899",
     title: "عرض حصري لفترة محدودة",
     body: "استمتع بخصومات مميزة على باقات الكوينز هذا الأسبوع." },
-  { key: "maintenance", category: "صيانة", icon: "🛠️", accentColor: "#64748B",
+  { key: "maintenance", category: "صيانة", icon: "wrench", accentColor: "#64748B",
     title: "صيانة مجدولة للتطبيق",
     body: "سيتم إيقاف الخدمة مؤقتاً لإجراء تحديثات تحسينية، نعتذر عن أي إزعاج." },
 ];
@@ -389,14 +399,15 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   const loadOrders = useCallback(async () => { setOrders(await adm<AdminOrder[]>("/api/admin/orders")); }, []);
 
   const loadNotifications = useCallback(async () => {
-    const data = await adm<{ id: string; title: string; body: string; audience: string; target_ids: string[]; category: string; icon: string | null; accent_color: string | null; scheduled_at: string | null; sent_at: string }[]>("/api/admin/notifications");
+    const data = await adm<{ id: string; title: string; body: string; audience: string; target_ids: string[]; category: string; icon: string | null; accent_color: string | null; scheduled_at: string | null; sent_at: string; sound?: number }[]>("/api/admin/notifications");
     setNotifications(data.map((n) => ({
       id: n.id, title: n.title, body: n.body,
       audience: n.audience as AdminNotification["audience"],
       targetIds: n.target_ids?.length ? n.target_ids : undefined,
       scope: n.audience === "all" ? "عامة" : "خاصة",
       category: dbCategoryToAr[n.category] ?? "عام",
-      icon: n.icon ?? "🔔",
+      icon: n.icon ?? "bell",
+      sound: n.sound !== 0,
       accentColor: n.accent_color ?? "#FF6B5C",
       scheduledAt: n.scheduled_at ?? undefined,
       sentAt: new Date(n.sent_at).toISOString().slice(0, 16).replace("T", " "),
@@ -414,11 +425,12 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loadPolicies = useCallback(async () => {
-    const data = await adm<{ id: string; title: string; body: string; audience: string; policy_type: string; version: string; updated_at: string; published: number }[]>("/api/admin/policies");
+    const data = await adm<{ id: string; title: string; body: string; audience: string; policy_type: string; version: string; updated_at: string; published: number; placements: string | null }[]>("/api/admin/policies");
     setPolicies(data.map((p) => ({
       id: p.id, title: p.title, body: p.body, audience: p.audience as AdminPolicy["audience"],
       type: (p.policy_type as AdminPolicy["type"]) || "سياسة عامة", version: p.version,
       updatedAt: new Date(p.updated_at).toISOString().slice(0, 10), published: !!p.published,
+      placements: (() => { try { return JSON.parse(p.placements ?? "[]") as PolicyPlacement[]; } catch { return ["registration", "account"] as PolicyPlacement[]; } })(),
     })));
   }, []);
 
@@ -541,7 +553,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
 
   const sendNotification = async (n: Omit<AdminNotification, "id" | "sentAt">) => {
     try {
-      await adm("/api/admin/notifications", { body: { title: n.title, body: n.body, audience: n.audience, category: arCategoryToDb[n.category], icon: n.icon, accent_color: n.accentColor, scheduled_at: n.scheduledAt || null, target_ids: n.targetIds ?? [] } });
+      await adm("/api/admin/notifications", { body: { title: n.title, body: n.body, audience: n.audience, category: arCategoryToDb[n.category], icon: n.icon, accent_color: n.accentColor, sound: n.sound ?? true, scheduled_at: n.scheduledAt || null, target_ids: n.targetIds ?? [] } });
       await loadNotifications();
     } catch (e) { report(e); }
   };
@@ -571,6 +583,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     if (p.type !== undefined) b.policy_type = dbPolicyTypeOk(p.type);
     if (p.version !== undefined) b.version = p.version;
     if (p.published !== undefined) b.published = p.published;
+    if (p.placements !== undefined) b.placements = p.placements;
     return b;
   };
   const addPolicy = async (p: Omit<AdminPolicy, "id" | "updatedAt">) => { try { await adm("/api/admin/policies", { body: policyBody(p) }); await loadPolicies(); } catch (e) { report(e); } };

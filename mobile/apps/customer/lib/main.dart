@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mohemah_core/mohemah_core.dart';
 
 import 'orders_store.dart';
+import 'screens/auth_page.dart';
 import 'screens/order_detail_page.dart';
 import 'screens/shell.dart';
 
@@ -13,7 +14,7 @@ void main() {
     subtitle: 'كل مهامك اليومية بضغطة واحدة',
     palette: SplashPalette.customer,
     scope: (context, child) => CustomerScope(child: child),
-    home: (_) => const CustomerShell(),
+    home: (_) => const CustomerGate(child: CustomerShell()),
     onPushMessage: (_) {
       OrdersStore.instance?.refresh(background: true);
       return false;

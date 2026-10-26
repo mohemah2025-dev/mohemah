@@ -5,6 +5,7 @@
  * edited from the admin page «الرسائل والبريد». API keys are Worker secrets only:
  *   SMS_API_KEY    Unifonic AppSid | Taqnyat bearer token | Msegat API key
  *   EMAIL_API_KEY  Resend API key | SendGrid API key
+ *   WHATSAPP_TOKEN Meta WhatsApp Cloud API access token
  */
 import { all, now, run, uid, type Ctx, type Env } from "./core";
 import { getSettings, type Settings } from "./domain";
@@ -23,7 +24,7 @@ export function intlPhone(phone: string) {
   return d;
 }
 
-async function log(env: Env, channel: "sms" | "email", recipient: string, subject: string | null, r: Result) {
+async function log(env: Env, channel: "sms" | "email" | "whatsapp", recipient: string, subject: string | null, r: Result) {
   try {
     await run(env.DB, "INSERT INTO message_log (id, channel, recipient, subject, status, error, created_at) VALUES (?,?,?,?,?,?,?)",
       uid(), channel, recipient, subject, r.ok ? "sent" : "failed", r.ok ? null : r.error.slice(0, 500), now());
@@ -131,23 +132,60 @@ export async function sendEmailWith(env: Env, s: Settings, to: string, subject: 
   }
 }
 
+/* ---------------- WhatsApp (Meta WhatsApp Cloud API) ---------------- */
+
+/**
+ * Business-initiated WhatsApp messages must use an approved template. The template is expected to have one body
+ * variable {{1}} that receives the message text. Without a template a plain text message is sent, which WhatsApp
+ * only delivers inside the 24-hour customer-service window.
+ */
+export async function sendWhatsAppWith(env: Env, s: Settings, to: string, body: string): Promise<Result> {
+  const token = env.WHATSAPP_TOKEN;
+  if (!token) return { ok: false, error: "WHATSAPP_TOKEN غير مضاف في أسرار Cloudflare" };
+  if (!s.whatsapp_phone_id) return { ok: false, error: "اكتب معرّف رقم الهاتف (Phone number ID) من لوحة Meta" };
+  const payload = s.whatsapp_template
+    ? { messaging_product: "whatsapp", to: intlPhone(to), type: "template",
+        template: { name: s.whatsapp_template, language: { code: s.whatsapp_lang || "ar" }, components: [{ type: "body", parameters: [{ type: "text", text: body.slice(0, 1000) }] }] } }
+    : { messaging_product: "whatsapp", to: intlPhone(to), type: "text", text: { body: body.slice(0, 4000) } };
+  try {
+    const res = await fetch(`https://graph.facebook.com/v21.0/${encodeURIComponent(s.whatsapp_phone_id)}/messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) return { ok: false, error: await readError(res) };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: String((e as Error)?.message ?? e) };
+  }
+}
+
+export async function testWhatsApp(env: Env, to: string) {
+  const s = await getSettings(env);
+  const r = await sendWhatsAppWith(env, s, to, `${s.app_name}: رسالة تجريبية من لوحة التحكم ✓`);
+  await log(env, "whatsapp", to, "رسالة تجريبية", r);
+  return r;
+}
+
 /* ---------------- Background helpers used by the routes ---------------- */
 
 /**
  * Sends an SMS and/or e-mail to users after the response (only for the channels switched on).
  * Missing phone/e-mail or a disabled channel is skipped silently.
  */
-export function notifyExternal(c: Ctx, userIds: string[], msg: { title: string; body: string; sms?: boolean; email?: boolean }) {
+export function notifyExternal(c: Ctx, userIds: string[], msg: { title: string; body: string; sms?: boolean; email?: boolean; whatsapp?: boolean }) {
   if (!userIds.length) return;
   c.tasks.push((async () => {
     const s = await getSettings(c.env);
     const wantSms = msg.sms !== false && !!s.sms_enabled;
     const wantEmail = msg.email !== false && !!s.email_enabled;
-    if (!wantSms && !wantEmail) return;
+    const wantWa = (msg.whatsapp ?? msg.sms) !== false && !!s.whatsapp_enabled;
+    if (!wantSms && !wantEmail && !wantWa) return;
     const marks = userIds.map(() => "?").join(",");
     const users = await all<{ phone: string | null; email: string | null }>(c.env.DB, `SELECT phone, email FROM users WHERE id IN (${marks})`, ...userIds);
     for (const u of users) {
       if (wantSms && u.phone) await log(c.env, "sms", u.phone, msg.title, await sendSmsWith(c.env, s, u.phone, `${s.app_name}: ${msg.body}`));
+      if (wantWa && u.phone) await log(c.env, "whatsapp", u.phone, msg.title, await sendWhatsAppWith(c.env, s, u.phone, `${msg.title}\n${msg.body}`));
       if (wantEmail && u.email) await log(c.env, "email", u.email, msg.title, await sendEmailWith(c.env, s, u.email, msg.title, emailLayout(s, msg.title, msg.body)));
     }
   })().catch((e) => console.error("notifyExternal", e)));

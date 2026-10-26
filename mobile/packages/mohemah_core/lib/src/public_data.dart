@@ -37,7 +37,8 @@ class PublicData extends ChangeNotifier {
     return null;
   }
 
-  List<Policy> policiesFor(String audience) => policies.where((p) => p.audience == 'all' || p.audience == audience).toList();
+  List<Policy> policiesFor(String audience, {String? placement}) =>
+      policies.where((p) => (p.audience == 'all' || p.audience == audience) && (placement == null || p.placements.contains(placement))).toList();
 
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();

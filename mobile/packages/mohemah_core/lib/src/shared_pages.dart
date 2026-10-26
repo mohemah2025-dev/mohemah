@@ -68,12 +68,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
                           return AppCard(
                             color: n.read ? Colors.white : const Color(0xFFF1F6FF),
                             child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(color: Brand.primary.withValues(alpha: 0.1), shape: BoxShape.circle),
-                                child: const Icon(Icons.notifications_outlined, color: Brand.primary, size: 21),
-                              ),
+                              NotifBadge(icon: n.icon, accent: n.accent),
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -341,16 +336,19 @@ class _Composer extends StatelessWidget {
 /* ======================= Policies ======================= */
 
 class PoliciesPage extends StatelessWidget {
-  const PoliciesPage({super.key, required this.audience});
+  const PoliciesPage({super.key, required this.audience, this.placement});
 
   /// customers | providers
   final String audience;
 
+  /// Only the policies the administration set to appear here (registration, account, order, billing, application).
+  final String? placement;
+
   @override
   Widget build(BuildContext context) {
-    final list = PublicScope.of(context).policiesFor(audience);
+    final list = PublicScope.of(context).policiesFor(audience, placement: placement);
     return Scaffold(
-      appBar: AppBar(title: const Text('السياسات والشروط')),
+      appBar: PageHeader.bar('السياسات والشروط'),
       body: list.isEmpty
           ? const EmptyState(icon: Icons.policy_outlined, title: 'لا توجد سياسات منشورة بعد')
           : ListView.separated(
@@ -376,7 +374,7 @@ class PolicyPage extends StatelessWidget {
   final Policy policy;
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: Text(policy.title)),
+        appBar: PageHeader.bar(policy.title),
         body: ListView(padding: const EdgeInsets.all(20), children: [
           if (policy.updatedAt != null) Text('آخر تحديث: ${fmtDate(policy.updatedAt)}', style: const TextStyle(color: Brand.mutedFg, fontSize: 12)),
           const SizedBox(height: 10),
@@ -581,6 +579,34 @@ class _RatingSheetState extends State<_RatingSheet> {
             child: const Text('إرسال التقييم'),
           ),
         ]),
+      ),
+    );
+  }
+}
+
+/// "By continuing you agree to …" link that opens the policies set for this place; hidden when there are none.
+class PolicyLink extends StatelessWidget {
+  const PolicyLink({super.key, required this.audience, required this.placement, this.prefix = 'بالمتابعة أنت توافق على '});
+  final String audience;
+  final String placement;
+  final String prefix;
+
+  @override
+  Widget build(BuildContext context) {
+    final list = PublicScope.of(context).policiesFor(audience, placement: placement);
+    if (list.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: InkWell(
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => list.length == 1 ? PolicyPage(policy: list.first) : PoliciesPage(audience: audience, placement: placement))),
+        child: Text.rich(
+          TextSpan(children: [
+            TextSpan(text: prefix),
+            TextSpan(text: list.length == 1 ? list.first.title : 'الشروط والسياسات', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w700)),
+          ]),
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 12.5, color: Brand.mutedFg),
+        ),
       ),
     );
   }

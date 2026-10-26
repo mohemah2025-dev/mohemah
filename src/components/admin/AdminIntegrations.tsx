@@ -9,9 +9,10 @@ const input = "border border-border rounded-lg px-3 py-2 text-sm bg-background w
 interface Cfg {
   sms_enabled: number | boolean; sms_provider: string | null; sms_sender: string | null; sms_username: string | null;
   email_enabled: number | boolean; email_provider: string | null; email_from: string | null; email_from_name: string | null;
+  whatsapp_enabled: number | boolean; whatsapp_phone_id: string | null; whatsapp_template: string | null; whatsapp_lang: string | null;
 }
-interface Status { sms: { secret: boolean }; email: { secret: boolean } }
-interface Log { id: string; channel: "sms" | "email"; recipient: string; subject: string | null; status: string; error: string | null; created_at: string }
+interface Status { sms: { secret: boolean }; email: { secret: boolean }; whatsapp?: { secret: boolean } }
+interface Log { id: string; channel: "sms" | "email" | "whatsapp"; recipient: string; subject: string | null; status: string; error: string | null; created_at: string }
 
 const SMS = [
   { v: "unifonic", label: "يونيفونك Unifonic", key: "AppSid" },
@@ -22,6 +23,39 @@ const EMAIL = [
   { v: "resend", label: "Resend" },
   { v: "sendgrid", label: "SendGrid" },
 ];
+
+/** Step-by-step: how to add a secret key in Cloudflare (keys are never typed into this page). */
+function KeyGuide() {
+  const [open, setOpen] = useState(false);
+  return (
+    <section className="bg-sky-50 border border-sky-200 rounded-2xl p-4 text-sky-950">
+      <button type="button" onClick={() => setOpen(!open)} className="w-full flex items-center justify-between text-sm font-bold">
+        <span>كيف أضيف مفتاح المزود؟ (خطوة بخطوة)</span><span>{open ? "−" : "+"}</span>
+      </button>
+      {open && (
+        <div className="mt-3 text-xs leading-7 space-y-3">
+          <ol className="list-decimal pr-5 space-y-1">
+            <li>من لوحة المزود (تقنيات / مسجات / يونيفونك / Resend / Meta) أنشئ مفتاح API وانسخه.</li>
+            <li>ادخل <b>dash.cloudflare.com</b> ← <b>Workers &amp; Pages</b> ← اختر تطبيقك <b>app</b>.</li>
+            <li>افتح <b>Settings</b> ← <b>Variables and Secrets</b> ← اضغط <b>Add</b>.</li>
+            <li>اختر النوع <b>Secret</b> (وليس Text)، واكتب الاسم بالضبط كما في الجدول، والصق المفتاح في القيمة، ثم <b>Deploy</b>.</li>
+            <li>ارجع لهذه الصفحة وحدّثها: ستظهر الحالة «المفتاح مضاف»، ثم فعّل القناة وجرّب الإرسال.</li>
+          </ol>
+          <table className="w-full bg-white rounded-lg overflow-hidden text-right">
+            <thead className="bg-sky-100"><tr><th className="p-2">القناة</th><th className="p-2">اسم السرّ</th><th className="p-2">القيمة</th></tr></thead>
+            <tbody>
+              <tr className="border-t"><td className="p-2">رسائل SMS</td><td className="p-2 font-mono" dir="ltr">SMS_API_KEY</td><td className="p-2">تقنيات: Bearer Token · مسجات: API Key · يونيفونك: AppSid</td></tr>
+              <tr className="border-t"><td className="p-2">البريد</td><td className="p-2 font-mono" dir="ltr">EMAIL_API_KEY</td><td className="p-2">Resend: مفتاح يبدأ بـ re_ · SendGrid: مفتاح يبدأ بـ SG.</td></tr>
+              <tr className="border-t"><td className="p-2">واتساب</td><td className="p-2 font-mono" dir="ltr">WHATSAPP_TOKEN</td><td className="p-2">رمز وصول دائم (System User Token) من Meta Business</td></tr>
+            </tbody>
+          </table>
+          <p>من سطر الأوامر بديلاً: <code dir="ltr" className="bg-white px-1 rounded">npx wrangler secret put SMS_API_KEY</code> ثم الصق المفتاح.</p>
+          <p className="text-sky-800">لماذا لا يُكتب المفتاح هنا؟ لأن الأسرار في Cloudflare مشفّرة ولا يراها أحد حتى من لوحة التحكم، فلا تتسرب لو اختُرق حساب مشرف.</p>
+        </div>
+      )}
+    </section>
+  );
+}
 
 function Pill({ ok, yes, no }: { ok: boolean; yes: string; no: string }) {
   return <span className={`text-[11px] px-2 py-0.5 rounded-full ${ok ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-800"}`}>{ok ? yes : no}</span>;
@@ -53,16 +87,17 @@ export function AdminIntegrationsPage() {
       setCfg(await adm<Cfg>("/api/admin/integrations", { method: "PUT", body: {
         sms_enabled: !!cfg.sms_enabled, sms_provider: cfg.sms_provider || null, sms_sender: cfg.sms_sender || null, sms_username: cfg.sms_username || null,
         email_enabled: !!cfg.email_enabled, email_provider: cfg.email_provider || null, email_from: cfg.email_from || null, email_from_name: cfg.email_from_name || null,
+        whatsapp_enabled: !!cfg.whatsapp_enabled, whatsapp_phone_id: cfg.whatsapp_phone_id || null, whatsapp_template: cfg.whatsapp_template || null, whatsapp_lang: cfg.whatsapp_lang || "ar",
       } }));
       toast.success("تم الحفظ");
     } catch (e) { toast.error(errMsg(e)); }
     setBusy("");
   };
-  const test = async (kind: "sms" | "email") => {
+  const test = async (kind: "sms" | "email" | "whatsapp") => {
     setBusy(kind);
     try {
-      await adm(`/api/admin/integrations/test-${kind}`, { body: { to: kind === "sms" ? testPhone : testMail } });
-      toast.success(kind === "sms" ? "تم إرسال الرسالة التجريبية" : "تم إرسال البريد التجريبي");
+      await adm(`/api/admin/integrations/test-${kind}`, { body: { to: kind === "email" ? testMail : testPhone } });
+      toast.success(kind === "email" ? "تم إرسال البريد التجريبي" : "تم إرسال الرسالة التجريبية");
     } catch (e) { toast.error(errMsg(e)); }
     setBusy(""); load();
   };
@@ -70,11 +105,13 @@ export function AdminIntegrationsPage() {
 
   return (
     <div className="space-y-6" dir="rtl">
-      <h1 className="text-xl font-bold">الرسائل النصية والبريد</h1>
+      <h1 className="text-xl font-bold">الرسائل النصية والبريد وواتساب</h1>
       <p className="text-xs text-muted-foreground leading-6">
         تُرسل تلقائياً عند: قبول أو رفض طلب تسجيل مقدم الخدمة (رسالة + بريد)، قبول طلب العميل (رسالة)، ونجاح الدفع الإلكتروني (بريد).
         مفاتيح المزودين لا تُحفظ هنا؛ تُضاف كأسرار في Cloudflare: <code dir="ltr">SMS_API_KEY</code> و<code dir="ltr">EMAIL_API_KEY</code>.
       </p>
+
+      <KeyGuide />
 
       {/* SMS */}
       <section className="bg-card border border-border rounded-2xl p-4 space-y-3">
@@ -142,6 +179,42 @@ export function AdminIntegrationsPage() {
         )}
       </section>
 
+      {/* WhatsApp */}
+      <section className="bg-card border border-border rounded-2xl p-4 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="font-bold text-sm">واتساب (WhatsApp Cloud API)</h2>
+          {status && <Pill ok={!!status.whatsapp?.secret} yes="المفتاح مضاف" no="WHATSAPP_TOKEN غير مضاف" />}
+        </div>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" disabled={!canEdit} checked={!!cfg.whatsapp_enabled} onChange={(e) => set({ whatsapp_enabled: e.target.checked })} />تفعيل الإرسال عبر واتساب</label>
+        <div className="grid md:grid-cols-3 gap-3">
+          <div>
+            <label className="text-xs font-bold block mb-1">معرّف رقم الهاتف (Phone number ID)</label>
+            <input className={input} disabled={!canEdit} dir="ltr" placeholder="1234567890123" value={cfg.whatsapp_phone_id ?? ""} onChange={(e) => set({ whatsapp_phone_id: e.target.value })} />
+          </div>
+          <div>
+            <label className="text-xs font-bold block mb-1">اسم القالب المعتمد</label>
+            <input className={input} disabled={!canEdit} dir="ltr" placeholder="mohemah_update" value={cfg.whatsapp_template ?? ""} onChange={(e) => set({ whatsapp_template: e.target.value })} />
+          </div>
+          <div>
+            <label className="text-xs font-bold block mb-1">لغة القالب</label>
+            <select className={input} disabled={!canEdit} value={cfg.whatsapp_lang ?? "ar"} onChange={(e) => set({ whatsapp_lang: e.target.value })}>
+              <option value="ar">العربية (ar)</option><option value="en">English (en)</option>
+            </select>
+          </div>
+        </div>
+        <p className="text-[11px] text-muted-foreground leading-6">
+          من <b>developers.facebook.com</b> أنشئ تطبيقاً من نوع Business وأضف منتج WhatsApp، واربط رقماً موثّقاً، وانسخ «Phone number ID».
+          أنشئ قالب رسالة (Message template) فيه متغير واحد <code dir="ltr">{"{{1}}"}</code> مثل: «تحديث من مهمة: {"{{1}}"}» وانتظر اعتماده، ثم اكتب اسمه هنا.
+          تُرسل الرسائل نفسها التي تُرسل نصياً (قبول التسجيل أو رفضه، وقبول الطلب).
+        </p>
+        {canEdit && (
+          <div className="flex flex-wrap gap-2 items-center">
+            <input className={`${input} max-w-56`} dir="ltr" placeholder="05XXXXXXXX" value={testPhone} onChange={(e) => setTestPhone(e.target.value)} />
+            <button onClick={() => test("whatsapp")} disabled={busy !== "" || !testPhone} className="px-4 py-2 rounded-lg border border-border text-sm font-bold disabled:opacity-50">{busy === "whatsapp" ? "جارٍ الإرسال…" : "إرسال واتساب تجريبي"}</button>
+          </div>
+        )}
+      </section>
+
       {canEdit && <button onClick={save} disabled={busy !== ""} className="mohemah-btn-coral rounded-xl px-6 py-2.5 text-sm font-bold disabled:opacity-50">{busy === "save" ? "جارٍ الحفظ…" : "حفظ الإعدادات"}</button>}
 
       <section className="bg-card border border-border rounded-2xl overflow-x-auto">
@@ -152,7 +225,7 @@ export function AdminIntegrationsPage() {
             {log.map((l) => (
               <tr key={l.id} className="border-t border-border">
                 <td className="p-2" dir="ltr">{l.created_at.slice(0, 16).replace("T", " ")}</td>
-                <td className="p-2">{l.channel === "sms" ? "رسالة" : "بريد"}</td>
+                <td className="p-2">{l.channel === "sms" ? "رسالة" : l.channel === "whatsapp" ? "واتساب" : "بريد"}</td>
                 <td className="p-2" dir="ltr">{l.recipient}</td>
                 <td className="p-2">{l.subject ?? "—"}</td>
                 <td className={`p-2 ${l.status === "sent" ? "text-emerald-700" : "text-destructive"}`} title={l.error ?? ""}>{l.status === "sent" ? "أُرسلت" : `فشل: ${l.error ?? ""}`}</td>

@@ -134,8 +134,6 @@ export function registerAdminRoutes(r: Router) {
       const ids = names.length ? (await all<{ id: string }>(c.env.DB, `SELECT id FROM services WHERE name IN ${inList(names.length)} OR id IN ${inList(names.length)}`, ...names, ...names)).map((x) => x.id) : [];
       batch.push(stmt(c.env.DB, "DELETE FROM provider_services WHERE provider_id = ?", id));
       ids.forEach((sid) => batch.push(stmt(c.env.DB, "INSERT OR IGNORE INTO provider_services (provider_id, service_id) VALUES (?,?)", id, sid)));
-      // Services set by the administration become the provider's approved services.
-      batch.push(stmt(c.env.DB, "UPDATE users SET approved_services = ? WHERE id = ?", JSON.stringify(ids), id));
     }
     if (active === false) batch.push(stmt(c.env.DB, "DELETE FROM sessions WHERE user_id = ?", id));
     if (batch.length) await c.env.DB.batch(batch);
@@ -273,7 +271,6 @@ export function registerAdminRoutes(r: Router) {
     await c.env.DB.batch([
       ...docStmts,
       stmt(c.env.DB, "UPDATE users SET verification_status = ?, review_note = ?, reviewed_at = ?, reviewed_by = ?, updated_at = ? WHERE id = ?", approve ? "approved" : "rejected", note, t, admin.id, t, c.params.id),
-      ...(approve ? [stmt(c.env.DB, "UPDATE users SET approved_services = ? WHERE id = ?", JSON.stringify(services), c.params.id)] : []),
       ...(approve ? [
         stmt(c.env.DB, "INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, 'provider')", c.params.id),
         ...services.map((sid) => stmt(c.env.DB, "INSERT OR IGNORE INTO provider_services (provider_id, service_id) SELECT ?, id FROM services WHERE id = ?", c.params.id, sid)),

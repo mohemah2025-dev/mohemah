@@ -44,15 +44,6 @@ async function performanceWarning(c: Ctx, providerId: string, kind: "reject" | "
     : { title: "تنبيه أداء: طلبات ملغاة", body: `ألغيت ${n} طلبات بعد قبولها خلال آخر 30 يوماً. الإلغاء بعد القبول يضر بالعملاء وقد يؤدي لإيقاف الحساب، اقبل فقط ما تستطيع تنفيذه.`, link: "/provider/orders", icon: "AlertTriangle", category: "alert" }));
 }
 
-/** Approved service ids of a provider (falls back to what they currently have for older accounts). */
-async function approvedServices(c: Ctx, providerId: string): Promise<string[]> {
-  const row = await first<{ approved_services: string | null }>(c.env.DB, "SELECT approved_services FROM users WHERE id = ?", providerId);
-  if (row?.approved_services) {
-    try { return (JSON.parse(row.approved_services) as unknown[]).filter((x): x is string => typeof x === "string"); } catch { /* fall through */ }
-  }
-  return (await all<{ service_id: string }>(c.env.DB, "SELECT service_id FROM provider_services WHERE provider_id = ?", providerId)).map((x) => x.service_id);
-}
-
 export function registerOrderRoutes(r: Router) {
   /* =================== Customer =================== */
   r.post("/api/orders", async (c) => {
@@ -422,18 +413,10 @@ export function registerOrderRoutes(r: Router) {
     const u = await requireUser(c, { app: "provider" });
     return json((await all<{ service_id: string }>(c.env.DB, "SELECT service_id FROM provider_services WHERE provider_id = ?", u.id)).map((x) => x.service_id));
   });
-  /** Services the administration approved for this provider (only these can be switched on). */
-  r.get("/api/provider/services/allowed", async (c) => {
-    const u = await requireUser(c, { app: "provider" });
-    return json(await approvedServices(c, u.id));
-  });
   r.put("/api/provider/services", async (c) => {
     const u = await requireProvider(c);
     const ids = strArray(await readJson(c.req), "ids", 60);
-    const allowed = new Set(await approvedServices(c, u.id));
-    const wanted = ids.filter((id) => allowed.has(id));
-    if (wanted.length < ids.length) fail(403, "service_not_approved", "يمكنك تفعيل الخدمات المعتمدة لك فقط، تواصل مع الإدارة لإضافة خدمة");
-    const valid = wanted.length ? (await all<{ id: string }>(c.env.DB, `SELECT id FROM services WHERE active = 1 AND id IN ${inList(wanted.length)}`, ...wanted)).map((x) => x.id) : [];
+    const valid = ids.length ? (await all<{ id: string }>(c.env.DB, `SELECT id FROM services WHERE active = 1 AND id IN ${inList(ids.length)}`, ...ids)).map((x) => x.id) : [];
     await c.env.DB.batch([
       stmt(c.env.DB, "DELETE FROM provider_services WHERE provider_id = ?", u.id),
       ...valid.map((id) => stmt(c.env.DB, "INSERT OR IGNORE INTO provider_services (provider_id, service_id) VALUES (?,?)", u.id, id)),

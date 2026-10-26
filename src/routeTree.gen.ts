@@ -18,6 +18,7 @@ import { Route as OrdersRouteImport } from './routes/orders'
 import { Route as ServicesRouteImport } from './routes/services'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as AdminAdsRouteImport } from './routes/admin/ads'
+import { Route as AdminAnalyticsRouteImport } from './routes/admin/analytics'
 import { Route as AdminBillingRouteImport } from './routes/admin/billing'
 import { Route as AdminCustomersRouteImport } from './routes/admin/customers'
 import { Route as AdminFinanceRouteImport } from './routes/admin/finance'
@@ -26,6 +27,7 @@ import { Route as AdminIntegrationsRouteImport } from './routes/admin/integratio
 import { Route as AdminMessagesRouteImport } from './routes/admin/messages'
 import { Route as AdminNotificationsRouteImport } from './routes/admin/notifications'
 import { Route as AdminPoliciesRouteImport } from './routes/admin/policies'
+import { Route as AdminPromotionsRouteImport } from './routes/admin/promotions'
 import { Route as AdminProvidersRouteImport } from './routes/admin/providers'
 import { Route as AdminServicesRouteImport } from './routes/admin/services'
 import { Route as AdminSettingsRouteImport } from './routes/admin/settings'
@@ -87,6 +89,11 @@ const AdminAdsRoute = AdminAdsRouteImport.update({
   path: '/ads',
   getParentRoute: () => AdminRouteRoute,
 } as any)
+const AdminAnalyticsRoute = AdminAnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
 const AdminBillingRoute = AdminBillingRouteImport.update({
   id: '/billing',
   path: '/billing',
@@ -125,6 +132,11 @@ const AdminNotificationsRoute = AdminNotificationsRouteImport.update({
 const AdminPoliciesRoute = AdminPoliciesRouteImport.update({
   id: '/policies',
   path: '/policies',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminPromotionsRoute = AdminPromotionsRouteImport.update({
+  id: '/promotions',
+  path: '/promotions',
   getParentRoute: () => AdminRouteRoute,
 } as any)
 const AdminProvidersRoute = AdminProvidersRouteImport.update({
@@ -212,6 +224,7 @@ export interface FileRoutesByFullPath {
   '/orders': typeof OrdersRoute
   '/services': typeof ServicesRoute
   '/admin/ads': typeof AdminAdsRoute
+  '/admin/analytics': typeof AdminAnalyticsRoute
   '/admin/billing': typeof AdminBillingRoute
   '/admin/customers': typeof AdminCustomersRoute
   '/admin/finance': typeof AdminFinanceRoute
@@ -220,6 +233,7 @@ export interface FileRoutesByFullPath {
   '/admin/messages': typeof AdminMessagesRoute
   '/admin/notifications': typeof AdminNotificationsRoute
   '/admin/policies': typeof AdminPoliciesRoute
+  '/admin/promotions': typeof AdminPromotionsRoute
   '/admin/providers': typeof AdminProvidersRoute
   '/admin/services': typeof AdminServicesRouteWithChildren
   '/admin/settings': typeof AdminSettingsRoute
@@ -245,6 +259,7 @@ export interface FileRoutesByTo {
   '/orders': typeof OrdersRoute
   '/services': typeof ServicesRoute
   '/admin/ads': typeof AdminAdsRoute
+  '/admin/analytics': typeof AdminAnalyticsRoute
   '/admin/billing': typeof AdminBillingRoute
   '/admin/customers': typeof AdminCustomersRoute
   '/admin/finance': typeof AdminFinanceRoute
@@ -253,6 +268,7 @@ export interface FileRoutesByTo {
   '/admin/messages': typeof AdminMessagesRoute
   '/admin/notifications': typeof AdminNotificationsRoute
   '/admin/policies': typeof AdminPoliciesRoute
+  '/admin/promotions': typeof AdminPromotionsRoute
   '/admin/providers': typeof AdminProvidersRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/staff': typeof AdminStaffRoute
@@ -279,6 +295,7 @@ export interface FileRoutesById {
   '/orders': typeof OrdersRoute
   '/services': typeof ServicesRoute
   '/admin/ads': typeof AdminAdsRoute
+  '/admin/analytics': typeof AdminAnalyticsRoute
   '/admin/billing': typeof AdminBillingRoute
   '/admin/customers': typeof AdminCustomersRoute
   '/admin/finance': typeof AdminFinanceRoute
@@ -287,6 +304,7 @@ export interface FileRoutesById {
   '/admin/messages': typeof AdminMessagesRoute
   '/admin/notifications': typeof AdminNotificationsRoute
   '/admin/policies': typeof AdminPoliciesRoute
+  '/admin/promotions': typeof AdminPromotionsRoute
   '/admin/providers': typeof AdminProvidersRoute
   '/admin/services': typeof AdminServicesRouteWithChildren
   '/admin/settings': typeof AdminSettingsRoute
@@ -315,6 +333,7 @@ export interface FileRouteTypes {
     | '/orders'
     | '/services'
     | '/admin/ads'
+    | '/admin/analytics'
     | '/admin/billing'
     | '/admin/customers'
     | '/admin/finance'
@@ -323,6 +342,7 @@ export interface FileRouteTypes {
     | '/admin/messages'
     | '/admin/notifications'
     | '/admin/policies'
+    | '/admin/promotions'
     | '/admin/providers'
     | '/admin/services'
     | '/admin/settings'
@@ -348,6 +368,7 @@ export interface FileRouteTypes {
     | '/orders'
     | '/services'
     | '/admin/ads'
+    | '/admin/analytics'
     | '/admin/billing'
     | '/admin/customers'
     | '/admin/finance'
@@ -356,6 +377,7 @@ export interface FileRouteTypes {
     | '/admin/messages'
     | '/admin/notifications'
     | '/admin/policies'
+    | '/admin/promotions'
     | '/admin/providers'
     | '/admin/settings'
     | '/admin/staff'
@@ -381,6 +403,7 @@ export interface FileRouteTypes {
     | '/orders'
     | '/services'
     | '/admin/ads'
+    | '/admin/analytics'
     | '/admin/billing'
     | '/admin/customers'
     | '/admin/finance'
@@ -389,6 +412,7 @@ export interface FileRouteTypes {
     | '/admin/messages'
     | '/admin/notifications'
     | '/admin/policies'
+    | '/admin/promotions'
     | '/admin/providers'
     | '/admin/services'
     | '/admin/settings'
@@ -490,6 +514,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminAdsRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/admin/analytics': {
+      id: '/admin/analytics'
+      path: '/analytics'
+      fullPath: '/admin/analytics'
+      preLoaderRoute: typeof AdminAnalyticsRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/admin/billing': {
       id: '/admin/billing'
       path: '/billing'
@@ -544,6 +575,13 @@ declare module '@tanstack/react-router' {
       path: '/policies'
       fullPath: '/admin/policies'
       preLoaderRoute: typeof AdminPoliciesRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/promotions': {
+      id: '/admin/promotions'
+      path: '/promotions'
+      fullPath: '/admin/promotions'
+      preLoaderRoute: typeof AdminPromotionsRouteImport
       parentRoute: typeof AdminRouteRoute
     }
     '/admin/providers': {
@@ -670,6 +708,7 @@ const AdminServicesRouteWithChildren = AdminServicesRoute._addFileChildren(
 
 interface AdminRouteRouteChildren {
   AdminAdsRoute: typeof AdminAdsRoute
+  AdminAnalyticsRoute: typeof AdminAnalyticsRoute
   AdminBillingRoute: typeof AdminBillingRoute
   AdminCustomersRoute: typeof AdminCustomersRoute
   AdminFinanceRoute: typeof AdminFinanceRoute
@@ -678,6 +717,7 @@ interface AdminRouteRouteChildren {
   AdminMessagesRoute: typeof AdminMessagesRoute
   AdminNotificationsRoute: typeof AdminNotificationsRoute
   AdminPoliciesRoute: typeof AdminPoliciesRoute
+  AdminPromotionsRoute: typeof AdminPromotionsRoute
   AdminProvidersRoute: typeof AdminProvidersRoute
   AdminServicesRoute: typeof AdminServicesRouteWithChildren
   AdminSettingsRoute: typeof AdminSettingsRoute
@@ -687,6 +727,7 @@ interface AdminRouteRouteChildren {
 
 const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminAdsRoute: AdminAdsRoute,
+  AdminAnalyticsRoute: AdminAnalyticsRoute,
   AdminBillingRoute: AdminBillingRoute,
   AdminCustomersRoute: AdminCustomersRoute,
   AdminFinanceRoute: AdminFinanceRoute,
@@ -695,6 +736,7 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminMessagesRoute: AdminMessagesRoute,
   AdminNotificationsRoute: AdminNotificationsRoute,
   AdminPoliciesRoute: AdminPoliciesRoute,
+  AdminPromotionsRoute: AdminPromotionsRoute,
   AdminProvidersRoute: AdminProvidersRoute,
   AdminServicesRoute: AdminServicesRouteWithChildren,
   AdminSettingsRoute: AdminSettingsRoute,

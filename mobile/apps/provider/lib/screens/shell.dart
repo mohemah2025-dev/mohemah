@@ -57,11 +57,13 @@ class _ProviderShellState extends State<ProviderShell> {
 
   void _maybeShowIncoming() {
     final store = _store;
-    if (store == null || _dialogOpen || store.incoming.isEmpty || !mounted) return;
+    if (store == null || _dialogOpen || !mounted) return;
+    final waiting = store.incoming.where((o) => !store.minimized.contains(o.id)).toList();
+    if (waiting.isEmpty) return;
     final nav = rootNavigator.currentContext;
     if (nav == null) return;
     _dialogOpen = true;
-    final order = store.incoming.first;
+    final order = waiting.first;
     showGeneralDialog<void>(
       context: nav,
       barrierDismissible: false,
@@ -74,7 +76,8 @@ class _ProviderShellState extends State<ProviderShell> {
       ),
     ).whenComplete(() {
       _dialogOpen = false;
-      store.dismissIncoming(order.id);
+      // Minimised orders stay pending on the home page; anything else is done.
+      if (!store.minimized.contains(order.id)) store.dismissIncoming(order.id);
     });
   }
 
@@ -177,82 +180,129 @@ class _IncomingOrderDialogState extends State<IncomingOrderDialog> {
     nav.pop();
   }
 
+  void _minimize() {
+    _timer?.cancel();
+    widget.store.minimize(widget.order.id);
+    Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     final o = widget.order;
     final secs = _left.inSeconds;
+    final sub = widget.store.feed?.subscriptionEnd != null;
+    Widget row(IconData icon, String label, String value) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 7),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(color: Brand.primaryDeep.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(10)),
+              child: Icon(icon, size: 19, color: Brand.primaryDeep),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(label, style: const TextStyle(fontSize: 11.5, color: Brand.mutedFg)),
+                Text(value, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, height: 1.4)),
+              ]),
+            ),
+          ]),
+        );
     return SafeArea(
-      child: Align(
-        alignment: Alignment.bottomCenter,
+      child: Center(
         child: Padding(
           padding: const EdgeInsets.all(14),
-          child: Material(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(26),
-            clipBehavior: Clip.antiAlias,
-            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Container(
-                decoration: const BoxDecoration(gradient: Brand.providerGradient),
-                padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
-                child: Row(children: [
-                  const Icon(Icons.notifications_active_outlined, color: Colors.white, size: 28),
-                  const SizedBox(width: 10),
-                  const Expanded(child: Text('طلب جديد', style: TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w800))),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(20)),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      const Icon(Icons.timer_outlined, color: Colors.white, size: 16),
-                      const SizedBox(width: 4),
-                      Text('${secs}ث', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: 520, maxHeight: MediaQuery.of(context).size.height * 0.88),
+            child: Material(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(26),
+              clipBehavior: Clip.antiAlias,
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Container(
+                  decoration: const BoxDecoration(gradient: Brand.providerGradient),
+                  padding: const EdgeInsets.fromLTRB(8, 8, 14, 16),
+                  child: Column(children: [
+                    // Two arrows: shrink the card into a blinking bar on the home page.
+                    Row(children: [
+                      IconButton(
+                        tooltip: 'تصغير الطلب',
+                        onPressed: _busy ? null : _minimize,
+                        icon: const Icon(Icons.keyboard_double_arrow_up_rounded, color: Colors.white, size: 30),
+                      ),
+                      const Spacer(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(20)),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          const Icon(Icons.timer_outlined, color: Colors.white, size: 16),
+                          const SizedBox(width: 4),
+                          Text('${secs}ث', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+                        ]),
+                      ),
+                    ]),
+                    Row(children: [
+                      const SizedBox(width: 6),
+                      const Icon(Icons.notifications_active_outlined, color: Colors.white, size: 30),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          const Text('طلب جديد', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                          Text(o.title, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
+                          if (o.subServiceName != null) Text(o.serviceName, style: const TextStyle(color: Colors.white70, fontSize: 12.5)),
+                        ]),
+                      ),
+                    ]),
+                  ]),
+                ),
+                LinearProgressIndicator(value: _left.inMilliseconds / incomingTtl.inMilliseconds, minHeight: 4, backgroundColor: Brand.muted),
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                      row(o.mode == 'remote' ? Icons.videocam_outlined : Icons.home_work_outlined, 'نوع الخدمة', modeLabel(o.mode)),
+                      row(Icons.schedule_outlined, 'الموعد', o.scheduledAt == null ? 'في أقرب وقت' : fmtDateTime(o.scheduledAt)),
+                      if (o.region != null) row(Icons.location_on_outlined, 'المدينة', o.region!),
+                      row(Icons.person_outlined, 'العميل', '${o.customerName} • تقييم ${o.customerRating.toStringAsFixed(1)}'),
+                      row(Icons.toll_outlined, 'تكلفة القبول', sub ? 'مشمول في اشتراكك' : '${o.coinCost} كوين'),
+                      if ((o.description ?? '').isNotEmpty) ...[
+                        const Divider(height: 18),
+                        const Text('تفاصيل الطلب', style: TextStyle(fontSize: 11.5, color: Brand.mutedFg)),
+                        const SizedBox(height: 4),
+                        Text(o.description!, style: const TextStyle(height: 1.7, fontSize: 14)),
+                      ],
+                      const SizedBox(height: 6),
+                      const Text('العنوان الكامل ورقم العميل يظهران بعد القبول.', style: TextStyle(fontSize: 11.5, color: Brand.mutedFg)),
                     ]),
                   ),
-                ]),
-              ),
-              LinearProgressIndicator(value: _left.inMilliseconds / incomingTtl.inMilliseconds, minHeight: 4, backgroundColor: Brand.muted),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(18, 14, 18, 6),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(o.title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-                  if (o.subServiceName != null) Text(o.serviceName, style: const TextStyle(color: Brand.mutedFg)),
-                  const SizedBox(height: 8),
-                  Wrap(spacing: 6, runSpacing: 6, children: [
-                    Pill(modeLabel(o.mode), icon: o.mode == 'remote' ? Icons.videocam_outlined : Icons.home_work_outlined),
-                    if (o.region != null) Pill(o.region!, icon: Icons.location_on_outlined),
-                    Pill(o.scheduledAt == null ? 'في أقرب وقت' : fmtDateTime(o.scheduledAt), icon: Icons.schedule_outlined),
-                    Pill('${o.customerName} • ${o.customerRating.toStringAsFixed(1)}', icon: Icons.person_outlined),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+                  child: Row(children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(foregroundColor: Brand.danger, minimumSize: const Size(0, 50)),
+                        onPressed: _busy ? null : _reject,
+                        child: const Text('رفض'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 2,
+                      child: FilledButton.icon(
+                        style: FilledButton.styleFrom(backgroundColor: Brand.success, minimumSize: const Size(0, 50)),
+                        onPressed: _busy ? null : _accept,
+                        icon: _busy
+                            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            : const Icon(Icons.check_outlined),
+                        label: Text(sub ? 'قبول' : 'قبول (${o.coinCost} كوين)'),
+                      ),
+                    ),
                   ]),
-                  if ((o.description ?? '').isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    Text(o.description!, maxLines: 4, overflow: TextOverflow.ellipsis, style: const TextStyle(height: 1.6)),
-                  ],
-                ]),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
-                child: Row(children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(foregroundColor: Brand.danger),
-                      onPressed: _busy ? null : _reject,
-                      child: const Text('رفض'),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    flex: 2,
-                    child: FilledButton.icon(
-                      style: FilledButton.styleFrom(backgroundColor: Brand.success),
-                      onPressed: _busy ? null : _accept,
-                      icon: _busy
-                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : const Icon(Icons.check_outlined),
-                      label: Text(widget.store.feed?.subscriptionEnd != null ? 'قبول' : 'قبول (${o.coinCost} كوين)'),
-                    ),
-                  ),
-                ]),
-              ),
-            ]),
+                ),
+              ]),
+            ),
           ),
         ),
       ),

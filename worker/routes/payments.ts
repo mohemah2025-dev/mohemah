@@ -12,6 +12,7 @@ import { addMonths, all, fail, first, json, now, num, readJson, run, stmt, str, 
 import { requirePerm, requireProvider, requireUser } from "../lib/auth";
 import { getSettings, latestSubscriptionEnd, notifyStmts, type Settings } from "../lib/domain";
 import { notifyExternal } from "../lib/messaging";
+import { priceFor } from "../lib/promotions";
 
 export const LIVE_GATEWAYS = ["moyasar", "tap"] as const;
 type LiveKey = (typeof LIVE_GATEWAYS)[number];
@@ -162,7 +163,7 @@ export function registerPaymentRoutes(r: Router) {
     const s = await getSettings(c.env);
     if (!s.billing_coins_enabled) fail(409, "coins_disabled", "الدفع بالكوينز غير مفعّل");
     const gw = await gatewayFor(c, str(b, "gateway_id", { required: true, max: 64 }), s);
-    const amount = withVat(coins * (s.coin_price ?? 1), s);
+    const amount = withVat((await priceFor(c.env, "topups", coins * (s.coin_price ?? 1))).price, s);
     return startPurchase(c, u.id, gw, s, { purpose: "topup", coins, months: null, amount, description: `شحن ${coins} كوين` });
   });
 
@@ -175,7 +176,8 @@ export function registerPaymentRoutes(r: Router) {
     const price = ({ 1: s.sub_price_1m, 3: s.sub_price_3m, 6: s.sub_price_6m, 12: s.sub_price_12m } as Record<number, number>)[months];
     if (price === undefined || price <= 0) fail(400, "invalid_plan", "باقة غير صحيحة");
     const gw = await gatewayFor(c, str(b, "gateway_id", { required: true, max: 64 }), s);
-    return startPurchase(c, u.id, gw, s, { purpose: "subscription", coins: null, months, amount: withVat(price!, s), description: `اشتراك ${months} شهر` });
+    const discounted = (await priceFor(c.env, "subscriptions", price!)).price;
+    return startPurchase(c, u.id, gw, s, { purpose: "subscription", coins: null, months, amount: withVat(discounted, s), description: `اشتراك ${months} شهر` });
   });
 
   /** The app checks the result after returning from the gateway page. */
@@ -228,6 +230,7 @@ export function registerPaymentRoutes(r: Router) {
       tap: { secret: !!c.env.TAP_SECRET_KEY, mode: keyMode(c.env.TAP_SECRET_KEY), webhook_url: `${o}/api/payments/webhook/tap` },
       sms: { secret: !!c.env.SMS_API_KEY },
       email: { secret: !!c.env.EMAIL_API_KEY },
+      whatsapp: { secret: !!c.env.WHATSAPP_TOKEN },
     });
   });
 }
@@ -244,8 +247,8 @@ async function gatewayFor(c: Ctx, gatewayId: string | null, s: Settings) {
 async function startPurchase(c: Ctx, userId: string, gw: Gateway, s: Settings,
   x: { purpose: "topup" | "subscription"; coins: number | null; months: number | null; amount: number; description: string }) {
   const qty = x.purpose === "topup" ? x.coins! : x.months!;
-  if (!isLive(gw.provider_key)) {
-    // Simulated payment (test mode only).
+  if (!isLive(gw.provider_key) || x.amount === 0) {
+    // Simulated payment (test mode only), or fully discounted by an occasion offer.
     await c.env.DB.batch(await purchaseStmts(c, userId, x.purpose, qty, x.amount, gw.name, "شحن رصيد (تجريبي)"));
     const p = await first<{ coin_balance: number }>(c.env.DB, "SELECT coin_balance FROM users WHERE id = ?", userId);
     return json({ success: true, balance: p?.coin_balance ?? 0 });

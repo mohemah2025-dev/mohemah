@@ -11,3 +11,6 @@ extension AppKindX on AppKind {
 const String kApiBase = String.fromEnvironment('API_BASE', defaultValue: 'https://app.mohemah.workers.dev');
 
 String get apiBase => kApiBase.endsWith('/') ? kApiBase.substring(0, kApiBase.length - 1) : kApiBase;
+
+/// Files saved by the Worker may come back as "/api/files/..." paths: make them absolute for images.
+String absUrl(String u) => u.startsWith('/') ? '$apiBase$u' : u;

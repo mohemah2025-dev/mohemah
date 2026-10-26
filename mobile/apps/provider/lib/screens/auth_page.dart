@@ -289,7 +289,7 @@ class _ProviderRegisterFormState extends State<ProviderRegisterForm> {
           WidgetSpan(
             alignment: PlaceholderAlignment.middle,
             child: GestureDetector(
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PoliciesPage(audience: 'providers'))),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PoliciesPage(audience: 'providers', placement: 'registration'))),
               child: Text('شروط مقدمي الخدمة', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w700)),
             ),
           ),

@@ -271,6 +271,7 @@ class _NewOrderPageState extends State<NewOrderPage> {
             ]),
           ),
           const SizedBox(height: 18),
+          const PolicyLink(audience: 'customers', placement: 'order', prefix: 'بإرسال الطلب أنت توافق على '),
           BusyButton(label: 'إرسال الطلب', icon: Icons.send_outlined, onPressed: _submit),
         ]),
           ),

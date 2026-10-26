@@ -80,7 +80,7 @@ export function registerAccountRoutes(r: Router) {
       all(c.env.DB, `SELECT s.id, s.service_id, s.name, s.description, s.icon, s.color, COALESCE(s.coin_price, p.coin_price) AS coin_price, s.delivery_mode, s.sort_order
                      FROM sub_services s JOIN services p ON p.id = s.service_id WHERE s.active = 1 AND p.active = 1 ORDER BY s.sort_order, s.name`),
       all(c.env.DB, "SELECT id, title, sponsor, image_url, link, placement FROM ads WHERE active = 1 AND start_date <= ? AND end_date >= ? ORDER BY created_at DESC LIMIT 10", today, today),
-      all(c.env.DB, "SELECT id, title, body, audience, policy_type, version, updated_at FROM policies WHERE published = 1 ORDER BY updated_at DESC"),
+      all(c.env.DB, "SELECT id, title, body, audience, policy_type, version, placements, updated_at FROM policies WHERE published = 1 ORDER BY updated_at DESC"),
     ]);
     return json({ settings: publicSettings(settings), services, sub_services: subs, ads, policies, regions: REGIONS });
   });
@@ -238,14 +238,22 @@ export function registerAccountRoutes(r: Router) {
   /* ---------- Sign in / out ---------- */
   r.post("/api/auth/login", async (c) => {
     const b = await readJson(c.req);
-    const identifier = str(b, "identifier", { required: true, max: 255, label: "البريد أو اسم المستخدم" })!.toLowerCase();
+    const identifier = str(b, "identifier", { required: true, max: 255, label: "البريد أو اسم المستخدم أو رقم الجوال" })!.trim().toLowerCase();
     const password = str(b, "password", { required: true, max: 128, label: "كلمة المرور" })!;
     const app = oneOf(b, "app", ["customer", "provider", "admin"] as const, { required: true })!;
     const key = `login:${identifier}`;
     await rateLimit(c.env, key, 10, 15);
     await rateLimit(c.env, `login-ip:${c.ip}`, 60, 15);
-    const user = await first<{ id: string; password_hash: string; is_active: number }>(c.env.DB, "SELECT id, password_hash, is_active FROM users WHERE email = ?1 OR username = ?1", identifier);
-    if (!user || !(await verifyPassword(password, user.password_hash))) fail(401, "invalid_credentials", "البريد أو كلمة المرور غير صحيحة");
+    // Sign in with e-mail, username or mobile number. One phone may belong to two accounts (customer and
+    // provider), so every account with that number is tried against the password.
+    const phone = /^[+\d\s-]{9,16}$/.test(identifier) ? normalizePhone(identifier) : null;
+    const candidates = await all<{ id: string; password_hash: string; is_active: number }>(c.env.DB,
+      "SELECT id, password_hash, is_active FROM users WHERE email = ?1 OR username = ?1 OR (?2 IS NOT NULL AND phone = ?2) LIMIT 5", identifier, phone);
+    let user: { id: string; password_hash: string; is_active: number } | null = null;
+    for (const cand of candidates) {
+      if (await verifyPassword(password, cand.password_hash)) { user = cand; break; }
+    }
+    if (!user) fail(401, "invalid_credentials", "بيانات الدخول أو كلمة المرور غير صحيحة");
     if (!user!.is_active) fail(403, "account_suspended", "تم إيقاف هذا الحساب، تواصل مع الدعم");
     const roles = (await all<{ role: string }>(c.env.DB, "SELECT role FROM user_roles WHERE user_id = ?", user!.id)).map((r) => r.role);
     if (app === "admin" && !roles.some((r) => r === "admin" || r === "staff")) fail(403, "not_admin", "هذا الحساب لا يملك صلاحية لوحة التحكم");
@@ -400,7 +408,7 @@ export function registerAccountRoutes(r: Router) {
     const created = (await first<{ created_at: string }>(c.env.DB, "SELECT created_at FROM users WHERE id = ?", u.id))?.created_at ?? "";
     const aud = u.app === "provider" ? "providers" : u.app === "customer" ? "customers" : "none";
     const rows = await all(c.env.DB,
-      `SELECT n.id, n.title, n.body, n.category, n.icon, n.accent_color, n.link, COALESCE(n.scheduled_at, n.sent_at) AS at,
+      `SELECT n.id, n.title, n.body, n.category, n.icon, n.accent_color, n.link, n.sound, COALESCE(n.scheduled_at, n.sent_at) AS at,
               CASE WHEN r.user_id IS NULL THEN 0 ELSE 1 END AS read
          FROM notifications n
          LEFT JOIN notification_reads r ON r.notification_id = n.id AND r.user_id = ?1

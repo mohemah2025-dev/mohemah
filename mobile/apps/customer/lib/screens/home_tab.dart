@@ -31,7 +31,7 @@ class HomeTab extends StatelessWidget {
       if (sub != null) previous.add((sub, o));
       if (previous.length == 6) break;
     }
-    final ads = data.ads.where((a) => a.placement != 'popup_card' && (a.imageUrl ?? '').isNotEmpty).toList();
+    final ads = data.ads.where((a) => a.placement != 'popup_card').toList();
 
     return RefreshIndicator(
       onRefresh: () async {
@@ -42,6 +42,9 @@ class HomeTab extends StatelessWidget {
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
           sliver: SliverList.list(children: [
+            // Accepted orders are announced first so the customer sees it right away.
+            for (final o in open.where((x) => x.status == 'accepted'))
+              Padding(padding: const EdgeInsets.only(bottom: 12), child: _ActiveOrderCard(order: o)),
             // 1) Favorites (search is in the header above).
             const SectionTitle('خدماتي المفضلة', padding: EdgeInsets.fromLTRB(4, 0, 4, 10)),
             if (favs.isEmpty)
@@ -125,9 +128,9 @@ class HomeTab extends StatelessWidget {
                 ),
               ),
             ],
-            if (open.isNotEmpty) ...[
+            if (open.any((x) => x.status != 'accepted')) ...[
               const SectionTitle('طلبك الجاري'),
-              for (final o in open.take(2)) Padding(padding: const EdgeInsets.only(bottom: 10), child: _ActiveOrderCard(order: o)),
+              for (final o in open.where((x) => x.status != 'accepted').take(2)) Padding(padding: const EdgeInsets.only(bottom: 10), child: _ActiveOrderCard(order: o)),
             ],
           ]),
         ),
@@ -152,7 +155,7 @@ class _Header extends StatelessWidget {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(p == null ? 'أهلاً بك في مهمة' : 'مرحباً، ${p.firstName}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-              _CurrentLocation(fallback: p?.region),
+              CurrentLocationLine(fallback: p?.region),
             ]),
           ),
           IconButton(
@@ -233,8 +236,18 @@ class _AdsCarouselState extends State<_AdsCarousel> {
                 borderRadius: BorderRadius.circular(20),
                 child: InkWell(
                   onTap: (ad.link ?? '').startsWith('http') ? () => openUrl(context, ad.link!) : null,
-                  child: Image.network(
-                    ad.imageUrl!,
+                  child: (ad.imageUrl ?? '').isEmpty
+                      ? Container(
+                          decoration: const BoxDecoration(gradient: Brand.gradient),
+                          padding: const EdgeInsets.all(18),
+                          alignment: AlignmentDirectional.centerStart,
+                          child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            if ((ad.sponsor ?? '').isNotEmpty) Text(ad.sponsor!, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                            Text(ad.title, maxLines: 2, style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w800)),
+                          ]),
+                        )
+                      : Image.network(
+                    absUrl(ad.imageUrl!),
                     fit: BoxFit.cover,
                     errorBuilder: (_, __, ___) => Container(
                       color: Brand.muted,
@@ -273,6 +286,33 @@ class _ActiveOrderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = statusColor(order.status);
+    if (order.status == 'accepted') {
+      return Material(
+        borderRadius: BorderRadius.circular(20),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => OrderDetailPage(orderId: order.id))),
+          child: Ink(
+            decoration: BoxDecoration(gradient: LinearGradient(colors: [Brand.success, Brand.success.withValues(alpha: 0.82)])),
+            padding: const EdgeInsets.all(14),
+            child: Row(children: [
+              const CircleAvatar(radius: 24, backgroundColor: Colors.white, child: Icon(Icons.check_rounded, color: Brand.success, size: 30)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('تم قبول طلبك', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16)),
+                  Text('${order.title}${order.providerName != null ? ' • ${order.providerName}' : ''}', maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white, fontSize: 13)),
+                  const Text('اضغط لمتابعة الطلب ومراسلة مقدم الخدمة', style: TextStyle(color: Colors.white70, fontSize: 11.5)),
+                ]),
+              ),
+              if (order.unread > 0) Badge(label: Text('${order.unread}'), child: const Icon(Icons.chat_outlined, color: Colors.white)),
+              const Icon(Icons.chevron_left_outlined, color: Colors.white),
+            ]),
+          ),
+        ),
+      );
+    }
     return AppCard(
       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => OrderDetailPage(orderId: order.id))),
       child: Row(children: [
@@ -348,71 +388,6 @@ class _ReorderCard extends StatelessWidget {
           ),
         ),
       ]),
-    );
-  }
-}
-
-/// "Current location" line in the home header: filled automatically when permission was
-/// already given, otherwise a tap asks for it.
-class _CurrentLocation extends StatefulWidget {
-  const _CurrentLocation({this.fallback});
-  final String? fallback;
-  static final ValueNotifier<PickedLocation?> place = ValueNotifier(null);
-
-  @override
-  State<_CurrentLocation> createState() => _CurrentLocationState();
-}
-
-class _CurrentLocationState extends State<_CurrentLocation> {
-  bool _busy = false;
-
-  @override
-  void initState() {
-    super.initState();
-    if (_CurrentLocation.place.value == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        if (!mounted) return;
-        final loc = await quietCurrentLocation(PublicScope.of(context).regions);
-        if (loc != null) _CurrentLocation.place.value = loc;
-      });
-    }
-  }
-
-  Future<void> _locate() async {
-    setState(() => _busy = true);
-    final regions = PublicScope.of(context).regions;
-    final pos = await currentPosition(context);
-    if (pos != null) _CurrentLocation.place.value = await describeLocation(pos.latitude, pos.longitude, regions);
-    if (mounted) setState(() => _busy = false);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return ValueListenableBuilder<PickedLocation?>(
-      valueListenable: _CurrentLocation.place,
-      builder: (context, loc, _) => InkWell(
-        onTap: _busy ? null : _locate,
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2),
-          child: Row(children: [
-            _busy
-                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : Icon(loc == null ? Icons.my_location_outlined : Icons.location_on_outlined, size: 15),
-            const SizedBox(width: 4),
-            Flexible(
-              child: Text(
-                loc?.address ?? (widget.fallback != null ? '${widget.fallback} • حدّد موقعك الحالي' : 'حدّد موقعك الحالي'),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 12.5, color: Colors.white.withValues(alpha: 0.9)),
-              ),
-            ),
-            const SizedBox(width: 2),
-            Icon(Icons.keyboard_arrow_down_outlined, size: 16, color: Colors.white.withValues(alpha: 0.9)),
-          ]),
-        ),
-      ),
     );
   }
 }

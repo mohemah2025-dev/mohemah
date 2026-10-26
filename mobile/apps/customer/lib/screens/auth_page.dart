@@ -10,9 +10,12 @@ Future<bool> ensureSignedIn(BuildContext context, {String? reason}) async {
 
 /// Customer sign-in and registration (customer registration lives only in this app).
 class CustomerAuthPage extends StatefulWidget {
-  const CustomerAuthPage({super.key, this.reason, this.startWithRegister = false});
+  const CustomerAuthPage({super.key, this.reason, this.startWithRegister = false, this.asRoot = false});
   final String? reason;
   final bool startWithRegister;
+
+  /// Shown as the app's first screen (sign-in required): success simply rebuilds the app.
+  final bool asRoot;
 
   @override
   State<CustomerAuthPage> createState() => _CustomerAuthPageState();
@@ -21,7 +24,9 @@ class CustomerAuthPage extends StatefulWidget {
 class _CustomerAuthPageState extends State<CustomerAuthPage> {
   late int _tab = widget.startWithRegister ? 1 : 0;
 
-  void _done() => Navigator.of(context).pop(true);
+  void _done() {
+    if (!widget.asRoot) Navigator.of(context).pop(true);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -110,7 +115,7 @@ class _RegisterFormState extends State<_RegisterForm> {
               WidgetSpan(
                 alignment: PlaceholderAlignment.middle,
                 child: GestureDetector(
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PoliciesPage(audience: 'customers'))),
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PoliciesPage(audience: 'customers', placement: 'registration'))),
                   child: Text('الشروط والسياسات', style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w700)),
                 ),
               ),
@@ -121,5 +126,18 @@ class _RegisterFormState extends State<_RegisterForm> {
         ]),
       ),
     );
+  }
+}
+
+/// The customer app requires an account: the sign-in / registration screen comes first.
+class CustomerGate extends StatelessWidget {
+  const CustomerGate({super.key, required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final session = SessionScope.of(context);
+    if (session.signedIn) return child;
+    return const CustomerAuthPage(asRoot: true, reason: 'سجّل دخولك أو أنشئ حساباً للمتابعة');
   }
 }

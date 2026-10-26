@@ -1,9 +1,11 @@
 import { useRef, useState } from "react";
-import { useAdmin, AdminAd, AdminNotification, AdminPolicy, NOTIFICATION_PRESETS, NotifCategory } from "@/lib/adminStore";
+import { useAdmin, AdminAd, AdminNotification, AdminPolicy, NOTIFICATION_PRESETS, NotifCategory, POLICY_PLACEMENTS, type PolicyPlacement } from "@/lib/adminStore";
 import { Bell, Megaphone, Plus, Trash2, Send, Image as ImageIcon, FileText, Sparkles, Calendar, Pencil, Eye, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { uploadAdminImage } from "@/lib/adminStore";
 import { errMsg } from "@/lib/api";
+import { NOTIF_ICONS, NotifIcon } from "@/lib/notifIcons";
+import { Volume2, VolumeX } from "lucide-react";
 
 function Header({ title, subtitle, action }: { title: string; subtitle?: string; action?: React.ReactNode }) {
   return (
@@ -95,7 +97,7 @@ export function AdminNotificationsPage() {
               style={{ background: `linear-gradient(135deg, ${p.accentColor}10, transparent)` }}
             >
               <div className="flex items-center justify-between mb-1">
-                <span className="text-2xl">{p.icon}</span>
+                <span className="w-9 h-9 rounded-xl grid place-items-center" style={{ background: `${p.accentColor}1f` }}><NotifIcon icon={p.icon} color={p.accentColor} size={20} /></span>
                 <span className={`text-[10px] px-2 py-0.5 rounded-full ${CATEGORY_STYLES[p.category].bg}`}>{CATEGORY_STYLES[p.category].label}</span>
               </div>
               <p className="font-bold text-xs leading-snug line-clamp-2 mt-2">{p.title}</p>
@@ -112,8 +114,8 @@ export function AdminNotificationsPage() {
         <div className="divide-y divide-border">
           {notifications.map((n) => (
             <div key={n.id} className="p-4 flex items-start gap-3">
-              <div className="w-11 h-11 rounded-xl flex items-center justify-center text-xl flex-shrink-0" style={{ background: `${n.accentColor ?? "#FF6B5C"}20` }}>
-                {n.icon ?? "🔔"}
+              <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `${n.accentColor ?? "#FF6B5C"}20` }}>
+                <NotifIcon icon={n.icon} color={n.accentColor ?? "#FF6B5C"} size={20} />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -121,6 +123,7 @@ export function AdminNotificationsPage() {
                   <span className={`text-[10px] px-2 py-0.5 rounded-full ${CATEGORY_STYLES[n.category].bg}`}>{CATEGORY_STYLES[n.category].label}</span>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full ${n.scope === "عامة" ? "bg-mohemah-blue/15 text-mohemah-blue" : "bg-mohemah-coral/15 text-mohemah-coral"}`}>{n.scope}</span>
                   <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">{audienceLabel(n.audience)}</span>
+                  {n.sound === false ? <VolumeX className="w-3.5 h-3.5 text-muted-foreground" aria-label="بدون صوت" /> : <Volume2 className="w-3.5 h-3.5 text-muted-foreground" aria-label="مع صوت" />}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">{n.body}</p>
                 <p className="text-[10px] text-muted-foreground mt-2">{n.sentAt}</p>
@@ -159,7 +162,14 @@ function NotificationDialog({ preset, customers, providers, onClose, onSend }: {
   const [audience, setAudience] = useState<AdminNotification["audience"]>("all");
   const [scope, setScope] = useState<AdminNotification["scope"]>("عامة");
   const [category, setCategory] = useState<NotifCategory>(preset?.category ?? "عام");
-  const [icon, setIcon] = useState(preset?.icon ?? "🔔");
+  const [icon, setIcon] = useState(preset?.icon ?? "bell");
+  const [sound, setSound] = useState(true);
+  const iconFile = useRef<HTMLInputElement>(null);
+  const uploadIcon = (f?: File) => {
+    if (!f) return;
+    if (!["image/png", "image/jpeg", "image/webp", "image/svg+xml"].includes(f.type)) return toast.error("اختر صورة PNG أو JPG أو WEBP أو SVG");
+    uploadAdminImage(f).then((url) => { setIcon(url); toast.success("تم رفع الأيقونة"); }).catch((e) => toast.error(errMsg(e, "تعذر رفع الأيقونة")));
+  };
   const [accentColor, setAccentColor] = useState(preset?.accentColor ?? "#FF6B5C");
   const [scheduledAt, setScheduledAt] = useState("");
   const [targets, setTargets] = useState<string[]>([]);
@@ -176,7 +186,7 @@ function NotificationDialog({ preset, customers, providers, onClose, onSend }: {
         <div className="rounded-2xl p-4 mb-4 border border-border" style={{ background: `linear-gradient(135deg, ${accentColor}15, transparent)` }}>
           <p className="text-[10px] text-muted-foreground mb-2">معاينة الإشعار</p>
           <div className="flex items-start gap-3 bg-card rounded-xl p-3 shadow-sm">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl" style={{ background: `${accentColor}25` }}>{icon || "🔔"}</div>
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${accentColor}25` }}><NotifIcon icon={icon} color={accentColor} size={20} /></div>
             <div className="flex-1 min-w-0">
               <p className="font-bold text-sm">{title || "عنوان الإشعار"}</p>
               <p className="text-xs text-muted-foreground mt-1">{body || "محتوى الإشعار يظهر هنا..."}</p>
@@ -215,10 +225,31 @@ function NotificationDialog({ preset, customers, providers, onClose, onSend }: {
             </Field>
           </div>
 
+          <Field label="الأيقونة" hint="اختر من الأيقونات أو ارفع أيقونتك الخاصة (PNG/SVG مربعة)">
+            <div className="flex flex-wrap gap-1.5">
+              {NOTIF_ICONS.map((x) => (
+                <button key={x.key} type="button" title={x.label} onClick={() => setIcon(x.key)}
+                  className={`w-10 h-10 rounded-xl grid place-items-center border transition ${icon === x.key ? "border-transparent ring-2" : "border-border hover:bg-mohemah-light"}`}
+                  style={icon === x.key ? { background: `${accentColor}22`, boxShadow: `0 0 0 2px ${accentColor}` } : undefined}>
+                  <x.Icon style={{ width: 18, height: 18, color: icon === x.key ? accentColor : undefined }} />
+                </button>
+              ))}
+              <button type="button" onClick={() => iconFile.current?.click()} className="h-10 px-3 rounded-xl border border-dashed border-border text-xs flex items-center gap-1 hover:bg-mohemah-light">
+                <Upload className="w-3.5 h-3.5" /> رفع أيقونة
+              </button>
+              <input ref={iconFile} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden" onChange={(e) => { uploadIcon(e.target.files?.[0]); e.target.value = ""; }} />
+            </div>
+          </Field>
+
           <div className="grid grid-cols-3 gap-3">
-            <Field label="أيقونة (رمز تعبيري)"><input value={icon} onChange={(e) => setIcon(e.target.value)} maxLength={4} className="admin-input text-center text-lg" /></Field>
             <Field label="لون مميز"><input type="color" value={accentColor} onChange={(e) => setAccentColor(e.target.value)} className="admin-input h-10 p-1 cursor-pointer" /></Field>
             <Field label="جدولة الإرسال (اختياري)"><input type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} className="admin-input" /></Field>
+            <Field label="الصوت">
+              <label className="admin-input h-10 flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={sound} onChange={(e) => setSound(e.target.checked)} />
+                {sound ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}<span className="text-xs">{sound ? "مع صوت التنبيه" : "صامت"}</span>
+              </label>
+            </Field>
           </div>
 
           {audience === "specific" && (
@@ -240,7 +271,7 @@ function NotificationDialog({ preset, customers, providers, onClose, onSend }: {
         <div className="flex gap-2 mt-5">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-mohemah-light text-sm font-bold">إلغاء</button>
           <button
-            onClick={() => title && body && onSend({ title, body, audience, scope, category, icon, accentColor, scheduledAt: scheduledAt || undefined, targetIds: audience === "specific" ? targets : undefined })}
+            onClick={() => title && body && onSend({ title, body, audience, scope, category, icon, accentColor, sound, scheduledAt: scheduledAt || undefined, targetIds: audience === "specific" ? targets : undefined })}
             className="flex-1 py-2.5 rounded-xl mohemah-btn-coral text-sm font-bold flex items-center justify-center gap-2"
           >
             <Send className="w-4 h-4" /> {scheduledAt ? "جدولة الإرسال" : "إرسال الآن"}
@@ -470,6 +501,7 @@ export function AdminPoliciesPage() {
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-mohemah-blue/10 text-mohemah-blue">{p.type}</span>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">{audienceLabel(p.audience)}</span>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-mohemah-light">v{p.version}</span>
+                {p.placements.map((k) => <span key={k} className="text-[10px] px-2 py-0.5 rounded-full border border-border">{POLICY_PLACEMENTS.find((o) => o.key === k)?.label.split(" (")[0] ?? k}</span>)}
                 <span className={`text-[10px] px-2 py-0.5 rounded-full ${p.published ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{p.published ? "منشورة" : "مسودة"}</span>
               </div>
               <div className="flex gap-1">
@@ -511,6 +543,8 @@ function PolicyDialog({ initial, seed, onClose, onSave }: {
   const [type, setType] = useState<AdminPolicy["type"]>(initial?.type ?? seed?.type ?? "سياسة عامة");
   const [version, setVersion] = useState(initial?.version ?? "1.0");
   const [published, setPublished] = useState(initial?.published ?? true);
+  const [placements, setPlacements] = useState<PolicyPlacement[]>(initial?.placements ?? ["registration", "account"]);
+  const options = POLICY_PLACEMENTS.filter((o) => audience === "all" || o.who === "all" || o.who === audience);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
@@ -540,6 +574,17 @@ function PolicyDialog({ initial, seed, onClose, onSave }: {
             <Field label="رقم الإصدار"><input value={version} onChange={(e) => setVersion(e.target.value)} className="admin-input" /></Field>
           </div>
 
+          <Field label="أين تظهر؟" hint="تظهر السياسة لمن اخترته في «موجّهة إلى»، وفي الأماكن المحددة هنا فقط.">
+            <div className="grid sm:grid-cols-2 gap-1.5">
+              {options.map((o) => (
+                <label key={o.key} className="flex items-center gap-2 text-xs border border-border rounded-lg px-2.5 py-2 cursor-pointer hover:bg-mohemah-light">
+                  <input type="checkbox" checked={placements.includes(o.key)} onChange={(e) => setPlacements((p) => e.target.checked ? [...p, o.key] : p.filter((x) => x !== o.key))} />
+                  <span>{o.label}</span>
+                </label>
+              ))}
+            </div>
+          </Field>
+
           <Field label="نص السياسة"><textarea value={body} onChange={(e) => setBody(e.target.value)} className="admin-input min-h-48" /></Field>
 
           <label className="flex items-center gap-2 text-xs bg-mohemah-light rounded-xl p-3">
@@ -550,7 +595,12 @@ function PolicyDialog({ initial, seed, onClose, onSave }: {
 
         <div className="flex gap-2 mt-5">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-mohemah-light text-sm font-bold">إلغاء</button>
-          <button onClick={() => title && body && onSave({ title, body, audience, type, version, published })} className="flex-1 py-2.5 rounded-xl mohemah-btn-coral text-sm font-bold">حفظ</button>
+          <button onClick={() => {
+            const where = placements.filter((k) => options.some((o) => o.key === k));
+            if (!title || !body) return toast.error("أكمل العنوان والنص");
+            if (!where.length) return toast.error("اختر مكاناً واحداً على الأقل لظهور السياسة");
+            onSave({ title, body, audience, type, version, published, placements: where });
+          }} className="flex-1 py-2.5 rounded-xl mohemah-btn-coral text-sm font-bold">حفظ</button>
         </div>
       </div>
     </div>

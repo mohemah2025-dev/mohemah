@@ -353,6 +353,7 @@ class MyServicesPanel extends StatefulWidget {
 
 class _MyServicesPanelState extends State<MyServicesPanel> {
   Set<String>? _mine;
+  Set<String>? _allowed;
   bool _saving = false;
 
   @override
@@ -363,8 +364,14 @@ class _MyServicesPanelState extends State<MyServicesPanel> {
 
   Future<void> _load() async {
     try {
-      final ids = jStrings(await ProviderScope.read(context).api.get('/api/provider/services'));
-      if (mounted) setState(() => _mine = ids.toSet());
+      final api = ProviderScope.read(context).api;
+      final res = await Future.wait([api.get('/api/provider/services'), api.get('/api/provider/services/allowed')]);
+      if (mounted) {
+        setState(() {
+          _mine = jStrings(res[0]).toSet();
+          _allowed = jStrings(res[1]).toSet();
+        });
+      }
     } catch (_) {
       if (mounted) setState(() => _mine = <String>{});
     }
@@ -395,16 +402,18 @@ class _MyServicesPanelState extends State<MyServicesPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final services = PublicScope.of(context).services;
+    final allowed = _allowed;
+    // Only the services the administration approved for this provider (chosen at registration).
+    final services = PublicScope.of(context).services.where((sv) => allowed == null || allowed.contains(sv.id) || (_mine?.contains(sv.id) ?? false)).toList();
     final mine = _mine;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Text('اضغط على الخدمة لتفعيلها أو إيقافها${_saving ? ' — جارٍ الحفظ…' : ''}',
+      Text('خدماتك المعتمدة — اضغط لتفعيلها أو إيقافها${_saving ? ' — جارٍ الحفظ…' : ''}',
           style: const TextStyle(fontSize: 12, color: Brand.mutedFg)),
       const SizedBox(height: 10),
       if (mine == null)
         const Loading()
       else if (services.isEmpty)
-        const Text('لا توجد خدمات بعد.', style: TextStyle(color: Brand.mutedFg))
+        const Text('لا توجد خدمات معتمدة لك بعد، تواصل مع الإدارة.', style: TextStyle(color: Brand.mutedFg))
       else
         Wrap(
           spacing: 14,
@@ -412,6 +421,10 @@ class _MyServicesPanelState extends State<MyServicesPanel> {
           alignment: WrapAlignment.center,
           children: [for (final sv in services) _ServiceCheck(service: sv, on: mine.contains(sv.id), onTap: () => _toggle(sv.id))],
         ),
+      if (mine != null && services.isNotEmpty) ...[
+        const SizedBox(height: 10),
+        const Text('لإضافة خدمة جديدة تواصل مع الإدارة لاعتمادها.', textAlign: TextAlign.center, style: TextStyle(fontSize: 11.5, color: Brand.mutedFg)),
+      ],
     ]);
   }
 }

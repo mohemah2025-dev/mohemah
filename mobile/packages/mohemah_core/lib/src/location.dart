@@ -245,3 +245,75 @@ class _MapPickerPageState extends State<MapPickerPage> {
     );
   }
 }
+
+/// "Current location" line for the home headers (both apps): the real GPS place (neighbourhood,
+/// street, city), asked once on first open; tapping refreshes it.
+class CurrentLocationLine extends StatefulWidget {
+  const CurrentLocationLine({super.key, this.fallback});
+  final String? fallback;
+  static final ValueNotifier<PickedLocation?> place = ValueNotifier(null);
+  static bool _asked = false;
+
+  @override
+  State<CurrentLocationLine> createState() => _CurrentLocationLineState();
+}
+
+class _CurrentLocationLineState extends State<CurrentLocationLine> {
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (CurrentLocationLine.place.value == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        final loc = await quietCurrentLocation(PublicScope.of(context).regions);
+        if (loc != null) {
+          CurrentLocationLine.place.value = loc;
+        } else if (!CurrentLocationLine._asked && mounted) {
+          // First open: ask for permission once so the header shows the real current place.
+          CurrentLocationLine._asked = true;
+          await _locate();
+        }
+      });
+    }
+  }
+
+  Future<void> _locate() async {
+    setState(() => _busy = true);
+    final regions = PublicScope.of(context).regions;
+    final pos = await currentPosition(context);
+    if (pos != null) CurrentLocationLine.place.value = await describeLocation(pos.latitude, pos.longitude, regions);
+    if (mounted) setState(() => _busy = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<PickedLocation?>(
+      valueListenable: CurrentLocationLine.place,
+      builder: (context, loc, _) => InkWell(
+        onTap: _busy ? null : _locate,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(children: [
+            _busy
+                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : Icon(loc == null ? Icons.my_location_outlined : Icons.location_on_outlined, size: 15),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                loc?.address ?? (widget.fallback != null ? '${widget.fallback} • حدّد موقعك الحالي' : 'حدّد موقعك الحالي'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12.5, color: Colors.white.withValues(alpha: 0.9)),
+              ),
+            ),
+            const SizedBox(width: 2),
+            Icon(Icons.keyboard_arrow_down_outlined, size: 16, color: Colors.white.withValues(alpha: 0.9)),
+          ]),
+        ),
+      ),
+    );
+  }
+}

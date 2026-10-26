@@ -58,7 +58,7 @@ class _ProviderOrdersTabState extends State<ProviderOrdersTab> {
             child: feed == null
                 ? (store.error != null ? ListView(children: [ErrorRetry(message: store.error!, onRetry: store.refresh)]) : const Loading())
                 : switch (section) {
-                    0 => _AvailableList(orders: feed.available, online: feed.online),
+                    0 => _AvailableList(orders: feed.available, online: feed.online, servicesCount: feed.servicesCount, region: feed.region),
                     1 => _ActiveList(jobs: feed.active),
                     _ => _HistoryList(items: store.history, onLoad: _loadHistory),
                   },
@@ -70,9 +70,11 @@ class _ProviderOrdersTabState extends State<ProviderOrdersTab> {
 }
 
 class _AvailableList extends StatelessWidget {
-  const _AvailableList({required this.orders, required this.online});
+  const _AvailableList({required this.orders, required this.online, required this.servicesCount, this.region});
   final List<OfferedOrder> orders;
   final bool online;
+  final int servicesCount;
+  final String? region;
 
   @override
   Widget build(BuildContext context) {
@@ -81,7 +83,11 @@ class _AvailableList extends StatelessWidget {
         EmptyState(
           icon: Icons.inbox_outlined,
           title: 'لا توجد طلبات متاحة الآن',
-          message: online ? 'ستظهر هنا الطلبات الجديدة في خدماتك ومدينتك.' : 'اتصل من الصفحة الرئيسية لتصلك الطلبات الجديدة فور وصولها.',
+          message: servicesCount == 0
+              ? 'لم تفعّل أي خدمة بعد. من الرئيسية اضغط «خدماتي» وفعّل الخدمات التي تقدمها لتصلك طلباتها.'
+              : online
+                  ? 'ستظهر هنا الطلبات الجديدة في خدماتك ($servicesCount)${region != null ? ' داخل مدينة $region' : ''}.'
+                  : 'اتصل من الصفحة الرئيسية لتصلك الطلبات الجديدة فور وصولها.',
         ),
       ]);
     }
@@ -367,12 +373,16 @@ class JobDetailPage extends StatelessWidget {
             TextButton.icon(
               style: TextButton.styleFrom(foregroundColor: Brand.danger),
               onPressed: () async {
-                final reason = await promptText(context, title: 'الاعتذار عن الطلب', hint: 'سبب الاعتذار (اختياري)', ok: 'تأكيد الاعتذار', danger: true);
+                final reason = await promptText(context, title: 'إلغاء الطلب بعد القبول', hint: 'اكتب سبب الإلغاء (إلزامي)', ok: 'تأكيد الإلغاء', danger: true);
                 if (reason == null || !context.mounted) return;
+                if (reason.trim().length < 3) {
+                  showSnack(context, 'سبب الإلغاء إلزامي، اكتبه ليُعرض على الإدارة', error: true);
+                  return;
+                }
                 try {
                   await store.release(j.id, reason);
                   if (context.mounted) {
-                    showSnack(context, 'تم الاعتذار، وعاد الطلب لمقدمي الخدمة الآخرين');
+                    showSnack(context, 'تم إلغاء الطلب، وعاد لمقدمي الخدمة الآخرين');
                     Navigator.pop(context);
                   }
                 } catch (e) {
@@ -380,9 +390,9 @@ class JobDetailPage extends StatelessWidget {
                 }
               },
               icon: const Icon(Icons.undo_outlined),
-              label: const Text('الاعتذار عن الطلب'),
+              label: const Text('إلغاء الطلب'),
             ),
-            const Text('عند الاعتذار يعود الطلب لمقدمي الخدمة الآخرين ولا تُسترجع الكوينز.', textAlign: TextAlign.center, style: TextStyle(fontSize: 11.5, color: Brand.mutedFg)),
+            const Text('عند الإلغاء يعود الطلب لمقدمي الخدمة الآخرين ولا تُسترجع الكوينز، ويُسجَّل السبب لدى الإدارة.', textAlign: TextAlign.center, style: TextStyle(fontSize: 11.5, color: Brand.mutedFg)),
           ],
         ]),
       ),

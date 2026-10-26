@@ -256,6 +256,32 @@ ${services.length ? `<ul>${services.map((x) => `<li>${esc(x.name)}</li>`).join("
     const ok = new Set(approved);
     const name = Object.fromEntries(services.map((s) => [s.id, s.name]));
     const p = perf!;
+    // Charts: the last 12 months (Riyadh time) and the rating distribution.
+    const since12 = new Date(Date.now() - 365 * DAY).toISOString();
+    const month = (col: string) => `substr(datetime(${col}, '+3 hours'), 1, 7)`;
+    const [mOffered, mAccepted, mCompleted, mReleased, mRejected, ratingDist, bySvc] = await Promise.all([
+      all<{ m: string; n: number }>(c.env.DB, `SELECT ${month("offered_at")} AS m, COUNT(*) AS n FROM order_offers WHERE provider_id = ? AND offered_at >= ? GROUP BY m`, id, since12),
+      all<{ m: string; n: number }>(c.env.DB, `SELECT ${month("accepted_at")} AS m, COUNT(*) AS n FROM orders WHERE provider_id = ? AND accepted_at >= ? GROUP BY m`, id, since12),
+      all<{ m: string; n: number }>(c.env.DB, `SELECT ${month("completed_at")} AS m, COUNT(*) AS n FROM orders WHERE provider_id = ? AND status = 'completed' AND completed_at >= ? GROUP BY m`, id, since12),
+      all<{ m: string; n: number }>(c.env.DB, `SELECT ${month("created_at")} AS m, COUNT(*) AS n FROM order_rejections WHERE provider_id = ? AND kind = 'release' AND created_at >= ? GROUP BY m`, id, since12),
+      all<{ m: string; n: number }>(c.env.DB, `SELECT ${month("created_at")} AS m, COUNT(*) AS n FROM order_rejections WHERE provider_id = ? AND kind = 'reject' AND created_at >= ? GROUP BY m`, id, since12),
+      all<{ rating: number; n: number }>(c.env.DB, "SELECT rating, COUNT(*) AS n FROM orders WHERE provider_id = ? AND rating IS NOT NULL GROUP BY rating", id),
+      all<{ name: string; n: number }>(c.env.DB, "SELECT service_name AS name, COUNT(*) AS n FROM orders WHERE provider_id = ? AND status = 'completed' GROUP BY service_name ORDER BY n DESC LIMIT 8", id),
+    ]);
+    const months: string[] = [];
+    for (let i = 11; i >= 0; i--) { const d = new Date(Date.now() + 3 * 3600000); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - i); months.push(d.toISOString().slice(0, 7)); }
+    const pick = (rows: { m: string; n: number }[], m: string) => rows.find((x) => x.m === m)?.n ?? 0;
+    const released12 = new Map(mReleased.map((x) => [x.m, x.n]));
+    const charts = {
+      monthly: months.map((m) => {
+        const accepted = pick(mAccepted, m) + (released12.get(m) ?? 0);
+        const rejected = pick(mRejected, m);
+        // Orders that reached the provider (offers are logged since this report exists; accepted/declined ones reached them too).
+        return { month: m, offered: Math.max(pick(mOffered, m), accepted + rejected), accepted, completed: pick(mCompleted, m), rejected, cancelled: pick(mReleased, m) };
+      }),
+      ratings: [5, 4, 3, 2, 1].map((r) => ({ rating: r, n: ratingDist.find((x) => x.rating === r)?.n ?? 0 })),
+      services: bySvc,
+    };
     const accepted = p.accepted_now + p.released;
     return json({
       user: u,
@@ -268,7 +294,7 @@ ${services.length ? `<ul>${services.map((x) => `<li>${esc(x.name)}</li>`).join("
         accept_rate: p.offered ? Math.round((accepted / p.offered) * 100) : null,
         flag_ignored: p.ignored >= 5, flag_cancelled: p.released >= 3,
       },
-      reasons, ratings, customers, shifts,
+      reasons, ratings, customers, shifts, charts,
       actions: await Promise.all(actions.map(async (a) => ({ ...a, letter_url: a.letter_key ? await signFileUrl(c.env, a.letter_key) : null, letter_key: undefined }))),
     });
   });

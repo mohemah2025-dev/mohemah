@@ -140,7 +140,7 @@ export async function verifyFileSignature(env: Env, key: string, e: string, s: s
 
 /* ---------- Admin permissions per section ---------- */
 export const ADMIN_SECTIONS = [
-  "dashboard", "customers", "providers", "services", "finance", "billing", "gateways",
+  "dashboard", "analytics", "customers", "providers", "services", "finance", "billing", "gateways",
   "notifications", "messages", "ads", "policies", "integrations", "staff", "settings",
 ] as const;
 export type AdminSection = (typeof ADMIN_SECTIONS)[number];
@@ -150,6 +150,7 @@ export type AdminPermissions = Record<AdminSection, PermLevel>;
 /** Staff without custom permissions keep the previous behaviour: everything except administration pages. */
 export function defaultStaffPermissions(): AdminPermissions {
   const p = Object.fromEntries(ADMIN_SECTIONS.map((s) => [s, "edit"])) as AdminPermissions;
+  p.analytics = "view";
   p.gateways = "view";
   p.settings = "view";
   p.integrations = "none";

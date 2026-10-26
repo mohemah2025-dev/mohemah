@@ -134,9 +134,24 @@ export function registerAdminRoutes(r: Router) {
       const ids = names.length ? (await all<{ id: string }>(c.env.DB, `SELECT id FROM services WHERE name IN ${inList(names.length)} OR id IN ${inList(names.length)}`, ...names, ...names)).map((x) => x.id) : [];
       batch.push(stmt(c.env.DB, "DELETE FROM provider_services WHERE provider_id = ?", id));
       ids.forEach((sid) => batch.push(stmt(c.env.DB, "INSERT OR IGNORE INTO provider_services (provider_id, service_id) VALUES (?,?)", id, sid)));
+      // Services set by the administration become the provider's approved services.
+      batch.push(stmt(c.env.DB, "UPDATE users SET approved_services = ? WHERE id = ?", JSON.stringify(ids), id));
     }
     if (active === false) batch.push(stmt(c.env.DB, "DELETE FROM sessions WHERE user_id = ?", id));
-    if (batch.length) await c.env.DB.batch(batch);
+    for (let i = 0; i < batch.length; i += 80) await c.env.DB.batch(batch.slice(i, i + 80));
+    return json({ ok: true });
+  });
+
+  /** Deletes every main service with its sub-services (orders keep their service names). */
+  r.post("/api/admin/services/delete-all", async (c) => {
+    await requirePerm(c, "services", "edit");
+    const b = await readJson(c.req);
+    if (b.confirm !== "حذف") fail(400, "confirm_required", "اكتب كلمة «حذف» للتأكيد");
+    await c.env.DB.batch([
+      stmt(c.env.DB, "DELETE FROM sub_services"),
+      stmt(c.env.DB, "DELETE FROM provider_services"),
+      stmt(c.env.DB, "DELETE FROM services"),
+    ]);
     return json({ ok: true });
   });
 
@@ -271,6 +286,7 @@ export function registerAdminRoutes(r: Router) {
     await c.env.DB.batch([
       ...docStmts,
       stmt(c.env.DB, "UPDATE users SET verification_status = ?, review_note = ?, reviewed_at = ?, reviewed_by = ?, updated_at = ? WHERE id = ?", approve ? "approved" : "rejected", note, t, admin.id, t, c.params.id),
+      ...(approve ? [stmt(c.env.DB, "UPDATE users SET approved_services = ? WHERE id = ?", JSON.stringify(services), c.params.id)] : []),
       ...(approve ? [
         stmt(c.env.DB, "INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, 'provider')", c.params.id),
         ...services.map((sid) => stmt(c.env.DB, "INSERT OR IGNORE INTO provider_services (provider_id, service_id) SELECT ?, id FROM services WHERE id = ?", c.params.id, sid)),
@@ -353,7 +369,7 @@ export function registerAdminRoutes(r: Router) {
       if (existing.has(f.name as string)) continue;
       const id = uid();
       batch.push(stmt(c.env.DB, "INSERT INTO services (id, name, description, icon, color, coin_price, sort_order) VALUES (?,?,?,?,?,?,?)", id, f.name, f.description ?? null, f.icon ?? "Wrench", f.color ?? "blue", f.coin_price ?? 5, order++));
-      const subs = Array.isArray(m.subs) ? (m.subs as Record<string, unknown>[]).slice(0, 30) : [];
+      const subs = Array.isArray(m.subs) ? (m.subs as Record<string, unknown>[]).slice(0, 60) : [];
       subs.forEach((s, i) => {
         const sf = subFields({ ...s, coin_price: s.coinPrice ?? s.coin_price, delivery_mode: s.deliveryMode ?? s.delivery_mode, color: f.color }, false);
         batch.push(stmt(c.env.DB, "INSERT INTO sub_services (id, service_id, name, description, icon, color, coin_price, delivery_mode, sort_order) VALUES (?,?,?,?,?,?,?,?,?)",

@@ -152,20 +152,25 @@ class _AboutPage extends StatelessWidget {
 class _JoinProvidersPage extends StatelessWidget {
   const _JoinProvidersPage();
   @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('انضم كمقدم خدمة')),
-        body: ListView(padding: const EdgeInsets.all(20), children: const [
-          Icon(Icons.engineering_outlined, size: 72, color: Brand.primary),
-          SizedBox(height: 14),
-          Text('هل لديك مهارة أو خبرة؟', textAlign: TextAlign.center, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-          SizedBox(height: 10),
-          Text(
-            'حمّل تطبيق «مهمة شريك»، سجّل بياناتك وأرفق هويتك وشهادتك، وابدأ استقبال الطلبات بعد موافقة الإدارة.',
-            textAlign: TextAlign.center,
-            style: TextStyle(height: 1.8),
-          ),
-        ]),
-      );
+  Widget build(BuildContext context) {
+    final s = PublicScope.of(context).settings;
+    return Scaffold(
+      appBar: AppBar(title: const Text('انضم كمقدم خدمة')),
+      body: ListView(padding: const EdgeInsets.all(20), children: [
+        const Icon(Icons.engineering_outlined, size: 72, color: Brand.primary),
+        const SizedBox(height: 14),
+        const Text('هل لديك مهارة أو خبرة؟', textAlign: TextAlign.center, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 10),
+        const Text(
+          'حمّل تطبيق «مهمة شريك»، سجّل بياناتك وأرفق هويتك وشهادتك، وابدأ استقبال الطلبات بعد موافقة الإدارة.',
+          textAlign: TextAlign.center,
+          style: TextStyle(height: 1.8),
+        ),
+        const SizedBox(height: 22),
+        AppDownloadButtons(ios: s.providerIosUrl, android: s.providerAndroidUrl, other: s.providerOtherUrl),
+      ]),
+    );
+  }
 }
 
 /// Short explanation of how ordering works (opened from «حسابي»).

@@ -170,18 +170,105 @@ export function parsePermissions(raw: unknown): AdminPermissions {
 }
 
 export async function permissionsOf(c: Ctx, u: AuthUser): Promise<AdminPermissions> {
-  if (u.roles.includes("admin")) return Object.fromEntries(ADMIN_SECTIONS.map((s) => [s, "edit"])) as AdminPermissions;
-  const row = await first<{ admin_permissions: string | null }>(c.env.DB, "SELECT admin_permissions FROM users WHERE id = ?", u.id);
-  return parsePermissions(row?.admin_permissions);
+  return (await accessOf(c, u)).perms;
+}
+
+/* ---------- Fine-grained actions inside each page ---------- */
+export const ADMIN_FEATURES: Partial<Record<AdminSection, readonly string[]>> = {
+  customers: ["edit", "suspend", "password"],
+  providers: ["approve", "edit", "suspend", "password", "balance", "remind"],
+  services: ["add", "edit", "delete"],
+  billing: ["grant", "promotions", "prices"],
+  notifications: ["send", "delete"],
+  messages: ["reply", "assign", "close", "start"],
+  ads: ["add", "edit", "delete"],
+  policies: ["add", "edit", "delete"],
+  settings: ["general", "branding", "links"],
+  staff: ["add", "permissions", "edit", "suspend"],
+};
+export type AdminFeatures = Partial<Record<AdminSection, string[]>>;
+
+/** Only known actions are kept; a page missing from the map means "all actions". */
+export function parseFeatures(raw: unknown): AdminFeatures | null {
+  let obj: Record<string, unknown> | null = null;
+  if (typeof raw === "string" && raw) { try { obj = JSON.parse(raw); } catch { obj = null; } } else if (raw && typeof raw === "object") obj = raw as Record<string, unknown>;
+  if (!obj) return null;
+  const out: AdminFeatures = {};
+  for (const [s, list] of Object.entries(ADMIN_FEATURES)) {
+    const v = obj[s];
+    if (Array.isArray(v)) out[s as AdminSection] = v.filter((x): x is string => typeof x === "string" && list!.includes(x));
+  }
+  return out;
+}
+
+export async function accessOf(c: Ctx, u: AuthUser): Promise<{ perms: AdminPermissions; features: AdminFeatures | null }> {
+  if (u.roles.includes("admin")) return { perms: Object.fromEntries(ADMIN_SECTIONS.map((s) => [s, "edit"])) as AdminPermissions, features: null };
+  const row = await first<{ admin_permissions: string | null; admin_features: string | null }>(c.env.DB, "SELECT admin_permissions, admin_features FROM users WHERE id = ?", u.id);
+  return { perms: parsePermissions(row?.admin_permissions), features: parseFeatures(row?.admin_features) };
+}
+
+/** Which page action an admin request performs (method + path). */
+const FEATURE_ROUTES: [string, RegExp, AdminSection, string][] = [
+  ["POST", /^\/api\/admin\/(services|sub-services|services\/suggested)$/, "services", "add"],
+  ["PATCH", /^\/api\/admin\/(services|sub-services)\/[^/]+$/, "services", "edit"],
+  ["POST", /^\/api\/admin\/reorder$/, "services", "edit"],
+  ["DELETE", /^\/api\/admin\/(services|sub-services)\/[^/]+$/, "services", "delete"],
+  ["POST", /^\/api\/admin\/services\/delete-all$/, "services", "delete"],
+  ["POST", /^\/api\/admin\/grant$/, "billing", "grant"],
+  ["*", /^\/api\/admin\/promotions/, "billing", "promotions"],
+  ["POST", /^\/api\/admin\/notifications$/, "notifications", "send"],
+  ["DELETE", /^\/api\/admin\/notifications\//, "notifications", "delete"],
+  ["POST", /^\/api\/admin\/ads$/, "ads", "add"],
+  ["PATCH", /^\/api\/admin\/ads\//, "ads", "edit"],
+  ["DELETE", /^\/api\/admin\/ads\//, "ads", "delete"],
+  ["POST", /^\/api\/admin\/policies$/, "policies", "add"],
+  ["PATCH", /^\/api\/admin\/policies\//, "policies", "edit"],
+  ["DELETE", /^\/api\/admin\/policies\//, "policies", "delete"],
+  ["POST", /^\/api\/admin\/messages$/, "messages", "reply"],
+  ["POST", /^\/api\/admin\/support\/[^/]+\/reply$/, "messages", "reply"],
+  ["POST", /^\/api\/admin\/support\/[^/]+\/assign$/, "messages", "assign"],
+  ["POST", /^\/api\/admin\/support\/[^/]+\/close$/, "messages", "close"],
+  ["POST", /^\/api\/admin\/support\/start$/, "messages", "start"],
+  ["POST", /^\/api\/admin\/(applications|service-requests)\/[^/]+\/review$/, "providers", "approve"],
+  ["POST", /^\/api\/admin\/providers\/[^/]+\/remind$/, "providers", "remind"],
+  ["POST", /^\/api\/admin\/providers\/[^/]+\/sync-services$/, "providers", "edit"],
+  ["POST", /^\/api\/admin\/staff$/, "staff", "add"],
+  ["PUT", /^\/api\/admin\/users\/[^/]+\/permissions$/, "staff", "permissions"],
+];
+
+export const FEATURE_LABELS: Record<string, string> = {
+  edit: "التعديل", suspend: "الإيقاف والحذف", password: "تغيير كلمة المرور", approve: "القبول والرفض", balance: "الرصيد والهدايا",
+  remind: "التنبيهات", add: "الإضافة", delete: "الحذف", grant: "منح الاشتراكات", promotions: "العروض والخصومات", prices: "الأسعار",
+  send: "الإرسال", reply: "الرد", assign: "الإسناد", close: "إنهاء المحادثات", start: "بدء محادثة", general: "البيانات العامة",
+  branding: "الشعارات والألوان", links: "روابط التحميل", permissions: "تعديل الصلاحيات",
+};
+
+function featureOk(features: AdminFeatures | null, section: AdminSection, action: string) {
+  const list = features?.[section];
+  return !list || list.includes(action);
+}
+
+/** A staff member needs `action` inside `section` (edit access + the action ticked, or no restriction for that page). */
+export async function requireFeature(c: Ctx, section: AdminSection, action: string) {
+  const u = await requirePerm(c, section, "edit");
+  if (u.roles.includes("admin")) return u;
+  const { features } = await accessOf(c, u);
+  if (!featureOk(features, section, action)) fail(403, "forbidden", `لا تملك صلاحية «${FEATURE_LABELS[action] ?? action}» في هذه الصفحة`);
+  return u;
 }
 
 /** Admin user with at least `level` on one of `sections` (the owner always passes). */
 export async function requirePerm(c: Ctx, sections: AdminSection | AdminSection[], level: "view" | "edit") {
   const u = await requireAdmin(c);
   if (u.roles.includes("admin")) return u;
-  const p = await permissionsOf(c, u);
+  const { perms: p, features } = await accessOf(c, u);
   const list = Array.isArray(sections) ? sections : [sections];
   const ok = list.some((s) => (level === "view" ? p[s] !== "none" : p[s] === "edit"));
   if (!ok) fail(403, "forbidden", level === "view" ? "لا تملك صلاحية عرض هذا القسم" : "لا تملك صلاحية التعديل في هذا القسم");
+  if (level === "edit" && features) {
+    const path = c.url.pathname, method = c.req.method;
+    const rule = FEATURE_ROUTES.find(([m, re, s]) => (m === "*" || m === method) && re.test(path) && list.includes(s));
+    if (rule && !featureOk(features, rule[2], rule[3])) fail(403, "forbidden", `لا تملك صلاحية «${FEATURE_LABELS[rule[3]] ?? rule[3]}» في هذه الصفحة`);
+  }
   return u;
 }

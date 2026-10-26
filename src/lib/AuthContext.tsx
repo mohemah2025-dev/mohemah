@@ -50,8 +50,24 @@ export const ADMIN_SECTIONS = [
 export type AdminSection = (typeof ADMIN_SECTIONS)[number]["key"];
 export type PermLevel = "none" | "view" | "edit";
 export type AdminPermissions = Record<AdminSection, PermLevel>;
+/** Allowed actions inside a page ({} or a missing page = every action of that page). */
+export type AdminFeatures = Partial<Record<AdminSection, string[]>>;
 
-export type MePayload = { profile: AppProfile | null; roles: AppRole[]; app: App | null; subscription_end?: string | null; permissions?: AdminPermissions | null; token?: string };
+/** The actions of each page that can be granted one by one. */
+export const ADMIN_FEATURES: Partial<Record<AdminSection, { key: string; label: string }[]>> = {
+  customers: [{ key: "edit", label: "تعديل البيانات" }, { key: "suspend", label: "الإيقاف والحذف" }, { key: "password", label: "تغيير كلمة المرور" }],
+  providers: [{ key: "approve", label: "قبول ورفض الطلبات والخدمات" }, { key: "edit", label: "تعديل البيانات والخدمات" }, { key: "suspend", label: "الإيقاف والحذف" }, { key: "password", label: "تغيير كلمة المرور" }, { key: "balance", label: "تعديل الرصيد" }, { key: "remind", label: "إرسال التنبيهات" }],
+  services: [{ key: "add", label: "إضافة" }, { key: "edit", label: "تعديل وترتيب" }, { key: "delete", label: "حذف" }],
+  billing: [{ key: "grant", label: "منح اشتراك أو كوينز" }, { key: "promotions", label: "العروض والخصومات" }, { key: "prices", label: "أسعار الباقات" }],
+  notifications: [{ key: "send", label: "إرسال" }, { key: "delete", label: "حذف" }],
+  messages: [{ key: "reply", label: "الرد" }, { key: "assign", label: "إسناد لموظف" }, { key: "close", label: "إنهاء المحادثة" }, { key: "start", label: "بدء محادثة" }],
+  ads: [{ key: "add", label: "إضافة" }, { key: "edit", label: "تعديل وإيقاف" }, { key: "delete", label: "حذف" }],
+  policies: [{ key: "add", label: "إضافة" }, { key: "edit", label: "تعديل" }, { key: "delete", label: "حذف" }],
+  settings: [{ key: "general", label: "البيانات العامة" }, { key: "branding", label: "الشعارات والألوان" }, { key: "links", label: "روابط التحميل" }],
+  staff: [{ key: "add", label: "إضافة مستخدم" }, { key: "permissions", label: "تعديل الصلاحيات" }, { key: "edit", label: "تعديل البيانات وكلمة المرور" }, { key: "suspend", label: "الإيقاف والحذف" }],
+};
+
+export type MePayload = { profile: AppProfile | null; roles: AppRole[]; app: App | null; subscription_end?: string | null; permissions?: AdminPermissions | null; features?: AdminFeatures | null; token?: string };
 
 interface AuthState {
   app: App;
@@ -67,6 +83,9 @@ interface AuthState {
   permissions: AdminPermissions | null;
   /** Admin panel: may this account view / edit a section? */
   can: (section: AdminSection, level?: "view" | "edit") => boolean;
+  features: AdminFeatures | null;
+  /** May this account perform `action` inside `section` (edit access + the action granted)? */
+  canDo: (section: AdminSection, action: string) => boolean;
   signIn: (identifier: string, password: string) => Promise<MePayload>;
   acceptSession: (payload: MePayload) => void;
   signOut: () => Promise<void>;
@@ -94,7 +113,7 @@ export function AuthProvider({ app, children }: { app: App; children: ReactNode 
 
   const acceptSession = useCallback((payload: MePayload) => {
     if (payload.token) session.set(app, payload.token);
-    setMe({ profile: payload.profile, roles: payload.roles, app: payload.app, subscription_end: payload.subscription_end, permissions: payload.permissions ?? null });
+    setMe({ profile: payload.profile, roles: payload.roles, app: payload.app, subscription_end: payload.subscription_end, permissions: payload.permissions ?? null, features: payload.features ?? null });
   }, [app]);
 
   const signIn = useCallback(async (identifier: string, password: string) => {
@@ -127,6 +146,13 @@ export function AuthProvider({ app, children }: { app: App; children: ReactNode 
         if (roles.includes("admin")) return true;
         const v = me.permissions?.[section] ?? "none";
         return level === "view" ? v !== "none" : v === "edit";
+      },
+      features: me.features ?? null,
+      canDo: (section, action) => {
+        if (roles.includes("admin")) return true;
+        if ((me.permissions?.[section] ?? "none") !== "edit") return false;
+        const list = me.features?.[section];
+        return !list || list.includes(action);
       },
       signIn,
       acceptSession,

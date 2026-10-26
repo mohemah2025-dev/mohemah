@@ -27,10 +27,58 @@ const nav: { to: string; label: string; icon: typeof LayoutDashboard; section: A
   { to: "/admin/settings", label: "الإعدادات", icon: Settings, section: "settings", group: "الإدارة والإعدادات" },
 ];
 
-const GROUP_ORDER = ["الرئيسية", "المستخدمون", "الخدمات والمحتوى", "المالية", "التواصل", "الإدارة والإعدادات"];
+const GROUP_ORDER = ["الرئيسية", "المستخدمون", "المالية", "الخدمات والمحتوى", "التواصل", "الإدارة والإعدادات"];
+
+type Badges = { counts: Record<string, number>; items: { section: string; to: string; count: number; label: string }[]; total: number };
+
+/** Pending work per page (applications, unanswered messages…), refreshed every 30 s and on every page change. */
+function useAdminBadges(path: string) {
+  const [b, setB] = useState<Badges>({ counts: {}, items: [], total: 0 });
+  useEffect(() => {
+    let alive = true;
+    const load = () => api<Badges>("/api/admin/badges", { app: "admin" }).then((x) => alive && setB(x)).catch(() => {});
+    load();
+    const t = setInterval(load, 30000);
+    const onFocus = () => load();
+    window.addEventListener("focus", onFocus);
+    return () => { alive = false; clearInterval(t); window.removeEventListener("focus", onFocus); };
+  }, [path]);
+  return b;
+}
+
+function CountPill({ n }: { n?: number }) {
+  if (!n) return null;
+  return <span className="ms-auto min-w-5 h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-bold grid place-items-center animate-in zoom-in">{n > 99 ? "99+" : n}</span>;
+}
+
+function BellMenu({ badges }: { badges: Badges }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative">
+      <Button variant="ghost" size="icon" aria-label="التنبيهات" onClick={() => setOpen((v) => !v)} className="relative">
+        <Bell />
+        {badges.total > 0 && <span className="absolute -top-0.5 -left-0.5 min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold grid place-items-center">{badges.total > 99 ? "99+" : badges.total}</span>}
+      </Button>
+      {open && <>
+        <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+        <div className="absolute left-0 top-11 z-40 w-80 max-w-[90vw] bg-card border border-border rounded-2xl shadow-xl overflow-hidden">
+          <p className="px-4 py-3 text-sm font-bold border-b border-border">بانتظار إجراء</p>
+          {badges.items.length === 0
+            ? <p className="px-4 py-6 text-center text-xs text-muted-foreground">لا توجد مهام معلّقة 👌</p>
+            : badges.items.map((x, i) => (
+              <Link key={i} to={x.to} onClick={() => setOpen(false)} className="flex items-center gap-3 px-4 py-3 text-xs hover:bg-mohemah-light border-b border-border last:border-0">
+                <span className="min-w-6 h-6 px-1.5 rounded-full bg-red-500/10 text-red-600 font-bold grid place-items-center">{x.count}</span>
+                <span className="flex-1">{x.label}</span>
+              </Link>
+            ))}
+        </div>
+      </>}
+    </div>
+  );
+}
 
 /** Sidebar links grouped by category, in a fixed order. */
-function NavGroups({ items, path, onPick, large = false }: { items: typeof nav; path: string; onPick?: () => void; large?: boolean }) {
+function NavGroups({ items, path, onPick, large = false, counts = {} }: { items: typeof nav; path: string; onPick?: () => void; large?: boolean; counts?: Record<string, number> }) {
   return (
     <>
       {GROUP_ORDER.map((g) => {
@@ -46,7 +94,7 @@ function NavGroups({ items, path, onPick, large = false }: { items: typeof nav; 
                 return (
                   <Link key={n.to} to={n.to} onClick={onPick}
                     className={`relative flex items-center gap-3 px-3 ${large ? "py-3 text-sm" : "py-2 text-xs"} rounded-lg transition ${active ? "admin-nav-active font-bold" : "hover:bg-mohemah-light text-foreground"}`}>
-                    <Icon className="w-4 h-4" /><span>{n.label}</span>
+                    <Icon className="w-4 h-4" /><span>{n.label}</span>{!n.exact && <CountPill n={counts[n.section]} />}
                   </Link>
                 );
               })}
@@ -164,6 +212,7 @@ function AdminShell({ children }: { children?: ReactNode }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const { settings } = useAdmin();
   useAdminBranding(settings.primaryColor, settings.logoUrl, settings.appName);
+  const badges = useAdminBadges(path);
   const initials = (displayName || "م").trim().slice(0, 2).toUpperCase();
 
   return (
@@ -179,7 +228,7 @@ function AdminShell({ children }: { children?: ReactNode }) {
           </div>
         </div>
         <nav className="flex-1 p-3 overflow-y-auto">
-          <NavGroups items={visibleNav} path={path} />
+          <NavGroups items={visibleNav} path={path} counts={badges.counts} />
         </nav>
         <Button variant="unstyled" size="unstyled" onClick={async () => { await signOut(); navigate({ to: "/admin" }); }}
           className="m-3 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-sm bg-mohemah-light hover:bg-red-50 hover:text-red-600 transition">
@@ -191,7 +240,7 @@ function AdminShell({ children }: { children?: ReactNode }) {
         {menuOpen && <div className="fixed inset-0 z-50 bg-foreground/30 md:hidden" onClick={() => setMenuOpen(false)}>
           <aside className="w-64 max-w-[85vw] h-dvh bg-card p-4 overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4"><p className="font-bold">إدارة مهمة</p><Button variant="ghost" size="icon" aria-label="إغلاق القائمة" onClick={() => setMenuOpen(false)}><X /></Button></div>
-            <nav><NavGroups items={visibleNav} path={path} onPick={() => setMenuOpen(false)} large /></nav>
+            <nav><NavGroups items={visibleNav} path={path} onPick={() => setMenuOpen(false)} large counts={badges.counts} /></nav>
             <Button variant="secondary" className="w-full mt-4" onClick={async () => { await signOut(); navigate({ to: "/admin" }); }}><LogOut />تسجيل الخروج</Button>
           </aside>
         </div>}
@@ -202,6 +251,7 @@ function AdminShell({ children }: { children?: ReactNode }) {
             <input placeholder="بحث سريع..." className="w-full bg-mohemah-light rounded-xl pr-10 pl-3 py-2 text-sm outline-none focus:ring-2 focus:ring-mohemah-coral/40" />
           </div>
           <div className="flex shrink-0 items-center gap-3">
+            <BellMenu badges={badges} />
             <div className="flex items-center gap-2">
               <div className="w-9 h-9 rounded-full bg-mohemah-blue text-primary-foreground flex items-center justify-center text-xs font-bold">{initials}</div>
               <div className="hidden sm:block text-right">

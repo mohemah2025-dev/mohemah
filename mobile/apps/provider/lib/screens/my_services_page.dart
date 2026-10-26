@@ -289,12 +289,122 @@ class _RequestServicePageState extends State<_RequestServicePage> {
   }
 }
 
-/// Opens the printable experience letter in the browser.
+/// Asks for the letter period (whole period, a from–to range or up to a date), then opens the printable letter.
+/// The letter carries a reference number and a QR code that verifies it.
 Future<void> openExperienceLetter(BuildContext context) async {
+  final range = await showModalBottomSheet<(DateTime?, DateTime?)>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (_) => const _LetterPeriodSheet(),
+  );
+  if (range == null || !context.mounted) return;
+  String d(DateTime x) => '${x.year.toString().padLeft(4, '0')}-${x.month.toString().padLeft(2, '0')}-${x.day.toString().padLeft(2, '0')}';
+  final q = [if (range.$1 != null) 'from=${d(range.$1!)}', if (range.$2 != null) 'to=${d(range.$2!)}'].join('&');
   try {
-    final r = jMap(await ProviderScope.read(context).api.get('/api/provider/experience-letter'));
-    if (context.mounted) await openUrl(context, jS(r['url']));
+    final r = jMap(await ProviderScope.read(context).api.get('/api/provider/experience-letter${q.isEmpty ? '' : '?$q'}'));
+    if (context.mounted) {
+      showSnack(context, 'صدر الخطاب برقم مرجعي ${jS(r['ref'])}');
+      await openUrl(context, jS(r['url']));
+    }
   } catch (e) {
     if (context.mounted) showError(context, e);
+  }
+}
+
+class _LetterPeriodSheet extends StatefulWidget {
+  const _LetterPeriodSheet();
+  @override
+  State<_LetterPeriodSheet> createState() => _LetterPeriodSheetState();
+}
+
+class _LetterPeriodSheetState extends State<_LetterPeriodSheet> {
+  int _mode = 0; // 0 whole period, 1 from–to, 2 up to a date
+  DateTimeRange? _range;
+  DateTime? _date;
+
+  String _fmt(DateTime x) => '${x.day}/${x.month}/${x.year}';
+
+  Future<void> _pickRange() async {
+    final now = DateTime.now();
+    final r = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(now.year - 10),
+      lastDate: now,
+      initialDateRange: _range,
+      helpText: 'فترة الخطاب',
+      saveText: 'تم',
+    );
+    if (r != null) setState(() => _range = r);
+  }
+
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final r = await showDatePicker(context: context, firstDate: DateTime(now.year - 10), lastDate: now, initialDate: _date ?? now, helpText: 'حتى تاريخ');
+    if (r != null) setState(() => _date = r);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Widget option(int v, IconData icon, String title, String sub, {VoidCallback? onTap}) => Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Material(
+            color: _mode == v ? Brand.primary.withValues(alpha: 0.07) : Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: BorderSide(color: _mode == v ? Brand.primary : Brand.border, width: _mode == v ? 1.5 : 1)),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(14),
+              onTap: () {
+                setState(() => _mode = v);
+                onTap?.call();
+              },
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(children: [
+                  Icon(icon, color: _mode == v ? Brand.primary : Brand.mutedFg),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+                      Text(sub, style: const TextStyle(fontSize: 12, color: Brand.mutedFg)),
+                    ]),
+                  ),
+                  Icon(_mode == v ? Icons.radio_button_checked : Icons.radio_button_off, color: _mode == v ? Brand.primary : Brand.border),
+                ]),
+              ),
+            ),
+          ),
+        );
+    final ready = _mode == 0 || (_mode == 1 && _range != null) || (_mode == 2 && _date != null);
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          const Text('خطاب خبرة', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+          const Text('اختر الفترة التي يغطيها الخطاب، ويُحسب عدد الطلبات والتقييم خلالها فقط.', style: TextStyle(fontSize: 12.5, color: Brand.mutedFg)),
+          const SizedBox(height: 12),
+          option(0, Icons.all_inclusive, 'كامل فترة العمل', 'من تاريخ انضمامك حتى اليوم'),
+          option(1, Icons.date_range_outlined, 'فترة محددة', _range == null ? 'اختر تاريخ البداية والنهاية' : 'من ${_fmt(_range!.start)} إلى ${_fmt(_range!.end)}', onTap: _pickRange),
+          option(2, Icons.event_outlined, 'حتى تاريخ محدد', _date == null ? 'من تاريخ انضمامك حتى التاريخ الذي تختاره' : 'حتى ${_fmt(_date!)}', onTap: _pickDate),
+          const SizedBox(height: 6),
+          FilledButton.icon(
+            onPressed: ready
+                ? () => Navigator.pop<(DateTime?, DateTime?)>(context, switch (_mode) {
+                      1 => (_range!.start, _range!.end),
+                      2 => (null, _date),
+                      _ => (null, null),
+                    })
+                : null,
+            icon: const Icon(Icons.workspace_premium_outlined),
+            label: const Text('إصدار الخطاب'),
+          ),
+          const SizedBox(height: 6),
+          const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Icon(Icons.qr_code_2, size: 16, color: Brand.mutedFg),
+            SizedBox(width: 4),
+            Text('يحمل الخطاب رقماً مرجعياً وباركود للتحقق من صحته', style: TextStyle(fontSize: 11.5, color: Brand.mutedFg)),
+          ]),
+        ]),
+      ),
+    );
   }
 }

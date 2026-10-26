@@ -26,9 +26,9 @@ export function AdSpace({ className = "" }: { className?: string }) {
   return (
     <div className={`-mx-2 sm:-mx-6 ${className}`}>
       {ad?.link ? (
-        <a href={ad.link} target="_blank" rel="noopener noreferrer" className="mohemah-banner block relative overflow-hidden rounded-2xl aspect-[3/1] min-h-28">{inner}</a>
+        <a href={ad.link} target="_blank" rel="noopener noreferrer" className="mohemah-banner block relative overflow-hidden rounded-2xl aspect-[3/1]">{inner}</a>
       ) : (
-        <div className="mohemah-banner relative overflow-hidden rounded-2xl aspect-[3/1] min-h-28">{inner}</div>
+        <div className="mohemah-banner relative overflow-hidden rounded-2xl aspect-[3/1]">{inner}</div>
       )}
       <div className="flex justify-center gap-1.5 mt-2">
         {Array.from({ length: Math.max(ads.length, 3) }).map((_, k) => (

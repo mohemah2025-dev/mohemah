@@ -13,7 +13,7 @@ export function AppOpening() {
   const [leaving, setLeaving] = useState(false);
   const { settings } = usePublicData();
   const [broken, setBroken] = useState(false);
-  const image = settings?.logo_url && !broken ? fileUrl(settings.logo_url) : logo;
+  const image = settings?.app_logo_url && !broken ? fileUrl(settings.app_logo_url) : logo;
   const name = settings?.app_name ?? "مهمة";
   useEffect(() => {
     const timer = window.setTimeout(() => setLeaving(true), window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 500 : 1600);

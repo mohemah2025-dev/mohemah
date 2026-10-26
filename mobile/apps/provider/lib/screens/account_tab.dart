@@ -68,6 +68,8 @@ class ProviderAccountTab extends StatelessWidget {
           MenuTile(icon: Icons.star_rounded, title: 'تقييماتي', onTap: () => push(const RatingsPage())),
         ]),
         const SizedBox(height: 16),
+        const _CustomerAppCard(),
+        const SizedBox(height: 16),
         MenuGroup(children: [
           MenuTile(icon: Icons.notifications_outlined, title: 'الإشعارات', onTap: () => push(const NotificationsPage())),
           MenuTile(icon: Icons.policy_outlined, title: 'شروط مقدمي الخدمة', onTap: () => push(const PoliciesPage(audience: 'providers', placement: 'account'))),
@@ -91,6 +93,33 @@ class ProviderAccountTab extends StatelessWidget {
         ]),
         const SizedBox(height: 20),
         const Center(child: Text('مهمة شريك • الإصدار 1.0.0', style: TextStyle(color: Brand.mutedFg, fontSize: 12))),
+      ]),
+    );
+  }
+}
+
+/// «هل تحتاج خدمة؟»: download links of the customer app (set in admin → Settings).
+class _CustomerAppCard extends StatelessWidget {
+  const _CustomerAppCard();
+  @override
+  Widget build(BuildContext context) {
+    final s = PublicScope.of(context).settings;
+    return AccentBox(
+      accent: Brand.coral,
+      padding: const EdgeInsets.fromLTRB(14, 16, 14, 14),
+      child: Column(children: [
+        const Row(children: [
+          Icon(Icons.shopping_bag_outlined, color: Brand.coral),
+          SizedBox(width: 10),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('هل لديك مهمة أو تحتاج خدمة؟', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5)),
+              Text('حمّل تطبيق «مهمة» لطالبي الخدمات واطلب أي خدمة بضغطة زر', style: TextStyle(fontSize: 12, color: Brand.mutedFg)),
+            ]),
+          ),
+        ]),
+        const SizedBox(height: 12),
+        AppDownloadButtons(ios: s.customerIosUrl, android: s.customerAndroidUrl, other: s.customerOtherUrl),
       ]),
     );
   }

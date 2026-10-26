@@ -51,6 +51,14 @@ class AppSettings {
   final Map<String, dynamic> raw;
   String get appName => jS(raw['app_name'], 'مهمة');
   String? get logoUrl => jStr(raw['logo_url']);
+  /// Logo for the mobile apps (admin → Settings → «شعار التطبيقات»).
+  String? get appLogoUrl => jStr(raw['app_logo_url']);
+  String? get customerIosUrl => jStr(raw['customer_ios_url']);
+  String? get customerAndroidUrl => jStr(raw['customer_android_url']);
+  String? get customerOtherUrl => jStr(raw['customer_other_url']);
+  String? get providerIosUrl => jStr(raw['provider_ios_url']);
+  String? get providerAndroidUrl => jStr(raw['provider_android_url']);
+  String? get providerOtherUrl => jStr(raw['provider_other_url']);
   String get currency => jS(raw['currency_label'], 'ريال');
   String? get supportEmail => jStr(raw['support_email']);
   String? get supportPhone => jStr(raw['support_phone']);

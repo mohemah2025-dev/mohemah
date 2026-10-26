@@ -3,7 +3,7 @@ import {
   addDays, all, bool, fail, first, inList, json, normalizePhone, now, num, oneOf, readJson, REGIONS, run, stmt, str, strArray,
   uid, validEmail, validSaudiPhone, type Ctx, type Router,
 } from "../lib/core";
-import { ADMIN_SECTIONS, hashPassword, parsePermissions, permissionsOf, requireAdmin, requirePerm, requireUser, signFileUrl, validatePassword } from "../lib/auth";
+import { accessOf, ADMIN_SECTIONS, hashPassword, parseFeatures, parsePermissions, permissionsOf, requireAdmin, requireFeature, requirePerm, requireUser, signFileUrl, validatePassword, type AdminSection } from "../lib/auth";
 import { getSettings, notifyStmts, safeJson } from "../lib/domain";
 import { formFile, savePublicImage } from "./account";
 import { EMAIL_PROVIDERS, notifyExternal, SMS_PROVIDERS, testEmail, testSms, testWhatsApp } from "../lib/messaging";
@@ -69,6 +69,16 @@ async function guardAdminTarget(c: Ctx, id: string) {
   else if (roles.includes("staff")) await requirePerm(c, "staff", "edit");
 }
 
+/** Page action on a user account: the page follows the account type (staff → staff, provider → providers, else customers). */
+export async function requireUserFeature(c: Ctx, id: string, action: "edit" | "suspend" | "password" | "balance" | "approve") {
+  const roles = (await all<{ role: string }>(c.env.DB, "SELECT role FROM user_roles WHERE user_id = ?", id)).map((r) => r.role);
+  const section: AdminSection = roles.includes("admin") || roles.includes("staff") ? "staff" : roles.includes("provider") ? "providers" : "customers";
+  let act: string = action;
+  if (section === "staff" && (action === "password" || action === "balance" || action === "approve")) act = "edit";
+  if (section === "customers" && (action === "balance" || action === "approve")) act = "edit";
+  return requireFeature(c, section, act);
+}
+
 export function registerAdminRoutes(r: Router) {
   /* ---------- Users ---------- */
   r.get("/api/admin/users", async (c) => {
@@ -76,7 +86,7 @@ export function registerAdminRoutes(r: Router) {
     const [users, roles, provSvcs, orderStats] = await Promise.all([
       all<Record<string, unknown> & { id: string }>(c.env.DB,
         `SELECT id, full_name, email, username, phone, region, gender, rating, rating_count, coin_balance, is_active, is_online,
-                verification_status, admin_permissions, member_no, created_at, updated_at, last_seen_at FROM users ORDER BY created_at DESC LIMIT 5000`),
+                verification_status, admin_permissions, admin_features, member_no, created_at, updated_at, last_seen_at FROM users ORDER BY created_at DESC LIMIT 5000`),
       all<{ user_id: string; role: string }>(c.env.DB, "SELECT user_id, role FROM user_roles"),
       all<{ provider_id: string; name: string }>(c.env.DB, "SELECT ps.provider_id, s.name FROM provider_services ps JOIN services s ON s.id = ps.service_id"),
       all<{ customer_id: string; service_name: string; n: number }>(c.env.DB, "SELECT customer_id, service_name, COUNT(*) AS n FROM orders WHERE customer_id IS NOT NULL GROUP BY customer_id, service_name"),
@@ -93,7 +103,8 @@ export function registerAdminRoutes(r: Router) {
     });
     return json(users.map((u) => ({
       ...u, permissions: (rolesBy[u.id] ?? []).includes("staff") && !(rolesBy[u.id] ?? []).includes("admin") ? parsePermissions(u.admin_permissions) : null,
-      admin_permissions: undefined, is_active: !!u.is_active, is_online: !!u.is_online, roles: rolesBy[u.id] ?? [], services: svcBy[u.id] ?? [],
+      features: (rolesBy[u.id] ?? []).includes("staff") && !(rolesBy[u.id] ?? []).includes("admin") ? parseFeatures(u.admin_features) : null,
+      admin_permissions: undefined, admin_features: undefined, is_active: !!u.is_active, is_online: !!u.is_online, roles: rolesBy[u.id] ?? [], services: svcBy[u.id] ?? [],
       orders_count: ordersBy[u.id]?.total ?? 0, favorite_service: ordersBy[u.id]?.fav || null,
     })));
   });
@@ -105,9 +116,21 @@ export function registerAdminRoutes(r: Router) {
     if (!target) fail(404, "not_found", "المستخدم غير موجود");
     await guardAdminTarget(c, id);
     const b = await readJson(c.req);
+    if (b.is_active !== undefined) await requireUserFeature(c, id, "suspend");
+    if (b.coin_balance !== undefined) await requireUserFeature(c, id, "balance");
+    if (["full_name", "phone", "region", "gender", "services", "email", "username"].some((k) => b[k] !== undefined)) await requireUserFeature(c, id, "edit");
     const f: Record<string, unknown> = {};
     const name = str(b, "full_name", { max: 150 });
     if (name) f.full_name = name;
+    // Sign-in name of admin accounts (e-mail or username).
+    const login = str(b, "login", { max: 255 })?.toLowerCase();
+    if (login) {
+      await requireUserFeature(c, id, "edit");
+      const isEmail = login.includes("@");
+      if (isEmail ? !validEmail(login) : !/^[a-z0-9_.]{3,30}$/.test(login)) fail(400, "invalid_login", "اسم المستخدم: أحرف إنجليزية وأرقام (3–30) أو بريد صحيح");
+      if (await first(c.env.DB, "SELECT 1 FROM users WHERE (email = ?1 OR username = ?1) AND id <> ?2", login, id)) fail(409, "taken", "البريد أو اسم المستخدم مستخدم");
+      f[isEmail ? "email" : "username"] = login;
+    }
     const phone = str(b, "phone", { max: 20 });
     if (phone) { const p = normalizePhone(phone); if (!validSaudiPhone(p)) fail(400, "invalid_phone", "رقم الجوال غير صحيح"); f.phone = p; }
     const region = str(b, "region", { max: 40 });
@@ -164,6 +187,7 @@ export function registerAdminRoutes(r: Router) {
       : await requirePerm(c, role === "staff" ? "staff" : role === "provider" ? "providers" : "customers", "edit");
     const enable = bool(b, "enable") ?? false;
     const id = c.params.id;
+    if (role !== "admin") await requireFeature(c, role === "staff" ? "staff" : role === "provider" ? "providers" : "customers", role === "provider" && enable ? "approve" : "suspend");
     if (!(await first(c.env.DB, "SELECT 1 FROM users WHERE id = ?", id))) fail(404, "not_found", "المستخدم غير موجود");
     if (!enable && role === "admin") {
       if (id === owner.id) fail(400, "self_demote", "لا يمكنك إزالة صلاحية المالك عن نفسك");
@@ -192,19 +216,27 @@ export function registerAdminRoutes(r: Router) {
     const roles = (await all<{ role: string }>(c.env.DB, "SELECT role FROM user_roles WHERE user_id = ?", id)).map((r) => r.role);
     if (roles.includes("admin")) fail(400, "owner_permissions", "المالك يملك كل الصلاحيات");
     if (!roles.includes("staff")) fail(404, "not_staff", "المستخدم ليس من مشرفي اللوحة");
-    const perms = parsePermissions((await readJson(c.req)).permissions);
+    const body = await readJson(c.req);
+    const perms = parsePermissions(body.permissions);
+    const features = body.features === undefined ? undefined : parseFeatures(body.features);
     // A staff member cannot grant more than they have.
     if (!me.roles.includes("admin")) {
       const mine = await permissionsOf(c, me);
       const rank = { none: 0, view: 1, edit: 2 } as const;
       for (const s of ADMIN_SECTIONS) if (rank[perms[s]] > rank[mine[s]]) fail(403, "forbidden", "لا يمكنك منح صلاحية أعلى من صلاحياتك");
+      const myFeatures = (await accessOf(c, me)).features;
+      if (features && myFeatures) for (const [s, list] of Object.entries(features)) {
+        const own = myFeatures[s as AdminSection];
+        if (own && list!.some((a) => !own.includes(a))) fail(403, "forbidden", "لا يمكنك منح صلاحية أعلى من صلاحياتك");
+      }
     }
-    await run(c.env.DB, "UPDATE users SET admin_permissions = ?, updated_at = ? WHERE id = ?", JSON.stringify(perms), now(), id);
-    return json({ ok: true, permissions: perms });
+    if (features === undefined) await run(c.env.DB, "UPDATE users SET admin_permissions = ?, updated_at = ? WHERE id = ?", JSON.stringify(perms), now(), id);
+    else await run(c.env.DB, "UPDATE users SET admin_permissions = ?, admin_features = ?, updated_at = ? WHERE id = ?", JSON.stringify(perms), features ? JSON.stringify(features) : null, now(), id);
+    return json({ ok: true, permissions: perms, features: features ?? null });
   });
 
   r.post("/api/admin/users/:id/password", async (c) => {
-    await requirePerm(c, ["customers", "providers", "staff"], "edit");
+    await requireUserFeature(c, c.params.id, "password");
     const password = str(await readJson(c.req), "password", { required: true, label: "كلمة المرور" });
     validatePassword(password);
     await guardAdminTarget(c, c.params.id);
@@ -227,10 +259,11 @@ export function registerAdminRoutes(r: Router) {
     const role = oneOf(b, "role", ["admin", "staff"] as const) ?? "staff";
     if (role === "admin") await requireUser(c, { app: "admin", roles: ["admin"] });
     const permissions = b.permissions !== undefined && role === "staff" ? JSON.stringify(parsePermissions(b.permissions)) : null;
+    const featuresJson = b.features !== undefined && role === "staff" ? (() => { const f = parseFeatures(b.features); return f ? JSON.stringify(f) : null; })() : null;
     if (await first(c.env.DB, "SELECT 1 FROM users WHERE email = ?1 OR username = ?1", login)) fail(409, "taken", "البريد أو اسم المستخدم مستخدم");
     const id = uid();
     await c.env.DB.batch([
-      stmt(c.env.DB, `INSERT INTO users (id, ${isEmail ? "email" : "username"}, full_name, password_hash, admin_permissions) VALUES (?,?,?,?,?)`, id, login, full_name, await hashPassword(c.env, password!), permissions),
+      stmt(c.env.DB, `INSERT INTO users (id, ${isEmail ? "email" : "username"}, full_name, password_hash, admin_permissions, admin_features) VALUES (?,?,?,?,?,?)`, id, login, full_name, await hashPassword(c.env, password!), permissions, featuresJson),
       stmt(c.env.DB, "INSERT INTO user_roles (user_id, role) VALUES (?,?)", id, role),
     ]);
     return json({ id }, 201);
@@ -544,16 +577,37 @@ export function registerAdminRoutes(r: Router) {
   /* ---------- Settings ---------- */
   r.get("/api/admin/settings", async (c) => { await requireAdmin(c); return json(await getSettings(c.env)); });
   r.put("/api/admin/settings", async (c) => {
+    await requireAdmin(c);
     const b = await readJson(c.req);
     const billingKeys = ["billing_coins_enabled", "billing_subscription_enabled", "test_payments_enabled", "sub_price_1m", "sub_price_3m", "sub_price_6m", "sub_price_12m", "vat_percent", "coin_price"];
-    const generalKeys = Object.keys(b).filter((k) => !billingKeys.includes(k));
+    // Only keys whose value really changes count for the page actions (the form always sends everything).
+    const current = (await getSettings(c.env)) as unknown as Record<string, unknown>;
+    const norm = (v: unknown) => (v === null || v === undefined || v === "" ? "" : typeof v === "boolean" ? (v ? "1" : "0") : String(v));
+    const changed = (k: string) => norm(b[k]) !== norm(current[k]);
+    const generalKeys = Object.keys(b).filter((k) => !billingKeys.includes(k) && changed(k));
+    const brandingKeys = ["logo_url", "app_logo_url", "primary_color"];
+    const linkKeys = ["customer_ios_url", "customer_android_url", "customer_other_url", "provider_ios_url", "provider_android_url", "provider_other_url"];
     if (generalKeys.length) await requirePerm(c, "settings", "edit");
-    if (Object.keys(b).some((k) => billingKeys.includes(k))) await requirePerm(c, ["billing", "gateways"], "edit");
+    if (generalKeys.some((k) => brandingKeys.includes(k))) await requireFeature(c, "settings", "branding");
+    if (generalKeys.some((k) => linkKeys.includes(k))) await requireFeature(c, "settings", "links");
+    if (generalKeys.some((k) => !brandingKeys.includes(k) && !linkKeys.includes(k))) await requireFeature(c, "settings", "general");
+    if (Object.keys(b).some((k) => billingKeys.includes(k) && changed(k))) {
+      const me = await requirePerm(c, ["billing", "gateways"], "edit");
+      if (!me.roles.includes("admin")) {
+        const { perms, features } = await accessOf(c, me);
+        if (perms.gateways !== "edit" && features?.billing && !features.billing.includes("prices")) fail(403, "forbidden", "لا تملك صلاحية «الأسعار» في هذه الصفحة");
+      }
+    }
     const f: Record<string, unknown> = {};
     for (const [k, max] of [["app_name", 60], ["currency_label", 30], ["support_email", 255], ["support_phone", 30], ["welcome_customer", 500], ["welcome_provider", 500], ["primary_color", 20]] as const) {
       if (b[k] !== undefined) f[k] = str(b, k, { max });
     }
-    if (b.logo_url !== undefined) { const v = str(b, "logo_url", { max: 500 }); if (v && !/^https?:\/\//.test(v)) fail(400, "invalid_logo", "ارفع الشعار من زر إضافة شعار"); f.logo_url = v; }
+    for (const k of ["logo_url", "app_logo_url"] as const) {
+      if (b[k] !== undefined) { const v = str(b, k, { max: 500 }); if (v && !/^https?:\/\//.test(v)) fail(400, "invalid_logo", "ارفع الشعار من زر إضافة شعار"); f[k] = v; }
+    }
+    for (const k of ["customer_ios_url", "customer_android_url", "customer_other_url", "provider_ios_url", "provider_android_url", "provider_other_url"] as const) {
+      if (b[k] !== undefined) { const v = str(b, k, { max: 500 }); if (v && !/^https?:\/\//.test(v)) fail(400, "invalid_link", "الرابط يجب أن يبدأ بـ https://"); f[k] = v; }
+    }
     for (const k of ["billing_coins_enabled", "billing_subscription_enabled", "test_payments_enabled"] as const) {
       const v = bool(b, k); if (v !== null) f[k] = v ? 1 : 0;
     }

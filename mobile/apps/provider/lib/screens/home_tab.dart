@@ -56,6 +56,7 @@ class ProviderHomeTab extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 12),
                 child: PromoBanner(promos: store.feed!.promotions, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BillingPage()))),
               ),
+            const AdBanner(placement: 'top_banner', padding: EdgeInsets.only(bottom: 14)),
             for (final o in store.incoming.where((x) => store.minimized.contains(x.id)))
               Padding(padding: const EdgeInsets.only(bottom: 12), child: _MinimizedIncoming(order: o)),
             const _ConnectionCard(),
@@ -75,6 +76,7 @@ class ProviderHomeTab extends StatelessWidget {
                 ]),
               ),
             if (stats != null) ...[const SizedBox(height: 14), DemandChart(data: stats.demandByHour)],
+            const AdBanner(placement: 'bottom_banner', padding: EdgeInsets.only(top: 14)),
           ]),
         ),
       ]),

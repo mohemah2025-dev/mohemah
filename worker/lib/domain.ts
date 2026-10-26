@@ -1,7 +1,7 @@
 import { all, first, now, stmt, uid, type Ctx, type Env } from "./core";
 
 export type Settings = {
-  app_name: string; logo_url: string | null; currency_label: string; primary_color: string | null;
+  app_name: string; logo_url: string | null; app_logo_url: string | null; currency_label: string; primary_color: string | null;
   support_email: string | null; support_phone: string | null; welcome_customer: string | null; welcome_provider: string | null;
   billing_coins_enabled: number; billing_subscription_enabled: number;
   sub_price_1m: number; sub_price_3m: number; sub_price_6m: number; sub_price_12m: number;
@@ -9,6 +9,8 @@ export type Settings = {
   sms_enabled: number; sms_provider: string | null; sms_sender: string | null; sms_username: string | null;
   email_enabled: number; email_provider: string | null; email_from: string | null; email_from_name: string | null;
   whatsapp_enabled: number; whatsapp_phone_id: string | null; whatsapp_template: string | null; whatsapp_lang: string | null;
+  customer_ios_url: string | null; customer_android_url: string | null; customer_other_url: string | null;
+  provider_ios_url: string | null; provider_android_url: string | null; provider_other_url: string | null;
 };
 
 export async function getSettings(env: Env) {
@@ -17,12 +19,14 @@ export async function getSettings(env: Env) {
 
 export function publicSettings(s: Settings) {
   return {
-    app_name: s.app_name, logo_url: s.logo_url, currency_label: s.currency_label, primary_color: s.primary_color,
+    app_name: s.app_name, logo_url: s.logo_url, app_logo_url: s.app_logo_url, currency_label: s.currency_label, primary_color: s.primary_color,
     support_email: s.support_email, support_phone: s.support_phone,
     welcome_customer: s.welcome_customer, welcome_provider: s.welcome_provider,
     billing_coins_enabled: !!s.billing_coins_enabled, billing_subscription_enabled: !!s.billing_subscription_enabled,
     sub_price_1m: s.sub_price_1m, sub_price_3m: s.sub_price_3m, sub_price_6m: s.sub_price_6m, sub_price_12m: s.sub_price_12m,
     vat_percent: s.vat_percent, test_payments_enabled: !!s.test_payments_enabled, coin_price: s.coin_price ?? 1,
+    customer_ios_url: s.customer_ios_url, customer_android_url: s.customer_android_url, customer_other_url: s.customer_other_url,
+    provider_ios_url: s.provider_ios_url, provider_android_url: s.provider_android_url, provider_other_url: s.provider_other_url,
   };
 }
 

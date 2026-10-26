@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:mohemah_core/mohemah_core.dart';
 
@@ -31,7 +29,6 @@ class HomeTab extends StatelessWidget {
       if (sub != null) previous.add((sub, o));
       if (previous.length == 6) break;
     }
-    final ads = data.ads.where((a) => a.placement != 'popup_card').toList();
 
     return RefreshIndicator(
       onRefresh: () async {
@@ -87,8 +84,9 @@ class HomeTab extends StatelessWidget {
                   },
                 ),
               ),
-            // 2) Ads (several, auto-sliding).
-            if (ads.isNotEmpty) ...[const SizedBox(height: 18), _AdsCarousel(ads: ads)],
+            // 2) Ads: top banner 3:1 (auto-sliding) and the popup card once per launch.
+            const PopupAdHost(),
+            const AdBanner(placement: 'top_banner', padding: EdgeInsets.only(top: 18)),
             // 3) Services: rectangles side by side, scrolling sideways, up to 6.
             SectionTitle(
               'عرض الخدمات',
@@ -132,6 +130,8 @@ class HomeTab extends StatelessWidget {
               const SectionTitle('طلبك الجاري'),
               for (final o in open.where((x) => x.status != 'accepted').take(2)) Padding(padding: const EdgeInsets.only(bottom: 10), child: _ActiveOrderCard(order: o)),
             ],
+            // 5) Bottom ad space (4:1).
+            const AdBanner(placement: 'bottom_banner', padding: EdgeInsets.only(top: 18)),
           ]),
         ),
       ]),
@@ -186,96 +186,6 @@ class _Header extends StatelessWidget {
         ),
       ]),
     );
-  }
-}
-
-class _AdsCarousel extends StatefulWidget {
-  const _AdsCarousel({required this.ads});
-  final List<Ad> ads;
-  @override
-  State<_AdsCarousel> createState() => _AdsCarouselState();
-}
-
-class _AdsCarouselState extends State<_AdsCarousel> {
-  final _page = PageController(viewportFraction: 0.94);
-  Timer? _timer;
-  int _index = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.ads.length > 1) {
-      _timer = Timer.periodic(const Duration(seconds: 5), (_) {
-        if (!_page.hasClients) return;
-        _page.animateToPage((_index + 1) % widget.ads.length, duration: const Duration(milliseconds: 500), curve: Curves.easeOutCubic);
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    _page.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(children: [
-      AspectRatio(
-        aspectRatio: 2.2,
-        child: PageView.builder(
-          controller: _page,
-          itemCount: widget.ads.length,
-          onPageChanged: (i) => setState(() => _index = i),
-          itemBuilder: (_, i) {
-            final ad = widget.ads[i];
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(20),
-                child: InkWell(
-                  onTap: (ad.link ?? '').startsWith('http') ? () => openUrl(context, ad.link!) : null,
-                  child: (ad.imageUrl ?? '').isEmpty
-                      ? Container(
-                          decoration: const BoxDecoration(gradient: Brand.gradient),
-                          padding: const EdgeInsets.all(18),
-                          alignment: AlignmentDirectional.centerStart,
-                          child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            if ((ad.sponsor ?? '').isNotEmpty) Text(ad.sponsor!, style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                            Text(ad.title, maxLines: 2, style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w800)),
-                          ]),
-                        )
-                      : Image.network(
-                    absUrl(ad.imageUrl!),
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
-                      color: Brand.muted,
-                      alignment: Alignment.center,
-                      child: Text(ad.title, style: const TextStyle(fontWeight: FontWeight.w700)),
-                    ),
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-      ),
-      if (widget.ads.length > 1)
-        Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            for (var i = 0; i < widget.ads.length; i++)
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                margin: const EdgeInsets.symmetric(horizontal: 3),
-                width: i == _index ? 18 : 6,
-                height: 6,
-                decoration: BoxDecoration(color: i == _index ? Brand.primary : Brand.border, borderRadius: BorderRadius.circular(6)),
-              ),
-          ]),
-        ),
-    ]);
   }
 }
 

@@ -4,11 +4,12 @@
  * (suspend / reactivate / delete with a reason and an attached letter).
  */
 import { all, fail, first, json, now, run, stmt, str, uid, type Ctx, type Router } from "../lib/core";
-import { requirePerm, requireProvider, requireUser, signFileUrl, verifyFileSignature } from "../lib/auth";
+import { requireFeature, requirePerm, requireProvider, requireUser, signFileUrl, verifyFileSignature } from "../lib/auth";
 import { getSettings, notifyStmts, safeJson } from "../lib/domain";
 import { deleteFiles, putFile } from "../lib/storage";
 import { notifyExternal } from "../lib/messaging";
 import { DOC_TYPES, formFile, validateDoc } from "./account";
+import qrcode from "qrcode-generator";
 
 const DAY = 86400000;
 const riyadhDay = (iso: string) => new Date(Date.parse(iso) + 3 * 3600000).toISOString().slice(0, 10);
@@ -62,6 +63,74 @@ function esc(v: unknown) {
   return String(v ?? "").replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]!);
 }
 
+const LETTER_FONT = `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">`;
+
+function qrSvg(text: string, color: string) {
+  const qr = qrcode(0, "M");
+  qr.addData(text);
+  qr.make();
+  const n = qr.getModuleCount();
+  let d = "";
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (qr.isDark(y, x)) d += `M${x} ${y}h1v1h-1z`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -2 ${n + 4} ${n + 4}" width="116" height="116" shape-rendering="crispEdges"><rect x="-2" y="-2" width="${n + 4}" height="${n + 4}" fill="#fff"/><path d="${d}" fill="${color}"/></svg>`;
+}
+
+/** The letter itself (`verify` = the public check page reached by the QR code). */
+async function letterPage(c: Ctx, ref: string, verify: boolean) {
+  const L = await first<{ ref: string; provider_id: string; provider_name: string | null; period_from: string | null; period_to: string; completed: number; rating: number | null; services: string; issued_at: string }>(c.env.DB,
+    "SELECT * FROM experience_letters WHERE ref = ?", ref);
+  const s = await getSettings(c.env);
+  const color = /^#[0-9a-f]{6}$/i.test(s.primary_color ?? "") ? s.primary_color! : "#2B6CD9";
+  const html = (body: string, title: string) => new Response(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${esc(title)}</title>${LETTER_FONT}
+<style>
+*{box-sizing:border-box}body{margin:0;background:#eef1f6;font-family:Cairo,Tahoma,Arial,sans-serif;color:#1b2430}
+.page{max-width:780px;margin:24px auto;background:#fff;padding:44px 44px 36px;border-radius:14px;box-shadow:0 4px 24px rgba(0,0,0,.08);position:relative;overflow:hidden}
+.page:before{content:"";position:absolute;inset:0 0 auto 0;height:8px;background:linear-gradient(90deg,${color},${color}99)}
+.head{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid ${color}33;padding-bottom:16px;gap:16px}
+.brand{display:flex;align-items:center;gap:12px}.brand img{width:64px;height:64px;object-fit:contain}
+.brand b{font-size:21px;font-weight:800;color:${color}}.meta{font-size:12.5px;color:#5b6573;text-align:left;line-height:2}
+h1{text-align:center;font-size:24px;font-weight:800;margin:30px 0 22px;color:${color}}p,li{font-size:15.5px;line-height:2.15}
+.box{background:${color}0d;border:1px solid ${color}33;border-radius:12px;padding:12px 16px;margin:16px 0;font-size:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px}
+.box b{display:block;font-size:16px;color:${color}}
+.foot{margin-top:40px;display:flex;justify-content:space-between;align-items:flex-end;gap:16px}
+.sign{text-align:center;font-size:13px}.sign span{display:block;width:170px;border-bottom:2px solid #9aa3af;padding-bottom:4px;margin-bottom:6px}
+.qr{text-align:center;font-size:11px;color:#5b6573}.qr div{border:1px solid #e3e7ee;border-radius:10px;padding:6px;display:inline-block}
+.ok{display:flex;align-items:center;gap:10px;background:#e8f8ef;color:#137a3f;border:1px solid #b9e7cb;border-radius:12px;padding:12px 16px;font-weight:700;margin-bottom:16px}
+.bad{background:#fdecec;color:#b42318;border-color:#f6c4c0}
+.btn{display:block;margin:16px auto 32px;max-width:780px;padding:14px;border:0;border-radius:12px;background:${color};color:#fff;font-family:inherit;font-size:16px;font-weight:700;width:calc(100% - 32px);cursor:pointer}
+@media print{body{background:#fff}.page{box-shadow:none;margin:0;border-radius:0}.btn,.noprint{display:none}}
+</style></head><body>${body}</body></html>`, { status: L ? 200 : 404, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+
+  if (!L) return html(`<div class="page"><div class="ok bad">✕ لم يُعثر على خطاب بهذا المرجع (${esc(ref)}). قد يكون الخطاب غير صادر من تطبيق ${esc(s.app_name)}.</div></div>`, "التحقق من خطاب");
+
+  const u = await first<{ gender: string | null }>(c.env.DB, "SELECT gender FROM users WHERE id = ?", L.provider_id);
+  const female = u?.gender === "female";
+  const fmt = (d: string | Date) => new Date(d).toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", { day: "numeric", month: "long", year: "numeric" });
+  const from = L.period_from ?? L.issued_at;
+  const months = Math.max(0, Math.round((Date.parse(L.period_to) - Date.parse(from)) / (30.44 * DAY)));
+  const services = safeJson<string[]>(L.services, []);
+  const logoSrc = s.logo_url ?? s.app_logo_url;
+  const logo = logoSrc ? (logoSrc.startsWith("/") ? `${c.url.origin}${logoSrc}` : logoSrc) : "";
+  const verifyUrl = `${c.url.origin}/api/letters/verify/${L.ref}`;
+  const banner = verify ? `<div class="ok">✓ خطاب صحيح صادر من تطبيق ${esc(s.app_name)} بتاريخ ${esc(fmt(L.issued_at))} — المرجع ${esc(L.ref)}</div>` : "";
+  return html(`<div class="page">${banner}
+<div class="head"><div class="brand">${logo ? `<img src="${esc(logo)}" alt="">` : ""}<div><b>تطبيق ${esc(s.app_name)}</b><div style="font-size:12px;color:#5b6573">منصة الخدمات الموثوقة</div></div></div>
+<div class="meta">التاريخ: ${esc(fmt(L.issued_at))}<br>المرجع: <b dir="ltr">${esc(L.ref)}</b></div></div>
+<h1>خطاب إثبات خبرة</h1>
+<p>السلام عليكم ورحمة الله وبركاته،،</p>
+<p>تشهد إدارة <b>تطبيق ${esc(s.app_name)}</b> بأن ${female ? "السيدة" : "السيد"}/ <b>${esc(L.provider_name)}</b> ${female ? "قد عملت" : "قد عمل"} عبر التطبيق كمقدم خدمة خلال الفترة من <b>${esc(fmt(from))}</b> إلى <b>${esc(fmt(L.period_to))}</b>، ${female ? "وأنجزت" : "وأنجز"} خلالها عدد <b>(${L.completed})</b> طلب خدمة${L.rating ? `، بتقييم متوسط بلغ <b>(${Number(L.rating).toFixed(1)} من 5)</b>` : ""}${services.length ? "، في مجالات الأعمال التالية:" : "."}</p>
+${services.length ? `<ul>${services.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
+<div class="box"><div>مدة الفترة<b>${Math.floor(months / 12)} سنة و${months % 12} شهر</b></div><div>الطلبات المنجزة<b>${L.completed}</b></div><div>متوسط التقييم<b>${L.rating ? `${Number(L.rating).toFixed(1)} / 5` : "—"}</b></div></div>
+<p>وقد مُنح هذا الخطاب بناءً على ${female ? "طلبها" : "طلبه"} ليُستخدم لما ${female ? "تراه" : "يراه"} مناسباً.</p>
+<p style="margin-top:18px">والله ولي التوفيق،،</p>
+<div class="foot"><div class="sign"><span>ختم وتوقيع</span><b>إدارة تطبيق ${esc(s.app_name)}</b></div>
+<div class="qr"><div>${qrSvg(verifyUrl, "#1b2430")}</div><br>امسح الرمز للتحقق من صحة الخطاب<br><span dir="ltr">${esc(L.ref)}</span></div></div>
+</div>
+${verify ? "" : `<button class="btn" onclick="window.print()">طباعة / حفظ PDF</button>`}`, `خطاب خبرة — ${L.provider_name ?? ""}`);
+}
+
 export function registerProviderRoutes(r: Router) {
   /* =================== Provider app =================== */
 
@@ -106,14 +175,35 @@ export function registerProviderRoutes(r: Router) {
     return json({ id }, 201);
   });
 
-  /** Short-lived link to the printable experience letter. */
+  /**
+   * Issues an experience letter for the whole period, a date range (from–to) or up to a given date.
+   * Every letter gets a reference number and a QR code that opens the public verification page.
+   */
   r.get("/api/provider/experience-letter", async (c) => {
     const u = await requireProvider(c);
-    const done = await first<{ n: number }>(c.env.DB, "SELECT COUNT(*) AS n FROM orders WHERE provider_id = ? AND status = 'completed'", u.id);
-    if (!done?.n) fail(409, "no_completed_orders", "يُصدر الخطاب بعد إكمال طلب واحد على الأقل عبر التطبيق");
-    const signed = await signFileUrl(c.env, `letter:${u.id}`, 900);
-    const q = signed.split("?")[1];
-    return json({ url: `${c.url.origin}/api/letters/experience?${q}` });
+    const q = c.url.searchParams;
+    const day = (v: string | null) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v)) ? v : null);
+    const me = await first<{ full_name: string | null; created_at: string; reviewed_at: string | null }>(c.env.DB, "SELECT full_name, created_at, reviewed_at FROM users WHERE id = ?", u.id);
+    const joined = (me!.reviewed_at ?? me!.created_at).slice(0, 10);
+    const today = new Date().toISOString().slice(0, 10);
+    let from = day(q.get("from")) ?? joined;
+    let to = day(q.get("to")) ?? day(q.get("date")) ?? today;
+    if (to < joined) fail(400, "before_joining", "الفترة المختارة قبل تاريخ انضمامك للتطبيق");
+    if (from < joined) from = joined;
+    if (to > today) to = today;
+    if (from > to) fail(400, "invalid_period", "تاريخ البداية بعد تاريخ النهاية");
+    const end = new Date(Date.parse(to) + DAY).toISOString();
+    const [done, rating, services] = await Promise.all([
+      first<{ n: number }>(c.env.DB, "SELECT COUNT(*) AS n FROM orders WHERE provider_id = ? AND status = 'completed' AND completed_at >= ? AND completed_at < ?", u.id, from, end),
+      first<{ r: number | null }>(c.env.DB, "SELECT AVG(rating) AS r FROM orders WHERE provider_id = ? AND status = 'completed' AND rating IS NOT NULL AND completed_at >= ? AND completed_at < ?", u.id, from, end),
+      all<{ name: string }>(c.env.DB, "SELECT DISTINCT service_name AS name FROM orders WHERE provider_id = ? AND status = 'completed' AND completed_at >= ? AND completed_at < ?", u.id, from, end),
+    ]);
+    if (!done?.n) fail(409, "no_completed_orders", "لا توجد طلبات مكتملة في الفترة المختارة، يُصدر الخطاب بعد إكمال طلب واحد على الأقل");
+    const ref = `MHM-${crypto.getRandomValues(new Uint32Array(1))[0].toString(36).toUpperCase().padStart(7, "0").slice(-7)}`;
+    await run(c.env.DB, "INSERT INTO experience_letters (ref, provider_id, provider_name, period_from, period_to, completed, rating, services) VALUES (?,?,?,?,?,?,?,?)",
+      ref, u.id, me!.full_name, from, to, done!.n, rating?.r ?? null, JSON.stringify(services.map((x) => x.name)));
+    const signed = await signFileUrl(c.env, `letter:${ref}`, 900);
+    return json({ url: `${c.url.origin}/api/letters/experience?${signed.split("?")[1]}`, ref, from, to });
   });
 
   r.get("/api/letters/experience", async (c) => {
@@ -121,50 +211,11 @@ export function registerProviderRoutes(r: Router) {
     if (!k.startsWith("letter:") || !(await verifyFileSignature(c.env, k, c.url.searchParams.get("e") ?? "", c.url.searchParams.get("s") ?? ""))) {
       return new Response("الرابط منتهي، افتح الخطاب من التطبيق مرة أخرى", { status: 403, headers: { "content-type": "text/plain; charset=utf-8" } });
     }
-    const id = k.slice(7);
-    const [s, u, stats, services] = await Promise.all([
-      getSettings(c.env),
-      first<{ full_name: string | null; gender: string | null; rating: number; rating_count: number; created_at: string; reviewed_at: string | null }>(c.env.DB,
-        "SELECT full_name, gender, rating, rating_count, created_at, reviewed_at FROM users WHERE id = ?", id),
-      first<{ n: number }>(c.env.DB, "SELECT COUNT(*) AS n FROM orders WHERE provider_id = ? AND status = 'completed'", id),
-      all<{ name: string }>(c.env.DB, "SELECT DISTINCT service_name AS name FROM orders WHERE provider_id = ? AND status = 'completed'", id),
-    ]);
-    if (!u) return new Response("غير موجود", { status: 404 });
-    const start = Date.parse(u.reviewed_at ?? u.created_at);
-    const months = Math.max(0, Math.floor((Date.now() - start) / (30.44 * DAY)));
-    const fmt = (d: Date) => d.toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", { day: "numeric", month: "long", year: "numeric" });
-    const female = u.gender === "female";
-    const logo = s.logo_url ? (s.logo_url.startsWith("/") ? `${c.url.origin}${s.logo_url}` : s.logo_url) : "";
-    const html = `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>خطاب خبرة — ${esc(u.full_name)}</title>
-<style>
-body{margin:0;background:#eef1f6;font-family:Tahoma,Arial,sans-serif;color:#1b2430}
-.page{max-width:760px;margin:24px auto;background:#fff;padding:48px 44px;border-radius:12px;box-shadow:0 4px 24px rgba(0,0,0,.08)}
-.head{display:flex;justify-content:space-between;align-items:center;border-bottom:4px solid ${esc(s.primary_color || "#2B6CD9")};padding-bottom:16px}
-.brand{display:flex;align-items:center;gap:12px}.brand img{width:64px;height:64px;object-fit:contain}
-.brand b{font-size:20px;color:${esc(s.primary_color || "#2B6CD9")}}.meta{font-size:12px;color:#5b6573;text-align:left;line-height:1.9}
-h1{text-align:center;font-size:22px;margin:32px 0}p,li{font-size:15px;line-height:2.1}
-.sign{margin-top:56px;display:flex;justify-content:flex-start}.sign div{text-align:center;font-size:13px}
-.sign span{display:block;width:160px;border-bottom:2px solid #9aa3af;padding-bottom:4px;margin-bottom:6px}
-.btn{display:block;margin:16px auto 32px;max-width:760px;padding:14px;border:0;border-radius:12px;background:${esc(s.primary_color || "#2B6CD9")};color:#fff;font-size:16px;font-weight:bold;width:calc(100% - 32px);cursor:pointer}
-@media print{body{background:#fff}.page{box-shadow:none;margin:0;border-radius:0}.btn{display:none}}
-</style></head><body>
-<div class="page">
-<div class="head"><div class="brand">${logo ? `<img src="${esc(logo)}" alt="">` : ""}<div><b>تطبيق ${esc(s.app_name)}</b><div style="font-size:12px;color:#5b6573">منصة الخدمات الموثوقة</div></div></div>
-<div class="meta">التاريخ: ${esc(fmt(new Date()))}<br>المرجع: MHM-${esc(id.slice(0, 8).toUpperCase())}</div></div>
-<h1>خطاب إثبات خبرة</h1>
-<p>السلام عليكم ورحمة الله وبركاته،،</p>
-<p>تشهد إدارة <b>تطبيق ${esc(s.app_name)}</b> بأن ${female ? "السيدة" : "السيد"}/ <b>${esc(u.full_name)}</b> ${female ? "قد عملت" : "قد عمل"} عبر التطبيق كمقدم خدمة، ${female ? "وأنجزت" : "وأنجز"} عدد <b>(${stats?.n ?? 0})</b> طلب خدمة${u.rating_count ? `، بتقييم متوسط بلغ <b>(${Number(u.rating).toFixed(1)} من 5)</b>` : ""}${services.length ? "، في مجالات الأعمال التالية:" : "."}</p>
-${services.length ? `<ul>${services.map((x) => `<li>${esc(x.name)}</li>`).join("")}</ul>` : ""}
-<p>وقد امتدت فترة ${female ? "عملها" : "عمله"} مع التطبيق منذ ${esc(fmt(new Date(start)))} لمدة <b>(${Math.floor(months / 12)}) سنة و(${months % 12}) شهر</b> (بالتقويم الميلادي).</p>
-<p>وقد مُنح هذا الخطاب بناءً على ${female ? "طلبها" : "طلبه"} ليُستخدم لما ${female ? "تراه" : "يراه"} مناسباً.</p>
-<p style="margin-top:24px">والله ولي التوفيق،،</p>
-<div class="sign"><div><span>ختم وتوقيع</span><b>إدارة تطبيق ${esc(s.app_name)}</b></div></div>
-</div>
-<button class="btn" onclick="window.print()">طباعة / حفظ PDF</button>
-</body></html>`;
-    return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+    return letterPage(c, k.slice(7), false);
   });
+
+  /** Public verification page opened by the QR code (or by typing the reference). */
+  r.get("/api/letters/verify/:ref", async (c) => letterPage(c, c.params.ref.toUpperCase(), true));
 
   /* =================== Administration =================== */
 
@@ -323,7 +374,7 @@ ${services.length ? `<ul>${services.map((x) => `<li>${esc(x.name)}</li>`).join("
     if (!target) fail(404, "not_found", "الحساب غير موجود");
     const roles = (await all<{ role: string }>(c.env.DB, "SELECT role FROM user_roles WHERE user_id = ?", id)).map((x) => x.role);
     if (roles.includes("admin") || roles.includes("staff")) fail(400, "admin_account", "حسابات الإدارة تُدار من صفحة المستخدمين والصلاحيات");
-    const admin = await requirePerm(c, roles.includes("provider") ? "providers" : "customers", "edit");
+    const admin = await requireFeature(c, roles.includes("provider") ? "providers" : "customers", "suspend");
     const form = await c.req.formData();
     const action = String(form.get("action") ?? "");
     if (!["suspend", "reactivate", "delete"].includes(action)) fail(400, "invalid_action", "إجراء غير صحيح");

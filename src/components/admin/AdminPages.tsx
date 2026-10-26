@@ -3,13 +3,13 @@ import { ServiceIcon } from "@/components/ServiceAppearance";
 import { AdminProviderApplications } from "@/components/ProviderApplication";
 import { AdminProviderPerformance } from "./AdminProviderPerformance";
 import { AccountActionDialog, type AccountAction } from "./AccountActionDialog";
-import { ADMIN_SECTIONS, useAuth, type AdminPermissions, type PermLevel } from "@/lib/AuthContext";
+import { ADMIN_FEATURES, ADMIN_SECTIONS, useAuth, type AdminFeatures, type AdminPermissions, type AdminSection, type PermLevel } from "@/lib/AuthContext";
 import { api, errMsg } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "@tanstack/react-router";
 import { useAdmin, MainService, SubService, REGIONS_LIST, AdminCustomer, AdminProviderRow, uploadAdminImage, type StaffMember } from "@/lib/adminStore";
-import { ArrowLeft, Plus, Pencil, Trash2, TrendingUp, TrendingDown, Coins, Users, UserCheck, Star, Wrench, MapPin, ArrowDownCircle, ArrowUpCircle, Upload, Download, Save, LoaderCircle, Ban, RotateCcw } from "lucide-react";
+import { ArrowLeft, Plus, Pencil, Trash2, TrendingUp, TrendingDown, Coins, Users, UserCheck, Star, Wrench, MapPin, ArrowDownCircle, ArrowUpCircle, Upload, Download, Save, LoaderCircle, Ban, RotateCcw, Shield, KeyRound, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 
 const REGIONS = ["الكل", ...REGIONS_LIST];
@@ -497,85 +497,139 @@ function defaultAccess(): AdminPermissions {
   return p;
 }
 
-/** One row per page with none / view / edit. */
-function PermissionsMatrix({ value, onChange, max }: { value: AdminPermissions; onChange: (v: AdminPermissions) => void; max?: AdminPermissions | null }) {
+/** Ticked actions of a page (a page without a list = all its actions). */
+const ticked = (f: AdminFeatures, key: AdminSection) => f[key] ?? (ADMIN_FEATURES[key] ?? []).map((x) => x.key);
+
+/** One row per page with none / view / edit, and under each editable page the actions it allows. */
+function PermissionsMatrix({ value, onChange, features, onFeatures, max, maxFeatures }: {
+  value: AdminPermissions; onChange: (v: AdminPermissions) => void;
+  features: AdminFeatures; onFeatures: (f: AdminFeatures) => void;
+  max?: AdminPermissions | null; maxFeatures?: AdminFeatures | null;
+}) {
   const rank = { none: 0, view: 1, edit: 2 };
   const setAll = (lv: PermLevel) => onChange(Object.fromEntries(ADMIN_SECTIONS.map((x) => [x.key, max && rank[max[x.key]] < rank[lv] ? max[x.key] : lv])) as AdminPermissions);
+  const toggle = (sec: AdminSection, key: string) => {
+    const cur = ticked(features, sec);
+    onFeatures({ ...features, [sec]: cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key] });
+  };
   return (
     <div>
       <div className="flex flex-wrap gap-2 mb-2 text-[11px]">
         <span className="text-muted-foreground">تطبيق على الكل:</span>
         {LEVELS.map((l) => <button key={l.v} type="button" onClick={() => setAll(l.v)} className="px-2 py-0.5 rounded-full border border-border hover:bg-mohemah-light">{l.label}</button>)}
       </div>
-      <div className="border border-border rounded-xl divide-y divide-border max-h-[50vh] overflow-y-auto">
-        {ADMIN_SECTIONS.map((sec) => (
-          <div key={sec.key} className="flex items-center justify-between gap-2 px-3 py-2">
-            <span className="text-xs font-bold">{sec.label}</span>
-            <div className="inline-flex rounded-lg border border-border overflow-hidden text-[11px]">
-              {LEVELS.map((l) => {
-                const disabled = !!max && rank[max[sec.key]] < rank[l.v];
-                const active = value[sec.key] === l.v;
-                return (
-                  <button key={l.v} type="button" disabled={disabled} onClick={() => onChange({ ...value, [sec.key]: l.v })}
-                    className={`px-2.5 py-1 ${active ? (l.v === "edit" ? "bg-emerald-600 text-white" : l.v === "view" ? "bg-mohemah-blue text-white" : "bg-muted-foreground text-white") : "bg-card"} disabled:opacity-30`}>
-                    {l.label}
-                  </button>
-                );
-              })}
+      <div className="border border-border rounded-xl divide-y divide-border max-h-[55vh] overflow-y-auto">
+        {ADMIN_SECTIONS.map((sec) => {
+          const acts = ADMIN_FEATURES[sec.key];
+          const on = ticked(features, sec.key);
+          return (
+            <div key={sec.key} className="px-3 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold">{sec.label}</span>
+                <div className="inline-flex rounded-lg border border-border overflow-hidden text-[11px]">
+                  {LEVELS.map((l) => {
+                    const disabled = !!max && rank[max[sec.key]] < rank[l.v];
+                    const active = value[sec.key] === l.v;
+                    return (
+                      <button key={l.v} type="button" disabled={disabled} onClick={() => onChange({ ...value, [sec.key]: l.v })}
+                        className={`px-2.5 py-1 ${active ? (l.v === "edit" ? "bg-emerald-600 text-white" : l.v === "view" ? "bg-mohemah-blue text-white" : "bg-muted-foreground text-white") : "bg-card"} disabled:opacity-30`}>
+                        {l.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              {acts && value[sec.key] === "edit" && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {acts.map((a) => {
+                    const blocked = !!maxFeatures?.[sec.key] && !maxFeatures[sec.key]!.includes(a.key);
+                    const checked = on.includes(a.key) && !blocked;
+                    return (
+                      <label key={a.key} className={`text-[11px] px-2 py-1 rounded-lg border cursor-pointer flex items-center gap-1 ${checked ? "border-emerald-500 bg-emerald-50 text-emerald-800" : "border-border text-muted-foreground"} ${blocked ? "opacity-40 cursor-not-allowed" : ""}`}>
+                        <input type="checkbox" className="accent-emerald-600" checked={checked} disabled={blocked} onChange={() => toggle(sec.key, a.key)} />{a.label}
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
+      </div>
+      <p className="text-[10px] text-muted-foreground mt-2">عند اختيار «تعديل» تظهر إجراءات الصفحة؛ ألغِ تحديد أي إجراء لمنعه (مثلاً: يرد على الرسائل دون إنهائها).</p>
+    </div>
+  );
+}
+
+function accessSummary(a: AdminPermissions | null, f: AdminFeatures | null, owner: boolean) {
+  if (owner) return "كل الصفحات (تعديل)";
+  const p = a ?? defaultAccess();
+  const edit = ADMIN_SECTIONS.filter((x) => p[x.key] === "edit").length;
+  const view = ADMIN_SECTIONS.filter((x) => p[x.key] === "view").length;
+  const limited = f ? ADMIN_SECTIONS.filter((x) => p[x.key] === "edit" && f[x.key] && f[x.key]!.length < (ADMIN_FEATURES[x.key]?.length ?? 0)).length : 0;
+  return `تعديل ${edit} · عرض ${view} · بدون ${ADMIN_SECTIONS.length - edit - view}${limited ? ` · ${limited} بإجراءات محددة` : ""}`;
+}
+
+function Modal({ title, sub, children, onClose, wide = false }: { title: string; sub?: string; children: React.ReactNode; onClose: () => void; wide?: boolean }) {
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className={`bg-card rounded-2xl p-6 w-full max-h-[92vh] overflow-y-auto ${wide ? "max-w-2xl" : "max-w-md"}`} onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-lg font-bold mb-1">{title}</h3>
+        {sub && <p className="text-xs text-muted-foreground mb-4">{sub}</p>}
+        {children}
       </div>
     </div>
   );
 }
 
-function accessSummary(a: AdminPermissions | null, owner: boolean) {
-  if (owner) return "كل الصفحات (تعديل)";
-  const p = a ?? defaultAccess();
-  const edit = ADMIN_SECTIONS.filter((x) => p[x.key] === "edit").length;
-  const view = ADMIN_SECTIONS.filter((x) => p[x.key] === "view").length;
-  return `تعديل ${edit} · عرض ${view} · بدون ${ADMIN_SECTIONS.length - edit - view}`;
-}
-
 export function AdminStaffPage() {
-  const { staff, customers, providers, addStaff, toggleStaff, resetPassword, setStaffPermissions } = useAdmin();
-  const { isOwner, user, can, permissions } = useAuth();
-  const canEdit = can("staff", "edit");
+  const { staff, customers, providers, addStaff, toggleStaff, removeStaff, resetPassword, setStaffPermissions, updateStaff } = useAdmin();
+  const { isOwner, user, can, canDo, permissions, features } = useAuth();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<StaffMember | null>(null);
+  const [profileFor, setProfileFor] = useState<StaffMember | null>(null);
+  const [passFor, setPassFor] = useState<StaffMember | null>(null);
+  const [delFor, setDelFor] = useState<StaffMember | null>(null);
   const [resetFor, setResetFor] = useState("");
   const [newPass, setNewPass] = useState("");
-  const everyone = [...staff.map(s => ({ id: s.id, name: `${s.name} (${s.role})` })), ...providers.map(p => ({ id: p.id, name: `${p.name} (مقدم خدمة)` })), ...customers.filter(c => !providers.some(p => p.id === c.id)).map(c => ({ id: c.id, name: `${c.name} (طالب خدمة)` }))]
-    .filter((u) => isOwner || !staff.some((s) => s.id === u.id && s.role === "مالك"));
+  const everyone = [...providers.map(p => ({ id: p.id, name: `${p.name} (مقدم خدمة)` })), ...customers.filter(c => !providers.some(p => p.id === c.id)).map(c => ({ id: c.id, name: `${c.name} (طالب خدمة)` }))];
   const doReset = async () => {
     if (!resetFor || newPass.length < 8) return toast.error("اختر المستخدم واكتب كلمة مرور 8 أحرف على الأقل");
     try { await resetPassword(resetFor, newPass); toast.success("تم تعيين كلمة المرور الجديدة وتسجيل خروج المستخدم من أجهزته"); setNewPass(""); setResetFor(""); }
     catch (e) { toast.error(errMsg(e)); }
   };
+  const act = "text-[11px] px-2 py-1 rounded-lg border border-border hover:bg-mohemah-light flex items-center gap-1";
   return (
     <div>
-      <PageHeader title="المستخدمون والصلاحيات" subtitle="حسابات لوحة التحكم وصلاحية كل مستخدم على كل صفحة"
-        action={canEdit ? <button onClick={() => setOpen(true)} className="mohemah-btn-coral text-sm px-4 py-2 rounded-xl flex items-center gap-2"><Plus className="w-4 h-4" /> إضافة مستخدم</button> : undefined} />
+      <PageHeader title="المستخدمون والصلاحيات" subtitle="حسابات لوحة التحكم، وصلاحية كل مستخدم على كل صفحة وإجراءاتها"
+        action={canDo("staff", "add") ? <button onClick={() => setOpen(true)} className="mohemah-btn-coral text-sm px-4 py-2 rounded-xl flex items-center gap-2"><Plus className="w-4 h-4" /> إضافة مستخدم</button> : undefined} />
       <div className="bg-card border border-border rounded-2xl overflow-x-auto">
-        <table className="w-full text-sm text-right min-w-[640px]">
+        <table className="w-full text-sm text-right min-w-[860px]">
           <thead className="bg-mohemah-light text-xs text-muted-foreground">
-            <tr>{["#", "الاسم", "الدخول", "الدور", "الصلاحيات", "الحالة", ""].map((h) => <th key={h} className="p-3">{h}</th>)}</tr>
+            <tr>{["#", "الاسم", "الدخول", "الدور", "الصلاحيات", "الحالة", "الإجراءات"].map((h) => <th key={h} className="p-3">{h}</th>)}</tr>
           </thead>
           <tbody>
             {staff.map((s, i) => {
               const owner = s.role === "مالك";
+              const self = s.id === user?.id;
+              const manage = isOwner || !owner;
               return (
-                <tr key={s.id} className="border-t border-border">
+                <tr key={s.id} className="border-t border-border align-top">
                   <td className="p-3 text-muted-foreground">{i + 1}</td>
-                  <td className="p-3 font-bold">{s.name}</td>
+                  <td className="p-3 font-bold">{s.name}{self && <span className="text-[10px] text-muted-foreground font-normal"> (أنت)</span>}</td>
                   <td className="p-3" dir="ltr">{s.email}</td>
                   <td className="p-3"><span className="text-[11px] px-2 py-1 rounded-full bg-mohemah-blue/15 text-mohemah-blue">{s.role}</span></td>
-                  <td className="p-3 text-[11px] text-muted-foreground">{accessSummary(s.access, owner)}</td>
+                  <td className="p-3 text-[11px] text-muted-foreground">{accessSummary(s.access, s.features, owner)}</td>
                   <td className="p-3"><span className={`text-[11px] px-2 py-1 rounded-full ${s.active ? "bg-emerald-100 text-emerald-700" : "bg-muted text-muted-foreground"}`}>{s.active ? "نشط" : "موقوف"}</span></td>
-                  <td className="p-3 whitespace-nowrap space-x-3 space-x-reverse">
-                    {canEdit && !owner && s.id !== user?.id && <button onClick={() => setEditing(s)} className="text-xs text-mohemah-blue hover:underline">الصلاحيات</button>}
-                    {canEdit && s.id !== user?.id && (isOwner || !owner) && <button onClick={() => toggleStaff(s.id)} className="text-xs text-mohemah-blue hover:underline">{s.active ? "إيقاف" : "تفعيل"}</button>}
+                  <td className="p-3">
+                    <div className="flex flex-wrap gap-1.5">
+                      {canDo("staff", "permissions") && !owner && !self && <button onClick={() => setEditing(s)} className={act}><Shield className="size-3.5" />الصلاحيات</button>}
+                      {canDo("staff", "edit") && manage && <button onClick={() => setProfileFor(s)} className={act}><Pencil className="size-3.5" />البيانات</button>}
+                      {canDo("staff", "edit") && manage && <button onClick={() => setPassFor(s)} className={act}><KeyRound className="size-3.5" />كلمة المرور</button>}
+                      {canDo("staff", "suspend") && manage && !self && <button onClick={() => toggleStaff(s.id)} className={act}>{s.active ? <><Ban className="size-3.5" />إيقاف</> : <><RotateCcw className="size-3.5" />تفعيل</>}</button>}
+                      {canDo("staff", "suspend") && manage && !self && <button onClick={() => setDelFor(s)} className={`${act} text-red-600 hover:bg-red-50`}><Trash2 className="size-3.5" />حذف</button>}
+                      {!can("staff", "edit") && <span className="text-[11px] text-muted-foreground">عرض فقط</span>}
+                    </div>
                   </td>
                 </tr>
               );
@@ -583,10 +637,10 @@ export function AdminStaffPage() {
           </tbody>
         </table>
       </div>
-      <p className="text-[11px] text-muted-foreground mt-2">«عرض» يفتح الصفحة للقراءة فقط، و«تعديل» يسمح بالحفظ والإضافة والحذف، و«بدون» يخفي الصفحة. الصلاحيات تُطبَّق في الخادم أيضاً.</p>
-      {canEdit && (
+      <p className="text-[11px] text-muted-foreground mt-2">«عرض» يفتح الصفحة للقراءة فقط، و«تعديل» يسمح بالإجراءات المحددة لها، و«بدون» يخفي الصفحة. الصلاحيات تُطبَّق في الخادم أيضاً.</p>
+      {(canDo("customers", "password") || canDo("providers", "password")) && (
         <section className="mt-6 border-t border-border pt-5 space-y-3 max-w-xl">
-          <h2 className="font-bold text-sm">إعادة تعيين كلمة مرور مستخدم</h2>
+          <h2 className="font-bold text-sm">إعادة تعيين كلمة مرور طالب أو مقدم خدمة</h2>
           <p className="text-xs text-muted-foreground">يُستخدم عندما ينسى طالب الخدمة أو مقدم الخدمة كلمة المرور ويتواصل مع الدعم.</p>
           <div className="grid sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2">
             <select value={resetFor} onChange={(e) => setResetFor(e.target.value)} className="admin-input"><option value="">اختر المستخدم</option>{everyone.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}</select>
@@ -595,35 +649,80 @@ export function AdminStaffPage() {
           </div>
         </section>
       )}
-      {open && <NewStaffDialog canOwner={isOwner} max={isOwner ? null : permissions} onClose={() => setOpen(false)} onSave={async (d) => { try { await addStaff(d); toast.success("تم إضافة المستخدم"); setOpen(false); } catch (e) { toast.error(errMsg(e)); } }} />}
-      {editing && <PermissionsDialog member={editing} max={isOwner ? null : permissions} onClose={() => setEditing(null)}
-        onSave={async (p) => { try { await setStaffPermissions(editing.id, p); toast.success("تم حفظ الصلاحيات"); setEditing(null); } catch (e) { toast.error(errMsg(e)); } }} />}
+      {open && <NewStaffDialog canOwner={isOwner} max={isOwner ? null : permissions} maxFeatures={isOwner ? null : features} onClose={() => setOpen(false)}
+        onSave={async (d) => { try { await addStaff(d); toast.success("تم إضافة المستخدم"); setOpen(false); } catch (e) { toast.error(errMsg(e)); } }} />}
+      {editing && <PermissionsDialog member={editing} max={isOwner ? null : permissions} maxFeatures={isOwner ? null : features} onClose={() => setEditing(null)}
+        onSave={async (p, f) => { try { await setStaffPermissions(editing.id, p, f); toast.success("تم حفظ الصلاحيات"); setEditing(null); } catch (e) { toast.error(errMsg(e)); } }} />}
+      {profileFor && <StaffProfileDialog member={profileFor} onClose={() => setProfileFor(null)}
+        onSave={async (d) => { try { await updateStaff(profileFor.id, d); toast.success("تم حفظ البيانات"); setProfileFor(null); } catch (e) { toast.error(errMsg(e)); } }} />}
+      {passFor && <StaffPasswordDialog member={passFor} onClose={() => setPassFor(null)}
+        onSave={async (pw) => { try { await resetPassword(passFor.id, pw); toast.success("تم تغيير كلمة المرور وتسجيل خروجه من أجهزته"); setPassFor(null); } catch (e) { toast.error(errMsg(e)); } }} />}
+      {delFor && (
+        <Modal title={`حذف ${delFor.name} من لوحة التحكم`} sub="يُزال دوره في اللوحة ويُسجَّل خروجه، ويبقى حسابه في التطبيق إن وُجد." onClose={() => setDelFor(null)}>
+          <div className="flex gap-2 mt-2">
+            <button onClick={() => setDelFor(null)} className="flex-1 py-2.5 rounded-xl bg-mohemah-light text-sm font-bold">إلغاء</button>
+            <button onClick={async () => { await removeStaff(delFor.id); toast.success("تم الحذف من لوحة التحكم"); setDelFor(null); }} className="flex-1 py-2.5 rounded-xl bg-red-600 text-white text-sm font-bold">حذف</button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
 
-function PermissionsDialog({ member, max, onClose, onSave }: { member: StaffMember; max: AdminPermissions | null; onClose: () => void; onSave: (p: AdminPermissions) => void }) {
+function PermissionsDialog({ member, max, maxFeatures, onClose, onSave }: { member: StaffMember; max: AdminPermissions | null; maxFeatures: AdminFeatures | null; onClose: () => void; onSave: (p: AdminPermissions, f: AdminFeatures) => void }) {
   const [value, setValue] = useState<AdminPermissions>(member.access ?? defaultAccess());
+  const [feats, setFeats] = useState<AdminFeatures>(member.features ?? {});
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-card rounded-2xl p-6 max-w-lg w-full" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-lg font-bold mb-1">صلاحيات {member.name}</h3>
-        <p className="text-xs text-muted-foreground mb-4">حدد لكل صفحة: بدون، عرض، أو تعديل. يسري التغيير فوراً.</p>
-        <PermissionsMatrix value={value} onChange={setValue} max={max} />
-        <div className="flex gap-2 mt-5">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-mohemah-light text-sm font-bold">إلغاء</button>
-          <button onClick={() => onSave(value)} className="flex-1 py-2.5 rounded-xl mohemah-btn-coral text-sm font-bold">حفظ الصلاحيات</button>
-        </div>
+    <Modal wide title={`صلاحيات ${member.name}`} sub="حدد لكل صفحة: بدون، عرض، أو تعديل — ثم الإجراءات المسموحة داخلها. يسري التغيير فوراً." onClose={onClose}>
+      <PermissionsMatrix value={value} onChange={setValue} features={feats} onFeatures={setFeats} max={max} maxFeatures={maxFeatures} />
+      <div className="flex gap-2 mt-5">
+        <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-mohemah-light text-sm font-bold">إلغاء</button>
+        <button onClick={() => onSave(value, feats)} className="flex-1 py-2.5 rounded-xl mohemah-btn-coral text-sm font-bold">حفظ الصلاحيات</button>
       </div>
-    </div>
+    </Modal>
   );
 }
 
-function NewStaffDialog({ canOwner, max, onClose, onSave }: { canOwner: boolean; max: AdminPermissions | null; onClose: () => void; onSave: (s: { name: string; login: string; password: string; role: "مالك" | "مشرف"; permissions?: AdminPermissions }) => void }) {
+function StaffProfileDialog({ member, onClose, onSave }: { member: StaffMember; onClose: () => void; onSave: (d: { name: string; login?: string }) => void }) {
+  const [name, setName] = useState(member.name);
+  const [login, setLogin] = useState(member.email === "—" ? "" : member.email);
+  return (
+    <Modal title={`بيانات ${member.name}`} onClose={onClose}>
+      <div className="space-y-3 text-sm">
+        <Field label="الاسم"><input value={name} onChange={(e) => setName(e.target.value)} className="admin-input" /></Field>
+        <Field label="البريد أو اسم المستخدم (للدخول)"><input dir="ltr" value={login} onChange={(e) => setLogin(e.target.value)} className="admin-input" /></Field>
+      </div>
+      <div className="flex gap-2 mt-5">
+        <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-mohemah-light text-sm font-bold">إلغاء</button>
+        <button onClick={() => name.trim() ? onSave({ name: name.trim(), login: login.trim() && login.trim() !== member.email ? login.trim() : undefined }) : toast.error("اكتب الاسم")} className="flex-1 py-2.5 rounded-xl mohemah-btn-coral text-sm font-bold">حفظ</button>
+      </div>
+    </Modal>
+  );
+}
+
+function StaffPasswordDialog({ member, onClose, onSave }: { member: StaffMember; onClose: () => void; onSave: (pw: string) => void }) {
+  const [pw, setPw] = useState("");
+  const [pw2, setPw2] = useState("");
+  return (
+    <Modal title={`كلمة مرور ${member.name}`} sub="بعد الحفظ يُسجَّل خروجه من كل الأجهزة ويدخل بكلمة المرور الجديدة." onClose={onClose}>
+      <div className="space-y-3 text-sm">
+        <Field label="كلمة المرور الجديدة"><input dir="ltr" type="password" value={pw} onChange={(e) => setPw(e.target.value)} className="admin-input" autoComplete="new-password" /></Field>
+        <Field label="تأكيد كلمة المرور"><input dir="ltr" type="password" value={pw2} onChange={(e) => setPw2(e.target.value)} className="admin-input" autoComplete="new-password" /></Field>
+      </div>
+      <div className="flex gap-2 mt-5">
+        <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-mohemah-light text-sm font-bold">إلغاء</button>
+        <button onClick={() => pw.length < 8 ? toast.error("8 أحرف على الأقل") : pw !== pw2 ? toast.error("كلمتا المرور غير متطابقتين") : onSave(pw)} className="flex-1 py-2.5 rounded-xl mohemah-btn-coral text-sm font-bold">تغيير</button>
+      </div>
+    </Modal>
+  );
+}
+
+function NewStaffDialog({ canOwner, max, maxFeatures, onClose, onSave }: { canOwner: boolean; max: AdminPermissions | null; maxFeatures: AdminFeatures | null; onClose: () => void; onSave: (s: { name: string; login: string; password: string; role: "مالك" | "مشرف"; permissions?: AdminPermissions; features?: AdminFeatures | null }) => void }) {
   const [name, setName] = useState("");
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<"مالك" | "مشرف">("مشرف");
+  const [feats, setFeats] = useState<AdminFeatures>(maxFeatures ?? {});
   const [access, setAccess] = useState<AdminPermissions>(() => {
     const d = defaultAccess();
     if (!max) return d;
@@ -631,10 +730,9 @@ function NewStaffDialog({ canOwner, max, onClose, onSave }: { canOwner: boolean;
     return Object.fromEntries(ADMIN_SECTIONS.map((x) => [x.key, rank[max[x.key]] < rank[d[x.key]] ? max[x.key] : d[x.key]])) as AdminPermissions;
   });
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-card rounded-2xl p-6 max-w-lg w-full max-h-[92vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-lg font-bold mb-4">إضافة مستخدم للوحة التحكم</h3>
-        <div className="space-y-3 text-sm">
+    <Modal wide title="إضافة مستخدم للوحة التحكم" onClose={onClose}>
+      <div className="space-y-3 text-sm">
+        <div className="grid sm:grid-cols-2 gap-3">
           <Field label="الاسم"><input value={name} onChange={(e) => setName(e.target.value)} className="admin-input" /></Field>
           <Field label="البريد أو اسم المستخدم (للدخول)"><input dir="ltr" value={login} onChange={(e) => setLogin(e.target.value)} className="admin-input" placeholder="support1 أو name@mohemah.sa" /></Field>
           <Field label="كلمة المرور المؤقتة"><input dir="ltr" value={password} onChange={(e) => setPassword(e.target.value)} className="admin-input" placeholder="8 أحرف على الأقل" /></Field>
@@ -643,52 +741,66 @@ function NewStaffDialog({ canOwner, max, onClose, onSave }: { canOwner: boolean;
               <select value={role} onChange={(e) => setRole(e.target.value as "مالك" | "مشرف")} className="admin-input"><option>مشرف</option><option>مالك</option></select>
             </Field>
           )}
-          {role === "مشرف" ? <PermissionsMatrix value={access} onChange={setAccess} max={max} /> : <p className="text-[11px] text-muted-foreground">المالك يملك كل الصلاحيات على كل الصفحات.</p>}
         </div>
-        <div className="flex gap-2 mt-5">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-mohemah-light text-sm font-bold">إلغاء</button>
-          <button onClick={() => name && login && password.length >= 8 ? onSave({ name, login, password, role, permissions: role === "مشرف" ? access : undefined }) : toast.error("أكمل الحقول (كلمة المرور 8 أحرف على الأقل)")} className="flex-1 py-2.5 rounded-xl mohemah-btn-coral text-sm font-bold">حفظ</button>
-        </div>
+        {role === "مشرف" ? <PermissionsMatrix value={access} onChange={setAccess} features={feats} onFeatures={setFeats} max={max} maxFeatures={maxFeatures} /> : <p className="text-[11px] text-muted-foreground">المالك يملك كل الصلاحيات على كل الصفحات.</p>}
       </div>
-    </div>
+      <div className="flex gap-2 mt-5">
+        <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-mohemah-light text-sm font-bold">إلغاء</button>
+        <button onClick={() => name && login && password.length >= 8 ? onSave({ name, login, password, role, permissions: role === "مشرف" ? access : undefined, features: role === "مشرف" ? feats : undefined }) : toast.error("أكمل الحقول (كلمة المرور 8 أحرف على الأقل)")} className="flex-1 py-2.5 rounded-xl mohemah-btn-coral text-sm font-bold">حفظ</button>
+      </div>
+    </Modal>
   );
 }
 
 /* ============ Settings ============ */
+/** One logo slot: preview, upload, download, remove. */
+function LogoSlot({ title, hint, url, onChange }: { title: string; hint: string; url: string; onChange: (url: string) => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  const onFile = (f: File | undefined) => {
+    if (!f) return;
+    if (!["image/png", "image/jpeg", "image/webp", "image/svg+xml"].includes(f.type)) { toast.error("اختر صورة PNG أو JPG أو WEBP أو SVG"); return; }
+    if (f.size > 2 * 1024 * 1024) { toast.error("الحد الأقصى 2MB"); return; }
+    uploadAdminImage(f).then((u) => { onChange(u); toast.success("تم رفع الشعار، اضغط حفظ التغييرات"); }).catch((e) => toast.error(errMsg(e, "تعذر رفع الصورة")));
+  };
+  return (
+    <div className="mb-5">
+      <h3 className="font-bold text-sm mb-1">{title}</h3>
+      <p className="text-[11px] text-muted-foreground mb-2">{hint}</p>
+      <div className="h-32 bg-muted border border-dashed border-border rounded-lg grid place-items-center mb-3 overflow-hidden">
+        {url ? <img src={url} alt={title} className="max-w-full h-28 object-contain p-2" /> : <span className="text-muted-foreground text-xs">لم يتم إضافة شعار</span>}
+      </div>
+      <input ref={input} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={(e) => { onFile(e.target.files?.[0]); e.target.value = ""; }} className="hidden" aria-label={title} />
+      <div className="flex items-center gap-2">
+        <Button variant="outline" size="sm" className="flex-1" onClick={() => input.current?.click()}><Upload />{url ? "تغيير الشعار" : "إضافة شعار"}</Button>
+        {url && <><Button variant="ghost" size="icon" title="تحميل الشعار" aria-label="تحميل الشعار" asChild><a href={url} download="mohemah-logo"><Download /></a></Button><Button variant="ghost" size="icon" title="إزالة الشعار" aria-label="إزالة الشعار" onClick={() => onChange("")}><Trash2 /></Button></>}
+      </div>
+      <p className="text-[11px] text-muted-foreground mt-2">PNG / JPG / WEBP / SVG · حتى 2MB</p>
+    </div>
+  );
+}
+
 export function AdminSettingsPage() {
   const { settings, updateSettings } = useAdmin();
   const [local, setLocal] = useState(settings);
   const [saving, setSaving] = useState(false);
   const dirty = useRef(false);
-  const fileInput = useRef<HTMLInputElement>(null);
   useEffect(() => { if (!dirty.current) setLocal(settings); }, [settings]);
+  const set = (patch: Partial<typeof local>) => { dirty.current = true; setLocal((s) => ({ ...s, ...patch })); };
 
-
-  const onFile = (f: File | undefined) => {
-    if (!f) return;
-    if (!["image/png", "image/jpeg", "image/webp", "image/svg+xml"].includes(f.type)) { toast.error("اختر صورة PNG أو JPG أو WEBP أو SVG"); return; }
-    if (f.size > 2 * 1024 * 1024) { toast.error("الحد الأقصى 2MB"); return; }
-    uploadAdminImage(f).then((url) => { dirty.current = true; setLocal((s) => ({ ...s, logoUrl: url })); toast.success("تم رفع الشعار، اضغط حفظ التغييرات"); }).catch((e) => toast.error(errMsg(e, "تعذر رفع الصورة")));
+  const save = async () => {
+    for (const u of [local.customerIosUrl, local.customerAndroidUrl, local.customerOtherUrl, local.providerIosUrl, local.providerAndroidUrl, local.providerOtherUrl]) if (u.trim() && !/^https?:\/\//.test(u.trim())) return toast.error("روابط التحميل يجب أن تبدأ بـ https://");
+    setSaving(true);
+    try { await updateSettings(local); dirty.current = false; toast.success("تم حفظ الإعدادات"); } catch (e) { toast.error(errMsg(e, "تعذر حفظ الإعدادات، حاول مجددًا")); } finally { setSaving(false); }
   };
-
-  const save = async () => { setSaving(true); try { await updateSettings(local); dirty.current = false; toast.success("تم حفظ الإعدادات"); } catch { toast.error("تعذر حفظ الإعدادات، حاول مجددًا"); } finally { setSaving(false); } };
 
   return (
     <div>
-      <PageHeader title="الإعدادات العامة" subtitle="هوية التطبيق وبيانات التواصل والشعار" />
+      <PageHeader title="الإعدادات العامة" subtitle="هوية التطبيق وبيانات التواصل والشعارات وروابط التحميل" />
 
-      <div className="grid grid-cols-1 lg:grid-cols-[240px_minmax(0,1fr)] gap-4" onChange={() => { dirty.current = true; }}>
+      <div className="grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)] gap-4" onChange={() => { dirty.current = true; }}>
         <section className="min-w-0 border-t border-border pt-4">
-          <h3 className="font-bold text-sm mb-3">شعار الجهة</h3>
-          <div className="h-32 bg-muted border border-dashed border-border rounded-lg grid place-items-center mb-3 overflow-hidden">
-            {local.logoUrl ? <img src={local.logoUrl} alt="شعار الجهة" className="max-w-full h-28 object-contain p-2" /> : <span className="text-muted-foreground text-xs">لم يتم إضافة شعار</span>}
-          </div>
-          <input ref={fileInput} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={(e) => { onFile(e.target.files?.[0]); e.target.value = ""; }} className="hidden" aria-label="اختيار شعار الجهة" />
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="flex-1" onClick={() => fileInput.current?.click()}><Upload />إضافة شعار</Button>
-            {local.logoUrl && <><Button variant="ghost" size="icon" title="تحميل الشعار" aria-label="تحميل الشعار" asChild><a href={local.logoUrl} download="mohemah-logo"><Download /></a></Button><Button variant="ghost" size="icon" title="إزالة الشعار" aria-label="إزالة الشعار" onClick={() => { dirty.current = true; setLocal(s => ({ ...s, logoUrl: "" })); }}><Trash2 /></Button></>}
-          </div>
-          <p className="text-[11px] text-muted-foreground mt-2">PNG / JPG / WEBP / SVG · حتى 2MB</p>
+          <LogoSlot title="شعار لوحة التحكم" hint="يظهر في القائمة الجانبية وأيقونة تبويب المتصفح وخطابات الخبرة." url={local.logoUrl} onChange={(u) => set({ logoUrl: u })} />
+          <LogoSlot title="شعار التطبيقات" hint="يظهر في تطبيقي طالب ومقدم الخدمة (شاشة البداية، الدخول، الرئيسية). يُفضّل مربع 512×512 بخلفية شفافة." url={local.appLogoUrl} onChange={(u) => set({ appLogoUrl: u })} />
         </section>
 
         {/* Settings form */}
@@ -703,6 +815,21 @@ export function AdminSettingsPage() {
           </div>
           <Field label="رسالة ترحيب لمقدمي الخدمة"><textarea value={local.welcomeProvider} onChange={(e) => setLocal({ ...local, welcomeProvider: e.target.value })} className="admin-input min-h-20" /></Field>
           <Field label="رسالة ترحيب لطالبي الخدمة"><textarea value={local.welcomeCustomer} onChange={(e) => setLocal({ ...local, welcomeCustomer: e.target.value })} className="admin-input min-h-20" /></Field>
+
+          {([
+            { title: "روابط تحميل تطبيق مقدم الخدمة «مهمة شريك»", hint: "تظهر في تطبيق طالب الخدمة ← حسابي ← «هل لديك مهارة أو خبرة؟» ليحمّل تطبيق مقدمي الخدمة.", keys: ["providerIosUrl", "providerAndroidUrl", "providerOtherUrl"] as const },
+            { title: "روابط تحميل تطبيق طالب الخدمة «مهمة»", hint: "تظهر في تطبيق مقدم الخدمة ← حسابي ← «هل تحتاج خدمة؟».", keys: ["customerIosUrl", "customerAndroidUrl", "customerOtherUrl"] as const },
+          ]).map((g) => (
+            <div key={g.title} className="pt-3 border-t border-border">
+              <h3 className="font-bold mb-1 flex items-center gap-2"><Smartphone className="size-4 text-mohemah-blue" />{g.title}</h3>
+              <p className="text-[11px] text-muted-foreground mb-2">{g.hint} اترك الرابط فارغاً لإخفاء زره.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {(["آيفون (App Store)", "أندرويد (Google Play)", "أخرى (هواوي / رابط مباشر)"] as const).map((label, i) => (
+                  <Field key={label} label={label}><input dir="ltr" value={local[g.keys[i]]} onChange={(e) => set({ [g.keys[i]]: e.target.value })} className="admin-input" placeholder={i === 0 ? "https://apps.apple.com/…" : i === 1 ? "https://play.google.com/…" : "https://…"} /></Field>
+                ))}
+              </div>
+            </div>
+          ))}
 
           <Button onClick={save} disabled={saving}>{saving ? <LoaderCircle className="animate-spin" /> : <Save />}{saving ? "جاري الحفظ" : "حفظ التغييرات"}</Button>
         </div>

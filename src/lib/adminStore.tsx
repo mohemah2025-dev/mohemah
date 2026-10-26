@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, ReactNode, useCallback } from "react";
 import { api, errMsg } from "@/lib/api";
 import { compressImage } from "@/lib/imageCompress";
-import { useAuth, type AdminPermissions, type AdminSection } from "@/lib/AuthContext";
+import { useAuth, type AdminFeatures, type AdminPermissions, type AdminSection } from "@/lib/AuthContext";
 import { toast } from "sonner";
 
 /* ============================ Types ============================ */
@@ -85,6 +85,8 @@ export interface StaffMember {
   permissions: { read: string[]; write: string[] };
   /** Page permissions (staff only; null for the owner). */
   access: AdminPermissions | null;
+  /** Allowed actions per page (null = every action of the editable pages). */
+  features: AdminFeatures | null;
   active: boolean;
 }
 
@@ -144,6 +146,14 @@ export const POLICY_PLACEMENTS: { key: PolicyPlacement; label: string; who: "cus
 export interface AdminSettings {
   appName: string;
   logoUrl: string;
+  /** Logo shown in the mobile apps (separate from the admin panel logo). */
+  appLogoUrl: string;
+  customerIosUrl: string;
+  customerAndroidUrl: string;
+  customerOtherUrl: string;
+  providerIosUrl: string;
+  providerAndroidUrl: string;
+  providerOtherUrl: string;
   currencyLabel: string;
   welcomeProvider: string;
   welcomeCustomer: string;
@@ -219,6 +229,13 @@ export const NOTIFICATION_PRESETS: { key: string; category: NotifCategory; icon:
 const defaultSettings: AdminSettings = {
   appName: "مهمة",
   logoUrl: "",
+  appLogoUrl: "",
+  customerIosUrl: "",
+  customerAndroidUrl: "",
+  customerOtherUrl: "",
+  providerIosUrl: "",
+  providerAndroidUrl: "",
+  providerOtherUrl: "",
   currencyLabel: "كوين",
   welcomeProvider: "مرحباً بك في مهمة، فعّل الاتصال من الرئيسية لتصلك الطلبات الجديدة في خدماتك.",
   welcomeCustomer: "أهلاً بك في مهمة، اطلب أي خدمة بضغطة زر ونوصلك بأقرب مقدم خدمة.",
@@ -265,8 +282,9 @@ interface AdminState {
   updateProvider: (id: string, patch: Partial<AdminProviderRow>) => void;
   removeProvider: (id: string) => void;
 
-  addStaff: (s: { name: string; login: string; password: string; role: "مالك" | "مشرف"; permissions?: AdminPermissions }) => Promise<void>;
-  setStaffPermissions: (id: string, permissions: AdminPermissions) => Promise<void>;
+  addStaff: (s: { name: string; login: string; password: string; role: "مالك" | "مشرف"; permissions?: AdminPermissions; features?: AdminFeatures | null }) => Promise<void>;
+  setStaffPermissions: (id: string, permissions: AdminPermissions, features?: AdminFeatures | null) => Promise<void>;
+  updateStaff: (id: string, patch: { name?: string; login?: string }) => Promise<void>;
   toggleStaff: (id: string) => void;
   removeStaff: (id: string) => void;
 
@@ -294,6 +312,7 @@ type ApiUser = {
   gender: string | null; rating: number; coin_balance: number; is_active: boolean; roles: string[]; services: string[];
   orders_count: number; favorite_service: string | null; updated_at: string; last_seen_at: string | null;
   permissions?: AdminPermissions | null;
+  features?: AdminFeatures | null;
   member_no?: number | null;
 };
 type ApiService = { id: string; name: string; description: string | null; icon: string; color: string; coin_price: number; active: number; sort_order: number };
@@ -372,6 +391,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
           role: p.roles.includes("admin") ? "مالك" : "مشرف",
           permissions: { read: [...PERM_SECTIONS], write: p.roles.includes("admin") ? [...PERM_SECTIONS] : PERM_SECTIONS.filter((x) => x !== "staff" && x !== "settings") },
           access: p.permissions ?? null,
+          features: p.features ?? null,
           active: p.is_active,
         });
       }
@@ -443,6 +463,13 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     setSettings({
       appName: data.app_name ?? defaultSettings.appName,
       logoUrl: data.logo_url ?? "",
+      appLogoUrl: data.app_logo_url ?? "",
+      customerIosUrl: data.customer_ios_url ?? "",
+      customerAndroidUrl: data.customer_android_url ?? "",
+      customerOtherUrl: data.customer_other_url ?? "",
+      providerIosUrl: data.provider_ios_url ?? "",
+      providerAndroidUrl: data.provider_android_url ?? "",
+      providerOtherUrl: data.provider_other_url ?? "",
       currencyLabel: data.currency_label ?? defaultSettings.currencyLabel,
       welcomeProvider: data.welcome_provider ?? defaultSettings.welcomeProvider,
       welcomeCustomer: data.welcome_customer ?? defaultSettings.welcomeCustomer,
@@ -533,12 +560,16 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     try { await adm(`/api/admin/users/${id}/role`, { body: { role: "provider", enable: false } }); toast.success("تم إلغاء صفة مقدم الخدمة"); await loadUsers(); } catch (e) { report(e); }
   };
 
-  const addStaff = async (s: { name: string; login: string; password: string; role: "مالك" | "مشرف"; permissions?: AdminPermissions }) => {
-    await adm("/api/admin/staff", { body: { full_name: s.name, login: s.login, password: s.password, role: s.role === "مالك" ? "admin" : "staff", permissions: s.permissions } });
+  const addStaff = async (s: { name: string; login: string; password: string; role: "مالك" | "مشرف"; permissions?: AdminPermissions; features?: AdminFeatures | null }) => {
+    await adm("/api/admin/staff", { body: { full_name: s.name, login: s.login, password: s.password, role: s.role === "مالك" ? "admin" : "staff", permissions: s.permissions, features: s.features ?? undefined } });
     await loadUsers();
   };
-  const setStaffPermissions = async (id: string, permissions: AdminPermissions) => {
-    await adm(`/api/admin/users/${id}/permissions`, { method: "PUT", body: { permissions } });
+  const setStaffPermissions = async (id: string, permissions: AdminPermissions, features?: AdminFeatures | null) => {
+    await adm(`/api/admin/users/${id}/permissions`, { method: "PUT", body: { permissions, features: features === undefined ? undefined : features } });
+    await loadUsers();
+  };
+  const updateStaff = async (id: string, patch: { name?: string; login?: string }) => {
+    await adm(`/api/admin/users/${id}`, { method: "PATCH", body: { full_name: patch.name, login: patch.login } });
     await loadUsers();
   };
   const toggleStaff = async (id: string) => {
@@ -548,8 +579,8 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   };
   const removeStaff = async (id: string) => {
     try {
-      await adm(`/api/admin/users/${id}/role`, { body: { role: "staff", enable: false } });
-      await adm(`/api/admin/users/${id}/role`, { body: { role: "admin", enable: false } });
+      const owner = staff.find((x) => x.id === id)?.role === "مالك";
+      await adm(`/api/admin/users/${id}/role`, { body: { role: owner ? "admin" : "staff", enable: false } });
       await loadUsers();
     } catch (e) { report(e); }
   };
@@ -597,7 +628,9 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   const updateSettings = async (patch: Partial<AdminSettings>) => {
     const merged = { ...settings, ...patch };
     await adm("/api/admin/settings", { method: "PUT", body: {
-      app_name: merged.appName, logo_url: merged.logoUrl || null, currency_label: merged.currencyLabel,
+      app_name: merged.appName, logo_url: merged.logoUrl || null, app_logo_url: merged.appLogoUrl || null, currency_label: merged.currencyLabel,
+      customer_ios_url: merged.customerIosUrl.trim() || null, customer_android_url: merged.customerAndroidUrl.trim() || null, customer_other_url: merged.customerOtherUrl.trim() || null,
+      provider_ios_url: merged.providerIosUrl.trim() || null, provider_android_url: merged.providerAndroidUrl.trim() || null, provider_other_url: merged.providerOtherUrl.trim() || null,
       welcome_provider: merged.welcomeProvider, welcome_customer: merged.welcomeCustomer,
       support_email: merged.supportEmail, support_phone: merged.supportPhone, primary_color: merged.primaryColor,
     } });
@@ -611,7 +644,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     updateService, addService, removeService, moveSubService, addSubService, updateSubService, removeSubService, reorder, addSuggestedServices,
     addCustomer, updateCustomer, removeCustomer,
     addProvider, updateProvider, removeProvider,
-    addStaff, setStaffPermissions, toggleStaff, removeStaff,
+    addStaff, setStaffPermissions, updateStaff, toggleStaff, removeStaff,
     sendNotification, removeNotification,
     addAd, updateAd, removeAd,
     addPolicy, updatePolicy, removePolicy,

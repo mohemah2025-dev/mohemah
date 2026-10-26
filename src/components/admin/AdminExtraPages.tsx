@@ -344,14 +344,14 @@ export function AdminAdsPage() {
 
       <div className="bg-mohemah-blue/5 border border-mohemah-blue/20 rounded-2xl p-3 mb-5 flex items-start gap-2 text-xs text-mohemah-blue">
         <ImageIcon className="w-4 h-4 mt-0.5 flex-shrink-0" />
-        <p>المقاسات المقترحة للإعلانات: <b>بانر علوي 1200×400</b> (نسبة 3:1) — <b>بانر سفلي 1200×300</b> (نسبة 4:1) — <b>بطاقة منبثقة 800×600</b> (نسبة 4:3). الصور العرضية تعطي مظهراً احترافياً.</p>
+        <p>المقاسات المعتمدة (تظهر في التطبيقات بنفس النسبة تماماً دون قص): <b>بانر علوي 1200×400</b> (3:1) أعلى الرئيسية — <b>بانر سفلي 1200×300</b> (4:1) أسفل الرئيسية — <b>بطاقة منبثقة 800×600</b> (4:3) تظهر مرة عند فتح التطبيق.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {ads.map((a) => (
           <div key={a.id} className="bg-card border border-border rounded-2xl overflow-hidden">
-            {/* Landscape banner preview 3:1 */}
-            <div className="relative w-full bg-gradient-to-l from-mohemah-coral to-mohemah-blue overflow-hidden" style={{ aspectRatio: "3 / 1" }}>
+            {/* Preview in the exact ratio shown in the apps */}
+            <div className="relative w-full bg-gradient-to-l from-mohemah-coral to-mohemah-blue overflow-hidden" style={{ aspectRatio: a.placement === "بانر سفلي" ? "4 / 1" : a.placement === "بطاقة منبثقة" ? "4 / 3" : "3 / 1" }}>
               {a.imageUrl ? (
                 <img src={a.imageUrl} alt={a.title} className="w-full h-full object-cover" />
               ) : (

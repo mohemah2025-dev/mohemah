@@ -27,7 +27,7 @@ export function AppHeader() {
     <>
       <header className="mohemah-header-gradient text-foreground px-4 pt-4 pb-3">
         <div className="max-w-lg mx-auto grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3">
-          <img src={settings?.logo_url ? fileUrl(settings.logo_url) : logo} alt={settings?.app_name ?? "تطبيق مهمة"} width={56} height={56} className="w-14 h-14 shrink-0 object-contain" />
+          <img src={settings?.app_logo_url ? fileUrl(settings.app_logo_url) : logo} alt={settings?.app_name ?? "تطبيق مهمة"} width={56} height={56} className="w-14 h-14 shrink-0 object-contain" />
           <div className="flex min-w-0 items-center justify-end gap-3">
             {user ? (
               <div className="min-w-0 text-left">

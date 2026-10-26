@@ -11,7 +11,7 @@ export function AuthScreen({ title, subtitle, badge, children, switchTo }: { tit
     <div className="min-h-screen flex items-center justify-center px-4 py-10" style={{ background: "var(--gradient-brand)" }}>
       <div className="w-full max-w-md bg-card text-foreground rounded-3xl shadow-xl p-6 sm:p-8 border border-border">
         <div className="text-center mb-6">
-          <img src={settings?.logo_url ? fileUrl(settings.logo_url) : logo} alt={settings?.app_name ?? "مهمة"} className="mx-auto size-16 object-contain" />
+          <img src={settings?.app_logo_url ? fileUrl(settings.app_logo_url) : logo} alt={settings?.app_name ?? "مهمة"} className="mx-auto size-16 object-contain" />
           <span className="inline-block mt-3 rounded-full bg-accent px-3 py-1 text-[11px] font-bold text-primary">{badge}</span>
           <h1 className="text-2xl font-bold mt-2">{title}</h1>
           <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>

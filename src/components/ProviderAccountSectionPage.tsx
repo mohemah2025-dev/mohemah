@@ -235,7 +235,7 @@ function AboutSection() {
   const { settings } = usePublicData();
   return (
     <div className="mohemah-card p-6 text-center">
-      <img src={settings?.logo_url ? fileUrl(settings.logo_url) : logo} alt={settings?.app_name ?? "مهمة"} className="w-24 h-24 mx-auto object-contain" />
+      <img src={settings?.app_logo_url ? fileUrl(settings.app_logo_url) : logo} alt={settings?.app_name ?? "مهمة"} className="w-24 h-24 mx-auto object-contain" />
       <h2 className="text-lg font-bold mt-3 text-mohemah-coral">تطبيق {settings?.app_name ?? "مهمة"}</h2>
       <p className="text-xs text-muted-foreground mt-1">الإصدار 1.0.0</p>
       <p className="text-sm text-foreground mt-4 leading-relaxed">منصة سعودية تربط طالبي الخدمات بمقدميها بأسلوب احترافي وموثوق، تركز على الجودة والشفافية.</p>
@@ -288,7 +288,7 @@ function ExperienceLetterSection({ stats }: { stats: ProviderStats | null }) {
           <div className="text-left text-xs text-muted-foreground"><p>التاريخ: {today}</p><p className="mt-1">المرجع: {ref}</p></div>
           <div className="flex items-center gap-3">
             <div className="text-right"><p className="text-lg font-bold text-mohemah-coral">تطبيق {appName}</p><p className="text-[11px] text-muted-foreground">منصة الخدمات الموثوقة</p></div>
-            <img src={settings?.logo_url ? fileUrl(settings.logo_url) : logo} alt={appName} className="w-16 h-16 object-contain" />
+            <img src={settings?.app_logo_url ? fileUrl(settings.app_logo_url) : logo} alt={appName} className="w-16 h-16 object-contain" />
           </div>
         </div>
         <h1 className="text-center text-xl font-bold mt-6 mb-6 text-mohemah-blue">خطاب إثبات خبرة</h1>

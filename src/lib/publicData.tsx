@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { api } from "@/lib/api";
 
 export interface PublicSettings {
-  app_name: string; logo_url: string | null; currency_label: string; primary_color: string | null;
+  app_name: string; logo_url: string | null; app_logo_url?: string | null; currency_label: string; primary_color: string | null;
   support_email: string | null; support_phone: string | null; welcome_customer: string | null; welcome_provider: string | null;
   billing_coins_enabled: boolean; billing_subscription_enabled: boolean;
   sub_price_1m: number; sub_price_3m: number; sub_price_6m: number; sub_price_12m: number;

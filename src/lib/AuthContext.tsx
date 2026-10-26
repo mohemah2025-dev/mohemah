@@ -32,6 +32,7 @@ export interface AppProfile {
 /** Admin panel sections; each is "none" | "view" | "edit" for a staff member (the owner has everything). */
 export const ADMIN_SECTIONS = [
   { key: "dashboard", label: "الرئيسية" },
+  { key: "analytics", label: "تحليل الطلبات" },
   { key: "customers", label: "طالبو الخدمات" },
   { key: "providers", label: "مقدمو الخدمات" },
   { key: "services", label: "الخدمات" },

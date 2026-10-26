@@ -256,19 +256,22 @@ export function AdminProvidersPage() {
   const [editing, setEditing] = useState<AdminProviderRow | null>(null);
   const [open, setOpen] = useState(false);
   const serviceNames = services.map((s) => s.name);
+  const [pq, setPq] = useState("");
+  const shown = providers.filter((p) => !pq.trim() || p.name.includes(pq.trim()) || p.phone.includes(pq.trim()));
   return (
     <div>
       <PageHeader title="مقدمو الخدمات" subtitle={`${providers.length} مقدم خدمة`}
         action={<button onClick={() => { setEditing(null); setOpen(true); }} className="mohemah-btn-coral text-sm px-4 py-2 rounded-xl flex items-center gap-2"><Plus className="w-4 h-4" /> إضافة مقدم</button>} />
       <AdminProviderApplications onChanged={refreshAll} />
       <PendingServiceRequests />
+      <input value={pq} onChange={(e) => setPq(e.target.value)} placeholder="ابحث باسم مقدم الخدمة أو جواله، ثم اضغط الاسم لفتح ملفه وتحليل عمله" className="admin-input mb-3 max-w-xl" />
       <div className="bg-card border border-border rounded-2xl overflow-x-auto">
         <table className="w-full text-sm text-right min-w-[900px]">
           <thead className="bg-mohemah-light text-xs text-muted-foreground">
             <tr>{["#", "الاسم", "الجوال", "المنطقة", "الخدمات", "التقييم", "الرصيد", "الحالة", ""].map((h) => <th key={h} className="p-3">{h}</th>)}</tr>
           </thead>
           <tbody>
-            {providers.map((p) => (
+            {shown.map((p) => (
               <tr key={p.id} className="border-t border-border hover:bg-mohemah-light/40">
                 <td className="p-3 text-muted-foreground">{p.id}</td>
                 <td className="p-3 font-bold"><Link to="/admin/provider-profile/$id" params={{ id: p.id }} className="text-mohemah-blue hover:underline">{p.name}</Link></td>

@@ -5,6 +5,7 @@ import { AlertTriangle, ArrowRight, Ban, BellRing, CheckCircle2, Clock, FileText
 import { api, errMsg, fileUrl } from "@/lib/api";
 import { useAuth } from "@/lib/AuthContext";
 import { ServiceIcon } from "@/components/ServiceAppearance";
+import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { AccountActionDialog, type AccountAction } from "./AccountActionDialog";
 
 const adm = <T,>(path: string, opts: { method?: string; body?: unknown } = {}) => api<T>(path, { ...opts, app: "admin" });
@@ -25,6 +26,87 @@ interface Profile {
     daily: { day: string; hours: number }[]; monthly: { month: string; hours: number; days: number }[]; yearly: { year: string; hours: number; days: number }[];
     recent: { started_at: string; ended_at: string | null; hours: number }[];
   };
+  charts?: {
+    monthly: { month: string; offered: number; accepted: number; completed: number; rejected: number; cancelled: number }[];
+    ratings: { rating: number; n: number }[];
+    services: { name: string; n: number }[];
+  };
+}
+
+const axis = { tick: { fill: "var(--muted-foreground)", fontSize: 10 }, axisLine: false, tickLine: false } as const;
+
+function Charts({ p }: { p: Profile }) {
+  const c = p.charts;
+  if (!c) return null;
+  const daily = [...p.shifts.daily].reverse();
+  return (
+    <div className="grid lg:grid-cols-2 gap-4">
+      <section className="bg-card border border-border rounded-2xl p-4 lg:col-span-2">
+        <h2 className="font-bold text-sm mb-2">الطلبات شهرياً (آخر 12 شهراً)</h2>
+        <div className="h-64" dir="ltr">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={c.monthly} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="3 4" />
+              <XAxis dataKey="month" {...axis} tickFormatter={(v) => String(v).slice(5)} />
+              <YAxis width={26} allowDecimals={false} {...axis} />
+              <Tooltip />
+              <Legend formatter={(v) => ({ offered: "وصله", accepted: "قبل", completed: "أنجز", rejected: "رفض", cancelled: "ألغى" } as Record<string, string>)[v] ?? v} />
+              <Bar dataKey="offered" fill="#94a3b8" radius={[3, 3, 0, 0]} isAnimationActive={false} />
+              <Bar dataKey="accepted" fill="#3b82f6" radius={[3, 3, 0, 0]} isAnimationActive={false} />
+              <Bar dataKey="completed" fill="#16a34a" radius={[3, 3, 0, 0]} isAnimationActive={false} />
+              <Bar dataKey="rejected" fill="#f59e0b" radius={[3, 3, 0, 0]} isAnimationActive={false} />
+              <Bar dataKey="cancelled" fill="#dc2626" radius={[3, 3, 0, 0]} isAnimationActive={false} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </section>
+      <section className="bg-card border border-border rounded-2xl p-4">
+        <h2 className="font-bold text-sm mb-2">ساعات الدوام اليومية</h2>
+        <div className="h-52" dir="ltr">
+          {daily.length ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={daily} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="3 4" />
+                <XAxis dataKey="day" {...axis} tickFormatter={(v) => String(v).slice(5)} minTickGap={20} />
+                <YAxis width={26} {...axis} />
+                <Tooltip formatter={(v) => [`${v} ساعة`, "الدوام"]} />
+                <Line type="monotone" dataKey="hours" stroke="var(--primary)" strokeWidth={2} dot={false} isAnimationActive={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : <p className="text-xs text-muted-foreground">لا يوجد دوام مسجل بعد.</p>}
+        </div>
+      </section>
+      <section className="bg-card border border-border rounded-2xl p-4">
+        <h2 className="font-bold text-sm mb-2">توزيع التقييمات</h2>
+        <div className="h-52" dir="ltr">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={c.ratings} layout="vertical" margin={{ top: 4, right: 16, left: 4, bottom: 0 }}>
+              <CartesianGrid horizontal={false} stroke="var(--border)" strokeDasharray="3 4" />
+              <XAxis type="number" allowDecimals={false} {...axis} />
+              <YAxis type="category" dataKey="rating" width={36} {...axis} tickFormatter={(v) => `${v}★`} />
+              <Tooltip formatter={(v) => [`${v} تقييم`, ""]} />
+              <Bar dataKey="n" fill="#f59e0b" radius={[0, 3, 3, 0]} isAnimationActive={false} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </section>
+      {c.services.length > 0 && (
+        <section className="bg-card border border-border rounded-2xl p-4 lg:col-span-2">
+          <h2 className="font-bold text-sm mb-2">الطلبات المنجزة حسب الخدمة</h2>
+          <div className="h-52" dir="ltr">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={c.services} layout="vertical" margin={{ top: 4, right: 16, left: 4, bottom: 0 }}>
+                <XAxis type="number" allowDecimals={false} {...axis} />
+                <YAxis type="category" dataKey="name" width={110} {...axis} />
+                <Tooltip formatter={(v) => [`${v} طلب`, ""]} />
+                <Bar dataKey="n" fill="#16a34a" radius={[0, 3, 3, 0]} isAnimationActive={false} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
+      )}
+    </div>
+  );
 }
 
 const dt = (v: string | null) => (v ? new Date(v).toLocaleString("ar-SA-u-ca-gregory-nu-latn", { dateStyle: "medium", timeStyle: "short" }) : "—");
@@ -135,6 +217,7 @@ export function AdminProviderProfilePage() {
             <Box label="نسبة القبول" value={perf.accept_rate === null ? "—" : `${perf.accept_rate}%`} />
             <Box label="تنبيهات أُرسلت" value={perf.warnings} />
           </div>
+          <Charts p={p} />
           <section className="bg-card border border-border rounded-2xl p-4">
             <h2 className="font-bold text-sm mb-2">سجل الرفض والإلغاء مع الأسباب</h2>
             <ul className="divide-y divide-border text-xs">

@@ -119,6 +119,12 @@ export interface AdminAd {
   durationDays: number;
   active: boolean;
   placement?: "بانر علوي" | "بانر سفلي" | "بطاقة منبثقة";
+  /** Popup only: everyone, or new members (registered within newDays) as a welcome. */
+  audience?: "all" | "new_users";
+  newDays?: number;
+  app?: "all" | "customer" | "provider";
+  giftKind?: "none" | "coins" | "subscription";
+  giftValue?: number;
 }
 
 export interface AdminPolicy {
@@ -440,12 +446,14 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loadAds = useCallback(async () => {
-    const data = await adm<{ id: string; sponsor: string; title: string; image_url: string | null; link: string | null; start_date: string; end_date: string; active: number; placement: string }[]>("/api/admin/ads");
+    const data = await adm<{ id: string; sponsor: string; title: string; image_url: string | null; link: string | null; start_date: string; end_date: string; active: number; placement: string; audience?: string; new_days?: number; app?: string; gift_kind?: string; gift_value?: number }[]>("/api/admin/ads");
     setAds(data.map((a) => ({
       id: a.id, sponsor: a.sponsor, title: a.title, imageUrl: a.image_url ?? undefined, link: a.link ?? undefined,
       startDate: a.start_date, endDate: a.end_date,
       durationDays: Math.max(1, Math.round((new Date(a.end_date).getTime() - new Date(a.start_date).getTime()) / 86400000)),
       active: !!a.active, placement: dbPlacementToAr[a.placement] ?? "بانر علوي",
+      audience: (a.audience as AdminAd["audience"]) ?? "all", newDays: a.new_days ?? 7, app: (a.app as AdminAd["app"]) ?? "all",
+      giftKind: (a.gift_kind as AdminAd["giftKind"]) ?? "none", giftValue: a.gift_value ?? 0,
     })));
   }, []);
 
@@ -615,6 +623,11 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     if (a.endDate !== undefined) p.end_date = a.endDate;
     if (a.active !== undefined) p.active = a.active;
     if (a.placement !== undefined) p.placement = arPlacementToDb(a.placement);
+    if (a.audience !== undefined) p.audience = a.audience;
+    if (a.newDays !== undefined) p.new_days = a.newDays;
+    if (a.app !== undefined) p.app = a.app;
+    if (a.giftKind !== undefined) p.gift_kind = a.giftKind;
+    if (a.giftValue !== undefined) p.gift_value = a.giftValue;
     return p;
   };
   const addAd = async (a: Omit<AdminAd, "id">) => { try { await adm("/api/admin/ads", { body: adBody(a) }); await loadAds(); } catch (e) { report(e); } };

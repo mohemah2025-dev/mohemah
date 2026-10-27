@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:mohemah_core/mohemah_core.dart';
 
 /// Opens the sign-in screen when needed; returns true once the customer is signed in.

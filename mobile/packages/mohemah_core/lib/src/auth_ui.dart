@@ -1,4 +1,6 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
+
+import 'i18n.dart';
 
 import 'branding.dart';
 import 'package:flutter/services.dart';
@@ -69,9 +71,9 @@ class _FieldState extends State<Field> {
           textInputAction: widget.textInputAction,
           autofillHints: widget.autofill,
           textDirection: widget.ltr ? TextDirection.ltr : null,
-          validator: widget.validator == null ? null : (v) => widget.validator!(v?.trim() ?? ''),
+          validator: widget.validator == null ? null : (v) { final e = widget.validator!(v?.trim() ?? ''); return e == null ? null : tr(e); },
           decoration: InputDecoration(
-            hintText: widget.hint,
+            hintText: widget.hint == null ? null : tr(widget.hint!),
             hintTextDirection: widget.ltr ? TextDirection.ltr : null,
             prefixIcon: widget.icon == null ? null : Icon(widget.icon, color: Brand.mutedFg, size: 21),
             suffixIcon: widget.password
@@ -186,7 +188,7 @@ class PickerField extends StatelessWidget {
             child: InputDecorator(
               isEmpty: state.value == null,
               decoration: InputDecoration(
-                errorText: state.errorText,
+                errorText: state.errorText == null ? null : tr(state.errorText!),
                 prefixIcon: icon == null ? null : Icon(icon, color: Brand.mutedFg, size: 21),
                 suffixIcon: const Icon(Icons.keyboard_arrow_down_outlined, color: Brand.mutedFg),
               ),
@@ -227,12 +229,17 @@ class AuthScaffold extends StatelessWidget {
             child: Column(children: [
               SizedBox(
                 height: 48,
-                child: Align(
-                  alignment: AlignmentDirectional.centerStart,
-                  child: showBack && canPop
-                      ? IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.arrow_forward_outlined, color: Colors.white))
-                      : null,
-                ),
+                child: Row(children: [
+                  if (showBack && canPop)
+                    IconButton(onPressed: () => Navigator.pop(context), icon: const BackButtonIcon(), color: Colors.white),
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed: () => pickLanguage(context),
+                    style: TextButton.styleFrom(foregroundColor: Colors.white),
+                    icon: const Icon(Icons.translate_rounded, size: 18),
+                    label: Text(currentLanguageName, translate: false),
+                  ),
+                ]),
               ),
               const AppLogo(height: 64),
               const SizedBox(height: 10),

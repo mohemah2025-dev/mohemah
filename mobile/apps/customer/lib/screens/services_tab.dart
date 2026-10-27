@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:mohemah_core/mohemah_core.dart';
 
 import '../orders_store.dart';
@@ -45,7 +45,7 @@ class _ServicesTabState extends State<ServicesTab> {
               fillColor: Colors.white,
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
               enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-              hintText: 'ابحث عن خدمة',
+              hintText: tr('ابحث عن خدمة'),
               prefixIcon: const Icon(Icons.search_outlined, color: Brand.mutedFg),
               suffixIcon: _query.isEmpty
                   ? null

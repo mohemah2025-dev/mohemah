@@ -531,6 +531,12 @@ export function registerAdminRoutes(r: Router) {
     const sd = str(b, "start_date", { required: !partial, max: 10, label: "تاريخ البداية" }); if (sd) f.start_date = sd;
     const ed = str(b, "end_date", { required: !partial, max: 10, label: "تاريخ النهاية" }); if (ed) f.end_date = ed;
     const active = bool(b, "active"); if (active !== null) f.active = active ? 1 : 0;
+    // Popup for new members (welcome) with an optional gift for providers.
+    const audience = oneOf(b, "audience", ["all", "new_users"] as const); if (audience) f.audience = audience;
+    const app = oneOf(b, "app", ["all", "customer", "provider"] as const); if (app) f.app = app;
+    const gk = oneOf(b, "gift_kind", ["none", "coins", "subscription"] as const); if (gk) f.gift_kind = gk;
+    const gv = num(b, "gift_value", { min: 0, max: 100000, int: true }); if (gv !== null) f.gift_value = gv;
+    const nd = num(b, "new_days", { min: 1, max: 365, int: true }); if (nd !== null) f.new_days = nd;
     return f;
   }
   r.get("/api/admin/ads", async (c) => { await requirePerm(c, "ads", "view"); return json(await all(c.env.DB, "SELECT * FROM ads ORDER BY created_at DESC")); });

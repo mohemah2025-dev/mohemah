@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
+
+import 'i18n.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:record/record.dart';
 

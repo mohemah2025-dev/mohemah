@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:mohemah_core/mohemah_core.dart';
 
 import '../orders_store.dart';
@@ -40,6 +40,7 @@ class OrderDetailPage extends StatelessWidget {
           if (o.providerName != null) ...[
             const SectionTitle('مقدم الخدمة'),
             _ProviderCard(order: o),
+            if (o.isActive && o.priceStatus != 'none') ...[const SizedBox(height: 10), PriceCard(orderId: o.id)],
           ],
           const SectionTitle('تفاصيل الطلب'),
           AppCard(
@@ -207,7 +208,7 @@ class _ProviderCard extends StatelessWidget {
             Expanded(
               child: FilledButton.icon(
                 onPressed: () async {
-                  await Navigator.push(context, MaterialPageRoute(builder: (_) => OrderChatPage(orderId: order.id, title: 'محادثة مع $name')));
+                  await Navigator.push(context, MaterialPageRoute(builder: (_) => OrderChatPage(orderId: order.id, title: 'محادثة مع $name', header: order.isActive ? PriceCard(orderId: order.id, compact: true) : null)));
                   if (context.mounted) await OrdersScope.read(context).refresh();
                 },
                 icon: Badge(isLabelVisible: order.unread > 0, label: Text('${order.unread}'), child: const Icon(Icons.chat_outlined)),
@@ -225,18 +226,7 @@ class _Actions extends StatelessWidget {
   const _Actions({required this.order});
   final CustomerOrder order;
 
-  Future<void> _cancel(BuildContext context) async {
-    final reason = await promptText(context, title: 'إلغاء الطلب', hint: 'سبب الإلغاء (اختياري)', ok: 'تأكيد الإلغاء', danger: true);
-    if (reason == null || !context.mounted) return;
-    final store = OrdersScope.read(context);
-    try {
-      await store.session.api.post('/api/orders/${order.id}/cancel', {if (reason.isNotEmpty) 'reason': reason});
-      await store.refresh();
-      if (context.mounted) showSnack(context, 'تم إلغاء الطلب');
-    } catch (e) {
-      if (context.mounted) showError(context, e);
-    }
-  }
+  Future<void> _cancel(BuildContext context) => cancelOrderFlow(context, order);
 
   Future<void> _rate(BuildContext context) async {
     final r = await askRating(context, title: 'كيف كانت الخدمة؟');
@@ -300,5 +290,145 @@ class _Actions extends StatelessWidget {
           label: const Text('شكوى'),
         ),
     ]);
+  }
+}
+
+
+/// Customer cancellation with a reason (required after a provider accepted). The administration reviews the reason
+/// and may read the conversation, e.g. when the price was not agreed.
+Future<void> cancelOrderFlow(BuildContext context, CustomerOrder order, {String? preset}) async {
+  const reasons = [
+    ('price_disagreement', 'عدم الموافقة على المبلغ'),
+    ('provider_late', 'تأخر مقدم الخدمة'),
+    ('not_needed', 'لم أعد بحاجة للخدمة'),
+    ('other_provider', 'وجدت مقدم خدمة آخر'),
+    ('bad_communication', 'صعوبة التواصل مع مقدم الخدمة'),
+    ('other', 'سبب آخر'),
+  ];
+  final accepted = order.providerName != null;
+  String? code = preset;
+  final note = TextEditingController();
+  final ok = await showModalBottomSheet<bool>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, set) => Padding(
+        padding: EdgeInsets.fromLTRB(16, 0, 16, MediaQuery.viewInsetsOf(ctx).bottom + 16),
+        child: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            const Text('إلغاء الطلب', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            Text(accepted ? 'اختر سبب الإلغاء، يصل للإدارة لمراجعته وقد تطّلع على المحادثة للتأكد منه.' : 'اختر سبب الإلغاء (اختياري).',
+                style: const TextStyle(fontSize: 12.5, color: Brand.mutedFg)),
+            const SizedBox(height: 8),
+            for (final r in reasons)
+              if (accepted || (r.$1 != 'price_disagreement' && r.$1 != 'provider_late' && r.$1 != 'bad_communication'))
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(code == r.$1 ? Icons.radio_button_checked : Icons.radio_button_off, color: code == r.$1 ? Brand.danger : Brand.mutedFg),
+                  title: Text(r.$2, style: const TextStyle(fontWeight: FontWeight.w700)),
+                  onTap: () => set(() => code = r.$1),
+                ),
+            TextField(controller: note, maxLength: 300, maxLines: 2, decoration: InputDecoration(hintText: tr(code == 'other' ? 'اكتب السبب (مطلوب)' : 'تفاصيل إضافية (اختياري)'))),
+            const SizedBox(height: 6),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Brand.danger),
+              onPressed: () {
+                if (accepted && code == null) {
+                  showSnack(ctx, 'اختر سبب الإلغاء', error: true);
+                  return;
+                }
+                if (code == 'other' && note.text.trim().isEmpty) {
+                  showSnack(ctx, 'اكتب سبب الإلغاء', error: true);
+                  return;
+                }
+                Navigator.pop(ctx, true);
+              },
+              child: const Text('تأكيد الإلغاء'),
+            ),
+          ]),
+        ),
+      ),
+    ),
+  );
+  if (ok != true || !context.mounted) return;
+  final store = OrdersScope.read(context);
+  try {
+    await store.session.api.post('/api/orders/${order.id}/cancel', {if (code != null) 'code': code, if (note.text.trim().isNotEmpty) 'reason': note.text.trim()});
+    await store.refresh();
+    if (context.mounted) showSnack(context, 'تم إلغاء الطلب');
+  } catch (e) {
+    if (context.mounted) showError(context, e);
+  }
+}
+
+/// Service price from the provider: accept it, negotiate in the chat, or refuse and cancel.
+class PriceCard extends StatelessWidget {
+  const PriceCard({super.key, required this.orderId, this.compact = false});
+  final String orderId;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = OrdersScope.of(context);
+    CustomerOrder? o;
+    for (final x in store.orders ?? const <CustomerOrder>[]) {
+      if (x.id == orderId) o = x;
+    }
+    if (o == null || o.priceStatus == 'none') return const SizedBox.shrink();
+    final order = o;
+    final amount = order.priceAmount == null ? '' : fmtNum(order.priceAmount!);
+    final agreed = order.priceStatus == 'agreed';
+    final offered = order.priceStatus == 'offered';
+    Future<void> accept() async {
+      try {
+        await store.session.api.post('/api/orders/${order.id}/price/accept');
+        await store.refresh();
+        if (context.mounted) showSnack(context, 'تمت الموافقة على المبلغ');
+      } catch (e) {
+        if (context.mounted) showError(context, e);
+      }
+    }
+
+    final body = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Row(children: [
+        Icon(agreed ? Icons.verified_outlined : Icons.payments_outlined, color: agreed ? Brand.success : const Color(0xFFB7791F)),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            agreed ? 'تم الاتفاق على مبلغ $amount ريال' : offered ? 'مبلغ الخدمة المقترح: $amount ريال' : 'المبلغ بالتفاوض مع مقدم الخدمة',
+            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5),
+          ),
+        ),
+      ]),
+      if (!agreed && !compact)
+        const Padding(
+          padding: EdgeInsets.only(top: 4),
+          child: Text('يمكنك الموافقة على المبلغ أو التفاوض عليه في المحادثة، وإذا لم تتفقا يمكنك إلغاء الطلب مع ذكر السبب.',
+              style: TextStyle(fontSize: 12, color: Brand.mutedFg, height: 1.5)),
+        ),
+      if (!agreed) ...[
+        const SizedBox(height: 8),
+        Wrap(spacing: 8, runSpacing: 6, children: [
+          if (offered) FilledButton.icon(onPressed: accept, icon: const Icon(Icons.check_rounded, size: 18), label: const Text('موافق على المبلغ')),
+          if (!compact)
+            OutlinedButton.icon(
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => OrderChatPage(orderId: order.id, title: 'التفاوض على المبلغ', header: PriceCard(orderId: order.id, compact: true)))),
+              icon: const Icon(Icons.chat_outlined, size: 18),
+              label: const Text('تفاوض في المحادثة'),
+            ),
+          TextButton.icon(
+            style: TextButton.styleFrom(foregroundColor: Brand.danger),
+            onPressed: () => cancelOrderFlow(context, order, preset: 'price_disagreement'),
+            icon: const Icon(Icons.close_rounded, size: 18),
+            label: const Text('رفض وإلغاء'),
+          ),
+        ]),
+      ],
+    ]);
+    return compact
+        ? Container(width: double.infinity, color: const Color(0xFFFFFBF2), padding: const EdgeInsets.fromLTRB(14, 8, 14, 6), child: body)
+        : AppCard(color: agreed ? const Color(0xFFEAF7EF) : const Color(0xFFFFF7E8), child: body);
   }
 }

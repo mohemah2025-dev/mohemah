@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/services.dart';
 import 'package:mohemah_core/mohemah_core.dart';
 
@@ -148,11 +148,13 @@ class _IncomingOrderDialogState extends State<IncomingOrderDialog> {
   }
 
   Future<void> _accept() async {
+    final price = await askServicePrice(context);
+    if (price == null || !mounted) return;
     setState(() => _busy = true);
     _timer?.cancel();
     final nav = Navigator.of(context);
     try {
-      await widget.store.accept(widget.order.id);
+      await widget.store.accept(widget.order.id, price: price.$1);
       nav.pop();
       rootMessenger.currentState?.showSnackBar(const SnackBar(content: Text('تم قبول الطلب، تابع التنفيذ من الطلبات الجارية')));
       ProviderShell.goTo(1, section: 1);
@@ -224,7 +226,7 @@ class _IncomingOrderDialogState extends State<IncomingOrderDialog> {
                     // Two arrows: shrink the card into a blinking bar on the home page.
                     Row(children: [
                       IconButton(
-                        tooltip: 'تصغير الطلب',
+                        tooltip: tr('تصغير الطلب'),
                         onPressed: _busy ? null : _minimize,
                         icon: const Icon(Icons.keyboard_double_arrow_up_rounded, color: Colors.white, size: 30),
                       ),

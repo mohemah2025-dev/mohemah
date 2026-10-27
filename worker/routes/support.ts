@@ -7,6 +7,8 @@
 import { all, fail, first, json, now, readJson, run, stmt, str, uid, type Ctx, type Router } from "../lib/core";
 import { accessOf, requireAdmin, requireUser, type AuthUser } from "../lib/auth";
 import { notifyStmts } from "../lib/domain";
+import { detectLang, rememberLang, type Lang } from "../lib/translate";
+import { saveVoice, serializeChat } from "./orders";
 
 const AUTO_CLOSE_HOURS = 48;
 
@@ -45,7 +47,7 @@ async function openThreadOf(c: Ctx, userId: string) {
 }
 
 /** A user writes to the administration (adds to the open conversation or starts a new one). */
-export async function userWrites(c: Ctx, userId: string, body: string, subject: string | null) {
+export async function userWrites(c: Ctx, userId: string, body: string, subject: string | null, voice?: Lang) {
   await autoClose(c);
   const t = now();
   let thread = await openThreadOf(c, userId);
@@ -58,8 +60,13 @@ export async function userWrites(c: Ctx, userId: string, body: string, subject: 
   }
   const assigned = await first<{ assigned_to: string | null }>(c.env.DB, "SELECT assigned_to FROM support_threads WHERE id = ?", thread.id);
   const owner = assigned?.assigned_to ?? (await first<{ user_id: string }>(c.env.DB, "SELECT user_id FROM user_roles WHERE role = 'admin' ORDER BY created_at LIMIT 1"))?.user_id ?? null;
+  if (voice) {
+    await c.env.DB.batch(batch);
+    return saveVoice(c, { sender: userId, recipient: owner, threadId: thread.id, lang: voice });
+  }
   const id = uid();
-  batch.push(stmt(c.env.DB, "INSERT INTO messages (id, sender_id, recipient_id, subject, body, thread_id) VALUES (?,?,?,?,?,?)", id, userId, owner, subject, body, thread.id));
+  const lang = await rememberLang(c, userId);
+  batch.push(stmt(c.env.DB, "INSERT INTO messages (id, sender_id, recipient_id, subject, body, thread_id, lang) VALUES (?,?,?,?,?,?,?)", id, userId, owner, subject, body, thread.id, detectLang(body) === "en" ? "en" : lang));
   await c.env.DB.batch(batch);
   return id;
 }
@@ -72,10 +79,11 @@ export function registerSupportRoutes(r: Router) {
     const thread = await first<{ id: string; status: string; subject: string | null; assigned_name: string | null; closed_by: string | null; rating: number | null; created_at: string }>(c.env.DB,
       `SELECT t.id, t.status, t.subject, a.full_name AS assigned_name, t.closed_by, t.rating, t.created_at
          FROM support_threads t LEFT JOIN users a ON a.id = t.assigned_to WHERE t.user_id = ? ORDER BY t.created_at DESC LIMIT 1`, u.id);
+    const lang = await rememberLang(c, u.id);
     const messages = thread
-      ? await all(c.env.DB,
-          `SELECT m.id, m.body, m.created_at, m.sender_id, m.recipient_id, m.read_at, s.full_name AS sender_name
-             FROM messages m LEFT JOIN users s ON s.id = m.sender_id WHERE m.thread_id = ? ORDER BY m.created_at DESC LIMIT 200`, thread.id)
+      ? await serializeChat(c, await all<{ id: string; body: string | null; lang: string | null; kind: string | null; audio_key: string | null }>(c.env.DB,
+          `SELECT m.id, m.body, m.created_at, m.sender_id, m.recipient_id, m.read_at, m.lang, m.kind, m.audio_key, m.transcript, s.full_name AS sender_name
+             FROM messages m LEFT JOIN users s ON s.id = m.sender_id WHERE m.thread_id = ? ORDER BY m.created_at DESC LIMIT 200`, thread.id), lang)
       : [];
     if (thread) await run(c.env.DB, "UPDATE messages SET read_at = ? WHERE thread_id = ? AND recipient_id = ? AND read_at IS NULL", now(), thread.id, u.id);
     return json({ thread, messages });
@@ -86,6 +94,13 @@ export function registerSupportRoutes(r: Router) {
     const b = await readJson(c.req);
     const body = str(b, "body", { required: true, max: 2000, label: "الرسالة" })!;
     return json({ id: await userWrites(c, u.id, body, str(b, "subject", { max: 200 })) }, 201);
+  });
+
+  /** Voice message to the administration (multipart field "audio"). */
+  r.post("/api/me/support/voice", async (c) => {
+    const u = await requireUser(c);
+    const lang = await rememberLang(c, u.id);
+    return json({ id: await userWrites(c, u.id, "", null, lang) }, 201);
   });
 
   r.post("/api/me/support/close", async (c) => {
@@ -135,9 +150,10 @@ export function registerSupportRoutes(r: Router) {
       `SELECT t.*, u.full_name AS user_name, u.phone AS user_phone, u.member_no, a.full_name AS assigned_name
          FROM support_threads t JOIN users u ON u.id = t.user_id LEFT JOIN users a ON a.id = t.assigned_to WHERE t.id = ?`, c.params.id);
     if (!t) fail(404, "not_found", "المحادثة غير موجودة");
-    const messages = await all(c.env.DB,
-      `SELECT m.id, m.body, m.subject, m.created_at, m.sender_id, s.full_name AS sender_name, (m.sender_id = ?2) AS from_user
-         FROM messages m LEFT JOIN users s ON s.id = m.sender_id WHERE m.thread_id = ?1 ORDER BY m.created_at`, c.params.id, (t as { user_id: string }).user_id);
+    // The administration reads every message in Arabic (with the original kept).
+    const messages = await serializeChat(c, await all<{ id: string; body: string | null; lang: string | null; kind: string | null; audio_key: string | null }>(c.env.DB,
+      `SELECT m.id, m.body, m.subject, m.created_at, m.sender_id, m.lang, m.kind, m.audio_key, m.transcript, s.full_name AS sender_name, (m.sender_id = ?2) AS from_user
+         FROM messages m LEFT JOIN users s ON s.id = m.sender_id WHERE m.thread_id = ?1 ORDER BY m.created_at`, c.params.id, (t as { user_id: string }).user_id), "ar");
     await run(c.env.DB, "UPDATE messages SET read_at = ? WHERE thread_id = ? AND sender_id = ? AND read_at IS NULL", now(), c.params.id, (t as { user_id: string }).user_id);
     return json({ thread: t, messages });
   });
@@ -148,7 +164,7 @@ export function registerSupportRoutes(r: Router) {
     const t = await guardOwner(c, admin, c.params.id);
     const ts = now();
     await c.env.DB.batch([
-      stmt(c.env.DB, "INSERT INTO messages (id, sender_id, recipient_id, body, thread_id) VALUES (?,?,?,?,?)", uid(), admin.id, t.user_id, body, c.params.id),
+      stmt(c.env.DB, "INSERT INTO messages (id, sender_id, recipient_id, body, thread_id, lang) VALUES (?,?,?,?,?,?)", uid(), admin.id, t.user_id, body, c.params.id, detectLang(body)),
       // Replying re-opens a closed conversation and assigns it to the replier when nobody owns it.
       stmt(c.env.DB, "UPDATE support_threads SET status = 'open', closed_at = NULL, closed_by = NULL, last_from = 'admin', last_message_at = ?, assigned_to = COALESCE(assigned_to, ?) WHERE id = ?", ts, admin.id, c.params.id),
       ...notifyStmts(c, [t.user_id], { title: "رد جديد من الإدارة على رسالتك", body: body.slice(0, 150), link: SUPPORT_LINK, category: "general", icon: "megaphone", created_by: admin.id }),
@@ -196,9 +212,45 @@ export function registerSupportRoutes(r: Router) {
     } else {
       batch.push(stmt(c.env.DB, "UPDATE support_threads SET last_from = 'admin', last_message_at = ?, assigned_to = COALESCE(assigned_to, ?) WHERE id = ?", ts, admin.id, thread.id));
     }
-    batch.push(stmt(c.env.DB, "INSERT INTO messages (id, sender_id, recipient_id, subject, body, thread_id) VALUES (?,?,?,?,?,?)", uid(), admin.id, userId, subject, body, thread.id));
+    batch.push(stmt(c.env.DB, "INSERT INTO messages (id, sender_id, recipient_id, subject, body, thread_id, lang) VALUES (?,?,?,?,?,?,?)", uid(), admin.id, userId, subject, body, thread.id, detectLang(body)));
     batch.push(...notifyStmts(c, [userId], { title: subject ?? "رسالة جديدة من الإدارة", body: body.slice(0, 150), link: SUPPORT_LINK, category: "general", icon: "megaphone", created_by: admin.id }));
     await c.env.DB.batch(batch);
     return json({ id: thread.id }, 201);
+  });
+
+  /* ---------- Cancelled orders: reasons and the conversation, for the administration ---------- */
+  r.get("/api/admin/cancellations", async (c) => {
+    await requireAdmin(c);
+    const status = c.url.searchParams.get("status") === "reviewed" ? "reviewed" : "new";
+    const rows = await all(c.env.DB,
+      `SELECT o.id, o.order_no + 100000 AS order_no, o.service_name, o.sub_service_name, o.cancel_reason, o.cancel_code, o.cancelled_at, o.price_amount, o.price_status,
+              o.cancel_reviewed_at, r.full_name AS reviewed_by_name,
+              cu.full_name AS customer_name, cu.member_no AS customer_no, pr.full_name AS provider_name, pr.member_no AS provider_no,
+              (SELECT COUNT(*) FROM messages m WHERE m.order_id = o.id) AS messages
+         FROM orders o LEFT JOIN users cu ON cu.id = o.customer_id
+         LEFT JOIN users pr ON pr.id = COALESCE(o.provider_id, (SELECT m.recipient_id FROM messages m WHERE m.order_id = o.id AND m.sender_id = o.customer_id LIMIT 1))
+         LEFT JOIN users r ON r.id = o.cancel_reviewed_by
+        WHERE o.status = 'cancelled' AND o.cancelled_by = 'customer' AND o.cancel_code IS NOT NULL
+          AND ${status === "new" ? "o.cancel_reviewed_at IS NULL" : "o.cancel_reviewed_at IS NOT NULL"}
+        ORDER BY o.cancelled_at DESC LIMIT 200`);
+    const counts = await first<{ fresh: number }>(c.env.DB, "SELECT COUNT(*) AS fresh FROM orders WHERE status = 'cancelled' AND cancelled_by = 'customer' AND cancel_code IS NOT NULL AND cancel_reviewed_at IS NULL");
+    return json({ rows, new_count: counts?.fresh ?? 0 });
+  });
+
+  /** The conversation of an order (read by the administration to check a cancellation), translated into Arabic. */
+  r.get("/api/admin/orders/:id/chat", async (c) => {
+    await requireAdmin(c);
+    const o = await first<{ customer_id: string | null }>(c.env.DB, "SELECT customer_id FROM orders WHERE id = ?", c.params.id);
+    if (!o) fail(404, "not_found", "الطلب غير موجود");
+    const rows = await all<{ id: string; body: string | null; lang: string | null; kind: string | null; audio_key: string | null }>(c.env.DB,
+      `SELECT m.id, m.body, m.created_at, m.sender_id, m.lang, m.kind, m.audio_key, m.transcript, s.full_name AS sender_name, (m.sender_id = ?2) AS from_customer
+         FROM messages m LEFT JOIN users s ON s.id = m.sender_id WHERE m.order_id = ?1 ORDER BY m.created_at`, c.params.id, o!.customer_id);
+    return json(await serializeChat(c, rows, "ar"));
+  });
+
+  r.post("/api/admin/cancellations/:id/reviewed", async (c) => {
+    const admin = await requireAdmin(c);
+    await run(c.env.DB, "UPDATE orders SET cancel_reviewed_at = ?, cancel_reviewed_by = ? WHERE id = ?", now(), admin.id, c.params.id);
+    return json({ ok: true });
   });
 }

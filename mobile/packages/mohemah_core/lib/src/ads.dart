@@ -1,10 +1,14 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'i18n.dart';
 
 import 'config.dart';
 import 'models.dart';
 import 'public_data.dart';
+import 'session.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
@@ -125,7 +129,8 @@ class _AdBannerState extends State<AdBanner> {
   }
 }
 
-/// Shows the popup-card ad (4:3) once per app launch. Place it anywhere in the home page; it draws nothing.
+/// Shows the popup-card ad (4:3): general popups once per app launch; welcome popups (new members) once per user,
+/// with «receive the gift» when the administration attached coins or a free subscription. Draws nothing itself.
 class PopupAdHost extends StatefulWidget {
   const PopupAdHost({super.key});
   @override
@@ -133,35 +138,108 @@ class PopupAdHost extends StatefulWidget {
 }
 
 class _PopupAdHostState extends State<PopupAdHost> {
-  static bool _shown = false;
+  static bool _shownGeneral = false;
+  static final Set<String> _handled = {};
+  bool _busy = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final ads = _adsOf(context, 'popup_card');
-    if (_shown || ads.isEmpty) return;
-    _shown = true;
-    final ad = ads.first;
+    final session = SessionScope.of(context);
+    final ads = _adsOf(context, 'popup_card').where((a) => a.app == 'all' || a.app == session.app.name).toList();
+    if (ads.isEmpty || _busy) return;
+    final profile = session.profile;
+    final created = profile?.createdAt;
+    // Welcome ad for a member who registered within the ad's period.
+    final welcome = ads.where((a) => a.audience == 'new_users' && !_handled.contains(a.id) && profile != null && created != null &&
+        DateTime.now().difference(created).inDays < a.newDays).toList();
+    if (welcome.isNotEmpty) {
+      final ad = welcome.first;
+      _handled.add(ad.id);
+      _busy = true;
+      unawaited(_showWelcome(ad, profile!.id));
+      return;
+    }
+    if (_shownGeneral) return;
+    final general = ads.where((a) => a.audience != 'new_users').toList();
+    if (general.isEmpty) return;
+    _shownGeneral = true;
+    final ad = general.first;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      showDialog<void>(
-        context: context,
-        builder: (ctx) => Dialog(
-          insetPadding: const EdgeInsets.symmetric(horizontal: 22),
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            AspectRatio(aspectRatio: adAspect('popup_card'), child: _AdImage(ad: ad, radius: 20)),
-            const SizedBox(height: 12),
-            IconButton.filled(
-              onPressed: () => Navigator.pop(ctx),
-              style: IconButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Brand.foreground),
-              icon: const Icon(Icons.close),
-            ),
-          ]),
-        ),
-      );
+      if (mounted) _show(ad, null);
     });
+  }
+
+  Future<void> _showWelcome(Ad ad, String userId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'welcome_ad_${ad.id}_$userId';
+      if (prefs.getBool(key) == true || !mounted) return;
+      await prefs.setBool(key, true);
+      await _show(ad, ad.giftKind != 'none' && ad.giftValue > 0 && SessionScope.read(context).app == AppKind.provider ? ad : null, welcome: true);
+    } catch (_) {
+    } finally {
+      _busy = false;
+    }
+  }
+
+  Future<void> _claim(BuildContext ctx, Ad ad) async {
+    final session = SessionScope.read(context);
+    try {
+      final r = jMap(await session.api.post('/api/ads/${ad.id}/claim'));
+      if (ctx.mounted) Navigator.pop(ctx);
+      final gift = jS(r['gift']);
+      if (!mounted) return;
+      if (r['already'] == true) {
+        showSnack(context, 'استلمت هذه الهدية مسبقاً');
+      } else if (gift == 'coins') {
+        showSnack(context, 'أُضيفت ${r['value']} كوين إلى رصيدك 🎁');
+      } else if (gift == 'subscription') {
+        showSnack(context, 'تم تفعيل اشتراك مجاني لمدة ${r['value']} يوم 🎁');
+      }
+      unawaited(session.refresh().catchError((_) {}));
+    } catch (e) {
+      if (mounted) showError(context, e);
+    }
+  }
+
+  Future<void> _show(Ad ad, Ad? gift, {bool welcome = false}) {
+    return showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 22),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          AspectRatio(aspectRatio: adAspect('popup_card'), child: _AdImage(ad: ad, radius: 20)),
+          if (welcome) ...[
+            const SizedBox(height: 10),
+            if (gift != null)
+              FilledButton.icon(
+                onPressed: () => _claim(ctx, gift),
+                style: FilledButton.styleFrom(backgroundColor: Brand.success, minimumSize: const Size(220, 46)),
+                icon: const Icon(Icons.card_giftcard_rounded),
+                label: Text(gift.giftKind == 'coins' ? 'استلم ${gift.giftValue} كوين هدية' : 'فعّل اشتراكك المجاني (${gift.giftValue} يوم)'),
+              )
+            else
+              FilledButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  unawaited(SessionScope.read(context).api.post('/api/ads/${ad.id}/claim').catchError((_) => null));
+                },
+                style: FilledButton.styleFrom(minimumSize: const Size(160, 44)),
+                child: const Text('شكراً، لنبدأ'),
+              ),
+          ],
+          const SizedBox(height: 12),
+          IconButton.filled(
+            onPressed: () => Navigator.pop(ctx),
+            style: IconButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Brand.foreground),
+            icon: const Icon(Icons.close),
+          ),
+        ]),
+      ),
+    );
   }
 
   @override

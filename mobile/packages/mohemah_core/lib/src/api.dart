@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 
 import 'config.dart';
+import 'lang_state.dart';
 
 /// Error returned by the Worker (`{ error, message }`) or a network failure (status 0).
 class ApiException implements Exception {
@@ -41,6 +42,7 @@ class Api {
 
   Map<String, String> get _headers => {
         'accept': 'application/json',
+        'x-lang': LangState.code,
         if (token != null) 'authorization': 'Bearer $token',
       };
 

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:mohemah_core/mohemah_core.dart';
 
 import '../docs.dart';
@@ -281,7 +281,7 @@ class _RequestServicePageState extends State<_RequestServicePage> {
         const SizedBox(height: 18),
         const Text('3. ملاحظة للإدارة (اختياري)', style: TextStyle(fontWeight: FontWeight.w800)),
         const SizedBox(height: 8),
-        TextField(controller: _note, maxLines: 3, maxLength: 500, decoration: const InputDecoration(hintText: 'سنوات الخبرة، جهة الشهادة…')),
+        TextField(controller: _note, maxLines: 3, maxLength: 500, decoration: InputDecoration(hintText: tr('سنوات الخبرة، جهة الشهادة…'))),
         const SizedBox(height: 8),
         BusyButton(label: 'إرسال الطلب للإدارة', icon: Icons.send_outlined, onPressed: _submit),
       ]),
@@ -332,15 +332,15 @@ class _LetterPeriodSheetState extends State<_LetterPeriodSheet> {
       firstDate: DateTime(now.year - 10),
       lastDate: now,
       initialDateRange: _range,
-      helpText: 'فترة الخطاب',
-      saveText: 'تم',
+      helpText: tr('فترة الخطاب'),
+      saveText: tr('تم'),
     );
     if (r != null) setState(() => _range = r);
   }
 
   Future<void> _pickDate() async {
     final now = DateTime.now();
-    final r = await showDatePicker(context: context, firstDate: DateTime(now.year - 10), lastDate: now, initialDate: _date ?? now, helpText: 'حتى تاريخ');
+    final r = await showDatePicker(context: context, firstDate: DateTime(now.year - 10), lastDate: now, initialDate: _date ?? now, helpText: tr('حتى تاريخ'));
     if (r != null) setState(() => _date = r);
   }
 

@@ -4,6 +4,8 @@ import {
 } from "../lib/core";
 import { requireProvider, requireUser, signFileUrl } from "../lib/auth";
 import { putFile } from "../lib/storage";
+import { langOf, rememberLang, transcribe, translateMessages, aiTranslate, userLang, detectLang, type Lang } from "../lib/translate";
+import { flushPush } from "../lib/push";
 import { notifyExternal } from "../lib/messaging";
 import { activePromotions, applyBest, describePromo } from "../lib/promotions";
 import {
@@ -18,6 +20,17 @@ type OrderRow = {
   charged_coins: number; billing_mode: string | null; rating: number | null; review: string | null; customer_rating: number | null;
   cancelled_by: string | null; cancel_reason: string | null; created_at: string; accepted_at: string | null; arrived_at: string | null;
   started_at: string | null; completed_at: string | null; cancelled_at: string | null;
+  price_amount: number | null; price_status: string; cancel_code: string | null;
+};
+
+/** Customer cancellation reasons (the app shows them as choices). */
+export const CANCEL_CODES: Record<string, string> = {
+  price_disagreement: "عدم الموافقة على المبلغ",
+  provider_late: "تأخر مقدم الخدمة",
+  not_needed: "لم أعد بحاجة للخدمة",
+  other_provider: "وجدت مقدم خدمة آخر",
+  bad_communication: "صعوبة التواصل مع مقدم الخدمة",
+  other: "سبب آخر",
 };
 
 const ACTIVE = ["accepted", "arrived", "in_progress"];
@@ -71,6 +84,47 @@ async function attachmentsFor(c: Ctx, orderIds: string[]) {
     for (const a of rows) (out[a.order_id] ||= []).push({ id: a.id, kind: a.kind, content_type: a.content_type, url: await signFileUrl(c.env, a.r2_key, 3600) });
   }
   return out;
+}
+
+const VOICE_TYPES: Record<string, string> = { "audio/wav": "wav", "audio/x-wav": "wav", "audio/mpeg": "mp3", "audio/mp4": "m4a", "audio/aac": "aac", "audio/webm": "webm", "audio/ogg": "ogg" };
+
+/** Stores a voice message (R2 key chat/<id>) and transcribes it after the response. Shared with the support chat. */
+export async function saveVoice(c: Ctx, m: { sender: string; recipient: string | null; orderId?: string | null; threadId?: string | null; lang: Lang }) {
+  const form = await c.req.formData();
+  const f = form.get("audio") as unknown as File | null;
+  if (!f || typeof f !== "object" || !("arrayBuffer" in f) || !f.size) fail(400, "no_audio", "سجّل رسالة صوتية");
+  const ext = VOICE_TYPES[f!.type] ?? (f!.name?.endsWith(".wav") ? "wav" : null);
+  if (!ext) fail(400, "invalid_audio", "صيغة التسجيل غير مدعومة");
+  if (f!.size > 6 * 1024 * 1024) fail(400, "too_large", "الرسالة الصوتية طويلة جداً (الحد 6MB)");
+  const id = uid();
+  const key = `chat/${id}.${ext}`;
+  const bytes = await f!.arrayBuffer();
+  await putFile(c.env, key, new File([bytes], `${id}.${ext}`, { type: f!.type || "audio/wav" }));
+  await run(c.env.DB, "INSERT INTO messages (id, sender_id, recipient_id, order_id, thread_id, body, lang, kind, audio_key) VALUES (?,?,?,?,?,?,?,?,?)",
+    id, m.sender, m.recipient, m.orderId ?? null, m.threadId ?? null, "", m.lang, "voice", key);
+  c.tasks.push((async () => {
+    const text = await transcribe(c.env, bytes);
+    if (text) await run(c.env.DB, "UPDATE messages SET transcript = ?, body = ?, lang = ? WHERE id = ?", text, text, detectLang(text), id);
+  })().catch((e) => console.error("voice", e)));
+  return id;
+}
+
+/** Chat rows for the app: translated text in the viewer's language, signed voice links. */
+export async function serializeChat<T extends { id: string; body: string | null; lang: string | null; kind: string | null; audio_key: string | null }>(c: Ctx, rows: T[], lang: Lang) {
+  const tr = await translateMessages(c.env, rows, lang);
+  return Promise.all(tr.map(async (m) => ({ ...m, audio_key: undefined, audio_url: m.audio_key ? await signFileUrl(c.env, m.audio_key, 3600) : null })));
+}
+
+/** Push for a chat message, translated into the recipient's language. */
+function pushChat(c: Ctx, app: "customer" | "provider", to: string, orderId: string, body: string, fromLang: Lang) {
+  c.tasks.push((async () => {
+    const target = await userLang(c.env, to);
+    const voice = body === "🎤";
+    const titles: Record<Lang, [string, string]> = { ar: ["رسالة من العميل", "رسالة من مقدم الخدمة"], en: ["Message from the customer", "Message from the service provider"], ur: ["گاہک کا پیغام", "سروس فراہم کنندہ کا پیغام"] };
+    const voiceText: Record<Lang, string> = { ar: "🎤 رسالة صوتية", en: "🎤 Voice message", ur: "🎤 صوتی پیغام" };
+    const text = voice ? voiceText[target] : (await aiTranslate(c.env, body, fromLang, target)) ?? body;
+    await flushPush(c.env, [{ userIds: [to], app, message: { title: titles[target][app === "provider" ? 0 : 1], body: text.slice(0, 180), data: { link: app === "provider" ? "/provider/orders" : "/orders", order_id: orderId, chat: "1" } } }]);
+  })().catch((e) => console.error("pushChat", e)));
 }
 
 export function registerOrderRoutes(r: Router) {
@@ -139,7 +193,7 @@ export function registerOrderRoutes(r: Router) {
         sub_service_name: o.sub_service_name, mode: o.mode, description: o.description, address: o.address, region: o.region,
         scheduled_at: o.scheduled_at, status: o.status, rating: o.rating, review: o.review, cancelled_by: o.cancelled_by, cancel_reason: o.cancel_reason,
         created_at: o.created_at, accepted_at: o.accepted_at, arrived_at: o.arrived_at, started_at: o.started_at, completed_at: o.completed_at, cancelled_at: o.cancelled_at,
-        unread: o.unread, attachments: files[o.id] ?? [],
+        unread: o.unread, attachments: files[o.id] ?? [], price_amount: o.price_amount, price_status: o.price_status, cancel_code: o.cancel_code,
         provider: o.provider_id ? { id: o.provider_id, name: o.p_name, rating: o.p_rating, rating_count: o.p_rating_count, nationality: o.p_nationality, avatar_url: o.p_avatar, phone: showContact ? o.p_phone : null } : null,
       };
     }));
@@ -178,11 +232,18 @@ export function registerOrderRoutes(r: Router) {
     const o = await getOrder(c, c.params.id);
     if (o.customer_id !== u.id) fail(403, "forbidden", "لا يمكنك إلغاء هذا الطلب");
     if (!["pending", "accepted"].includes(o.status)) fail(409, "cannot_cancel", "لا يمكن إلغاء الطلب بعد وصول مقدم الخدمة أو بدء التنفيذ");
-    const reason = str(await readJson(c.req), "reason", { max: 300 });
+    const cb = await readJson(c.req);
+    const note = str(cb, "reason", { max: 300 });
+    // A free-text reason without a code (older apps / web) counts as «another reason».
+    const code = typeof cb.code === "string" && CANCEL_CODES[cb.code] ? cb.code : o.status === "accepted" && note ? "other" : null;
+    // After a provider accepted, a reason is required and the administration reviews it (with the conversation).
+    if (o.status === "accepted" && !code) fail(400, "missing_reason", "اختر سبب الإلغاء");
+    if (code === "other" && !note) fail(400, "missing_reason", "اكتب سبب الإلغاء");
+    const reason = code ? `${CANCEL_CODES[code]}${note ? ` — ${note}` : ""}` : note;
     const t = now();
     const batch = [stmt(c.env.DB,
-      "UPDATE orders SET status = 'cancelled', cancelled_by = 'customer', cancel_reason = ?, cancelled_at = ?, updated_at = ? WHERE id = ? AND customer_id = ? AND status IN ('pending','accepted')",
-      reason, t, t, o.id, u.id)];
+      "UPDATE orders SET status = 'cancelled', cancelled_by = 'customer', cancel_reason = ?, cancel_code = ?, cancelled_at = ?, updated_at = ? WHERE id = ? AND customer_id = ? AND status IN ('pending','accepted')",
+      reason, code, t, t, o.id, u.id)];
     if (o.provider_id && o.status === "accepted") {
       const guard = "EXISTS (SELECT 1 FROM orders WHERE id = ?2 AND cancelled_at = ?3)";
       if (o.charged_coins > 0) {
@@ -230,21 +291,32 @@ export function registerOrderRoutes(r: Router) {
   }
   r.get("/api/orders/:id/messages", async (c) => {
     const { u, o } = await chatAccess(c);
+    const lang = await rememberLang(c, u.id);
     await run(c.env.DB, "UPDATE messages SET read_at = ? WHERE order_id = ? AND recipient_id = ? AND read_at IS NULL", now(), o.id, u.id);
-    return json(await all(c.env.DB, "SELECT id, sender_id, body, created_at FROM messages WHERE order_id = ? ORDER BY created_at LIMIT 300", o.id));
+    const rows = await all<{ id: string; sender_id: string | null; body: string | null; created_at: string; kind: string; lang: string | null; audio_key: string | null; transcript: string | null }>(c.env.DB,
+      "SELECT id, sender_id, body, created_at, kind, lang, audio_key, transcript FROM messages WHERE order_id = ? ORDER BY created_at LIMIT 300", o.id);
+    return json(await serializeChat(c, rows, lang));
   });
   r.post("/api/orders/:id/messages", async (c) => {
     const { u, o, other } = await chatAccess(c);
     if (!other) fail(409, "no_counterpart", "لم يُقبل الطلب بعد");
     if (!ACTIVE.includes(o.status) && o.status !== "completed") fail(409, "chat_closed", "المحادثة مغلقة لهذا الطلب");
     const body = str(await readJson(c.req), "body", { required: true, max: 1000, label: "الرسالة" })!;
+    const lang = await rememberLang(c, u.id);
     const id = uid();
-    await run(c.env.DB, "INSERT INTO messages (id, sender_id, recipient_id, order_id, body) VALUES (?,?,?,?,?)", id, u.id, other, o.id, body);
-    c.push.push({
-      userIds: [other!], app: u.app === "customer" ? "provider" : "customer",
-      message: { title: u.app === "customer" ? "رسالة من العميل" : "رسالة من مقدم الخدمة", body: body.slice(0, 180), data: { link: u.app === "customer" ? "/provider/orders" : "/orders", order_id: o.id, chat: "1" } },
-    });
-    return json({ id, sender_id: u.id, body, created_at: now() }, 201);
+    await run(c.env.DB, "INSERT INTO messages (id, sender_id, recipient_id, order_id, body, lang) VALUES (?,?,?,?,?,?)", id, u.id, other, o.id, body, detectLang(body) === "en" ? "en" : lang);
+    pushChat(c, u.app === "customer" ? "provider" : "customer", other!, o.id, body, lang);
+    return json({ id, sender_id: u.id, body, created_at: now(), kind: "text" }, 201);
+  });
+  /** Voice message in the order chat (multipart field "audio"); transcribed in the background for translation. */
+  r.post("/api/orders/:id/messages/voice", async (c) => {
+    const { u, o, other } = await chatAccess(c);
+    if (!other) fail(409, "no_counterpart", "لم يُقبل الطلب بعد");
+    if (!ACTIVE.includes(o.status) && o.status !== "completed") fail(409, "chat_closed", "المحادثة مغلقة لهذا الطلب");
+    const lang = await rememberLang(c, u.id);
+    const id = await saveVoice(c, { sender: u.id, recipient: other!, orderId: o.id, lang });
+    pushChat(c, u.app === "customer" ? "provider" : "customer", other!, o.id, "🎤", lang);
+    return json({ id, kind: "voice" }, 201);
   });
 
   /* =================== Provider =================== */
@@ -297,6 +369,7 @@ export function registerOrderRoutes(r: Router) {
         description: o.description, region: o.region, address: o.address, lat: o.lat, lng: o.lng, scheduled_at: o.scheduled_at,
         status: o.status, coin_cost: o.coin_cost, charged_coins: o.charged_coins, billing_mode: o.billing_mode, created_at: o.created_at,
         accepted_at: o.accepted_at, arrived_at: o.arrived_at, started_at: o.started_at, unread: o.unread, attachments: files[o.id] ?? [],
+        price_amount: o.price_amount, price_status: o.price_status,
         customer: { id: o.customer_id, name: o.customer_name, phone: o.customer_phone, rating: o.c_rating },
       })),
     });
@@ -318,6 +391,17 @@ export function registerOrderRoutes(r: Router) {
   r.post("/api/orders/:id/accept", async (c) => {
     const u = await requireProvider(c);
     const o = await getOrder(c, c.params.id);
+    // Optional service price (SAR); empty = to be negotiated with the customer in the chat.
+    const ab = await readJson(c.req).catch(() => ({} as Record<string, unknown>));
+    const rawPrice = ab.price === "" || ab.price === null || ab.price === undefined ? null : Number(ab.price);
+    if (rawPrice !== null && !(Number.isFinite(rawPrice) && rawPrice >= 0 && rawPrice <= 1000000)) fail(400, "invalid_price", "مبلغ الخدمة غير صحيح");
+    const setPrice = async () => {
+      const ts = now();
+      await c.env.DB.batch([
+        stmt(c.env.DB, "UPDATE orders SET price_amount = ?, price_status = ?, price_updated_at = ? WHERE id = ?", rawPrice, rawPrice === null ? "negotiable" : "offered", ts, o.id),
+        stmt(c.env.DB, "INSERT INTO messages (id, sender_id, recipient_id, order_id, body, kind, lang) VALUES (?,?,?,?,?,?,?)", uid(), u.id, o.customer_id, o.id, rawPrice === null ? "" : String(rawPrice), rawPrice === null ? "price_negotiable" : "price", "ar"),
+      ]);
+    };
     if (o.status !== "pending") fail(409, "not_pending", "قبل هذا الطلب مقدم خدمة آخر أو أُلغي");
     if (o.customer_id === u.id) fail(409, "own_order", "لا يمكنك قبول طلبك الشخصي");
     const offers = await first(c.env.DB, "SELECT 1 FROM provider_services WHERE provider_id = ? AND service_id = ?", u.id, o.service_id);
@@ -333,7 +417,7 @@ export function registerOrderRoutes(r: Router) {
     const t = now();
     const label = orderLabel(o);
     const smsAccepted = () => { if (o.customer_id) notifyExternal(c, [o.customer_id], { title: "تم قبول طلبك", body: `قبل مقدم الخدمة طلبك (${label})، تابع الحالة من تطبيق مهمة.`, email: false }); };
-    const notifyCustomer = o.customer_id ? notifyStmts(c, [o.customer_id], { title: "تم قبول طلبك", body: `قبل مقدم الخدمة طلب ${label}، تابع الحالة من صفحة الطلبات.`, link: "/orders", icon: "CheckCircle2" }) : [];
+    const notifyCustomer = o.customer_id ? notifyStmts(c, [o.customer_id], { title: "تم قبول طلبك", body: rawPrice === null ? `قبل مقدم الخدمة طلب ${label}، والمبلغ بالتفاوض معك في المحادثة.` : `قبل مقدم الخدمة طلب ${label} بمبلغ ${rawPrice} ريال، يمكنك الموافقة أو التفاوض من صفحة الطلب.`, link: "/orders", icon: "CheckCircle2" }) : [];
 
     // An active subscription (paid or gifted) always covers the order; otherwise coins are charged when enabled.
     if (subEnd) {
@@ -342,6 +426,7 @@ export function registerOrderRoutes(r: Router) {
       ]);
       const after = await getOrder(c, o.id);
       if (after.provider_id !== u.id || after.accepted_at !== t) fail(409, "not_pending", "قبل هذا الطلب مقدم خدمة آخر");
+      await setPrice();
       if (notifyCustomer.length) { await c.env.DB.batch(notifyCustomer); smsAccepted(); }
       return json({ success: true, mode: "subscription", balance: p.coin_balance });
     }
@@ -353,6 +438,7 @@ export function registerOrderRoutes(r: Router) {
       await run(c.env.DB, "UPDATE orders SET status = 'accepted', provider_id = ?, accepted_at = ?, billing_mode = 'coins', charged_coins = 0, updated_at = ? WHERE id = ? AND status = 'pending'", u.id, t, t, o.id);
       const after0 = await getOrder(c, o.id);
       if (after0.provider_id !== u.id || after0.accepted_at !== t) fail(409, "not_pending", "قبل هذا الطلب مقدم خدمة آخر");
+      await setPrice();
       if (notifyCustomer.length) { await c.env.DB.batch(notifyCustomer); smsAccepted(); }
       return json({ success: true, mode: "coins", charged: 0, balance: p.coin_balance });
     }
@@ -373,6 +459,7 @@ export function registerOrderRoutes(r: Router) {
       if (bal < cost) return json({ success: false, error: "insufficient_balance", balance: bal, required: cost }, 402);
       fail(409, "not_pending", "قبل هذا الطلب مقدم خدمة آخر");
     }
+    await setPrice();
     if (notifyCustomer.length) { await c.env.DB.batch(notifyCustomer); smsAccepted(); }
     return json({ success: true, mode: "coins", balance: (await providerProfile(c, u.id)).coin_balance });
   });
@@ -405,6 +492,37 @@ export function registerOrderRoutes(r: Router) {
   });
 
   /** Provider withdraws from an accepted job; the order returns to the pool (no coin refund). */
+  /** Provider sets / changes the service price (empty = negotiable); posted in the chat for the customer. */
+  r.post("/api/orders/:id/price", async (c) => {
+    const u = await requireProvider(c);
+    const o = await getOrder(c, c.params.id);
+    if (o.provider_id !== u.id || !ACTIVE.includes(o.status)) fail(409, "not_yours", "لا يمكن تعديل مبلغ هذا الطلب");
+    const b = await readJson(c.req);
+    const price = b.price === "" || b.price === null || b.price === undefined ? null : Number(b.price);
+    if (price !== null && !(Number.isFinite(price) && price >= 0 && price <= 1000000)) fail(400, "invalid_price", "مبلغ الخدمة غير صحيح");
+    const t = now();
+    await c.env.DB.batch([
+      stmt(c.env.DB, "UPDATE orders SET price_amount = ?, price_status = ?, price_updated_at = ?, updated_at = ? WHERE id = ?", price, price === null ? "negotiable" : "offered", t, t, o.id),
+      stmt(c.env.DB, "INSERT INTO messages (id, sender_id, recipient_id, order_id, body, kind, lang) VALUES (?,?,?,?,?,?,?)", uid(), u.id, o.customer_id, o.id, price === null ? "" : String(price), price === null ? "price_negotiable" : "price", "ar"),
+      ...(o.customer_id ? notifyStmts(c, [o.customer_id], { title: "مبلغ الخدمة", body: price === null ? `مقدم الخدمة يرغب بالتفاوض على مبلغ طلب ${orderLabel(o)}.` : `حدد مقدم الخدمة مبلغ ${price} ريال لطلب ${orderLabel(o)}.`, link: "/orders", icon: "Coins" }) : []),
+    ]);
+    return json({ ok: true });
+  });
+
+  /** Customer agrees to the price offered by the provider. */
+  r.post("/api/orders/:id/price/accept", async (c) => {
+    const u = await requireUser(c, { app: "customer" });
+    const o = await getOrder(c, c.params.id);
+    if (o.customer_id !== u.id || !ACTIVE.includes(o.status)) fail(409, "not_yours", "لا يمكن تنفيذ ذلك على هذا الطلب");
+    if (o.price_status !== "offered" || o.price_amount === null) fail(409, "no_offer", "لا يوجد مبلغ معروض للموافقة عليه");
+    await c.env.DB.batch([
+      stmt(c.env.DB, "UPDATE orders SET price_status = 'agreed', price_updated_at = ? WHERE id = ?", now(), o.id),
+      stmt(c.env.DB, "INSERT INTO messages (id, sender_id, recipient_id, order_id, body, kind, lang) VALUES (?,?,?,?,?,?,?)", uid(), u.id, o.provider_id, o.id, String(o.price_amount), "price_agreed", "ar"),
+      ...(o.provider_id ? notifyStmts(c, [o.provider_id], { title: "تمت الموافقة على المبلغ", body: `وافق العميل على مبلغ ${o.price_amount} ريال لطلب ${orderLabel(o)}.`, link: "/provider/orders", icon: "CheckCircle2" }) : []),
+    ]);
+    return json({ ok: true });
+  });
+
   r.post("/api/orders/:id/release", async (c) => {
     const u = await requireProvider(c);
     const o = await getOrder(c, c.params.id);
@@ -413,7 +531,7 @@ export function registerOrderRoutes(r: Router) {
     if (!reason || reason.trim().length < 3) fail(400, "missing_reason", "اكتب سبب إلغاء الطلب");
     const t = now();
     await c.env.DB.batch([
-      stmt(c.env.DB, "UPDATE orders SET status = 'pending', provider_id = NULL, accepted_at = NULL, arrived_at = NULL, billing_mode = NULL, charged_coins = 0, cancel_reason = ?, updated_at = ? WHERE id = ? AND provider_id = ? AND status IN ('accepted','arrived')", reason, t, o.id, u.id),
+      stmt(c.env.DB, "UPDATE orders SET status = 'pending', provider_id = NULL, accepted_at = NULL, arrived_at = NULL, billing_mode = NULL, charged_coins = 0, price_amount = NULL, price_status = 'none', cancel_reason = ?, updated_at = ? WHERE id = ? AND provider_id = ? AND status IN ('accepted','arrived')", reason, t, o.id, u.id),
       stmt(c.env.DB, "INSERT OR REPLACE INTO order_rejections (order_id, provider_id, kind, reason, created_at) VALUES (?,?,'release',?,?)", o.id, u.id, reason, t),
       ...(o.customer_id ? notifyStmts(c, [o.customer_id], { title: "جارٍ البحث عن مقدم خدمة آخر", body: `اعتذر مقدم الخدمة عن طلب ${orderLabel(o)}، وطلبك متاح الآن لمقدمي الخدمة الآخرين.`, link: "/orders", icon: "RefreshCw" }) : []),
     ]);

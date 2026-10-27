@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:mohemah_core/mohemah_core.dart';
 
 /// Saved addresses (the default one is used for new orders).

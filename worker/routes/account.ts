@@ -10,6 +10,7 @@ import {
 import { deleteFiles, getFile, putFile } from "../lib/storage";
 import { userWrites } from "./support";
 import { sendDirect } from "../lib/messaging";
+import { langOf, rememberLang, translateRows } from "../lib/translate";
 import { activeSubscriptionEnd, getSettings, publicSettings, referralCodeFor, serializeProfile, type UserRow } from "../lib/domain";
 
 export const DOC_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "application/pdf": "pdf" };
@@ -93,6 +94,36 @@ async function codeHash(userId: string, code: string) {
 }
 
 export function registerAccountRoutes(r: Router) {
+  /** Welcome popup for new members: receive the gift once (coins or subscription days for providers). */
+  r.post("/api/ads/:id/claim", async (c) => {
+    const u = await requireUser(c);
+    const ad = await first<{ audience: string; new_days: number; app: string; gift_kind: string; gift_value: number; title: string; active: number; end_date: string }>(c.env.DB,
+      "SELECT audience, new_days, app, gift_kind, gift_value, title, active, end_date FROM ads WHERE id = ?", c.params.id);
+    if (!ad || !ad.active || ad.end_date < now().slice(0, 10)) fail(404, "not_found", "العرض غير متاح");
+    const me = await first<{ created_at: string }>(c.env.DB, "SELECT created_at FROM users WHERE id = ?", u.id);
+    if (ad!.audience === "new_users" && Date.parse(me!.created_at) < Date.now() - (ad!.new_days || 7) * 86400000) fail(409, "not_new", "الهدية للمسجلين الجدد فقط");
+    if (ad!.app !== "all" && ad!.app !== u.app) fail(409, "other_app", "العرض لتطبيق آخر");
+    const res = await run(c.env.DB, "INSERT OR IGNORE INTO ad_claims (ad_id, user_id) VALUES (?,?)", c.params.id, u.id);
+    if (!res.meta.changes) return json({ ok: true, already: true });
+    const isProvider = u.roles.includes("provider");
+    const v = Math.max(0, Math.round(ad!.gift_value || 0));
+    if (isProvider && ad!.gift_kind === "coins" && v > 0) {
+      await c.env.DB.batch([
+        stmt(c.env.DB, "UPDATE users SET coin_balance = coin_balance + ? WHERE id = ?", v, u.id),
+        stmt(c.env.DB, "INSERT INTO coin_transactions (id, provider_id, amount, tx_type, balance_after, description, method) SELECT ?, ?, ?, 'bonus', coin_balance, ?, 'هدية' FROM users WHERE id = ?", uid(), u.id, v, `هدية ترحيب: ${ad!.title}`, u.id),
+      ]);
+      return json({ ok: true, gift: "coins", value: v });
+    }
+    if (isProvider && ad!.gift_kind === "subscription" && v > 0) {
+      const end = await first<{ e: string | null }>(c.env.DB, "SELECT MAX(ends_at) AS e FROM provider_subscriptions WHERE provider_id = ? AND ends_at > ?", u.id, now());
+      const start = end?.e ?? now();
+      await run(c.env.DB, "INSERT INTO provider_subscriptions (id, provider_id, months, amount, method, starts_at, ends_at, grant_note) VALUES (?,?,?,?,?,?,?,?)",
+        uid(), u.id, 0, 0, "هدية", start, new Date(Date.parse(start) + v * 86400000).toISOString(), `هدية ترحيب: ${ad!.title}`);
+      return json({ ok: true, gift: "subscription", value: v });
+    }
+    return json({ ok: true, gift: "none" });
+  });
+
   /* ---------- Account / password recovery by SMS or e-mail ---------- */
   r.post("/api/auth/forgot", async (c) => {
     await rateLimit(c.env, `forgot:${c.ip}`, 10, 60);
@@ -148,12 +179,22 @@ export function registerAccountRoutes(r: Router) {
     const today = now().slice(0, 10);
     const [settings, services, subs, ads, policies] = await Promise.all([
       getSettings(c.env),
-      all(c.env.DB, "SELECT id, name, description, icon, color, coin_price, sort_order FROM services WHERE active = 1 ORDER BY sort_order, name"),
-      all(c.env.DB, `SELECT s.id, s.service_id, s.name, s.description, s.icon, s.color, COALESCE(s.coin_price, p.coin_price) AS coin_price, s.delivery_mode, s.sort_order
+      all<Record<string, unknown>>(c.env.DB, "SELECT id, name, description, icon, color, coin_price, sort_order FROM services WHERE active = 1 ORDER BY sort_order, name"),
+      all<Record<string, unknown>>(c.env.DB, `SELECT s.id, s.service_id, s.name, s.description, s.icon, s.color, COALESCE(s.coin_price, p.coin_price) AS coin_price, s.delivery_mode, s.sort_order
                      FROM sub_services s JOIN services p ON p.id = s.service_id WHERE s.active = 1 AND p.active = 1 ORDER BY s.sort_order, s.name`),
-      all(c.env.DB, "SELECT id, title, sponsor, image_url, link, placement FROM ads WHERE active = 1 AND start_date <= ? AND end_date >= ? ORDER BY created_at DESC LIMIT 10", today, today),
-      all(c.env.DB, "SELECT id, title, body, audience, policy_type, version, placements, updated_at FROM policies WHERE published = 1 ORDER BY updated_at DESC"),
+      all<Record<string, unknown>>(c.env.DB, "SELECT id, title, sponsor, image_url, link, placement, audience, new_days, app, gift_kind, gift_value FROM ads WHERE active = 1 AND start_date <= ? AND end_date >= ? ORDER BY created_at DESC LIMIT 10", today, today),
+      all<Record<string, unknown>>(c.env.DB, "SELECT id, title, body, audience, policy_type, version, placements, updated_at FROM policies WHERE published = 1 ORDER BY updated_at DESC"),
     ]);
+    // English / Urdu apps: admin-entered content is machine-translated once and cached.
+    const lang = langOf(c);
+    if (lang !== "ar") {
+      await Promise.all([
+        translateRows(c.env, services, ["name", "description"], lang),
+        translateRows(c.env, subs, ["name", "description"], lang),
+        translateRows(c.env, ads, ["title"], lang),
+        translateRows(c.env, policies, ["title", "body", "policy_type"], lang),
+      ]);
+    }
     return json({ settings: publicSettings(settings), services, sub_services: subs, ads, policies, regions: REGIONS });
   });
 
@@ -495,7 +536,8 @@ export function registerAccountRoutes(r: Router) {
                OR (n.audience IN ('all', ?3) AND n.sent_at >= ?4))
         ORDER BY at DESC LIMIT 60`,
       u.id, now(), aud, addDaysSafe(created, -14));
-    return json(rows);
+    const lang = await rememberLang(c, u.id);
+    return json(await translateRows(c.env, rows as Record<string, unknown>[], ["title", "body"], lang));
   });
   r.post("/api/me/notifications/read", async (c) => {
     const u = await requireUser(c);
@@ -575,7 +617,7 @@ export function registerAccountRoutes(r: Router) {
   });
   r.get("/api/files/doc", async (c) => {
     const k = c.url.searchParams.get("k") ?? "";
-    if (!/^(docs|letters|orders)\//.test(k) || !(await verifyFileSignature(c.env, k, c.url.searchParams.get("e") ?? "", c.url.searchParams.get("s") ?? ""))) fail(403, "forbidden", "الرابط منتهي أو غير صالح");
+    if (!/^(docs|letters|orders|chat)\//.test(k) || !(await verifyFileSignature(c.env, k, c.url.searchParams.get("e") ?? "", c.url.searchParams.get("s") ?? ""))) fail(403, "forbidden", "الرابط منتهي أو غير صالح");
     const obj = await getFile(c.env, k);
     if (!obj) return fail(404, "not_found");
     const h = new Headers({ "content-type": obj.contentType });

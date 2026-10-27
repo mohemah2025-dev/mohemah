@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/services.dart';
 import 'package:mohemah_core/mohemah_core.dart';
 
@@ -56,6 +56,7 @@ class ProviderHomeTab extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 12),
                 child: PromoBanner(promos: store.feed!.promotions, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BillingPage()))),
               ),
+            const PopupAdHost(),
             const AdBanner(placement: 'top_banner', padding: EdgeInsets.only(bottom: 14)),
             for (final o in store.incoming.where((x) => store.minimized.contains(x.id)))
               Padding(padding: const EdgeInsets.only(bottom: 12), child: _MinimizedIncoming(order: o)),

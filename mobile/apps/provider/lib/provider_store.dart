@@ -129,9 +129,9 @@ class ProviderStore extends ChangeNotifier {
 
   /// Accepts an order. Throws [ApiException] with code `insufficient_balance` or
   /// `subscription_required` (status 402) when billing blocks the acceptance.
-  Future<void> accept(String id) async {
+  Future<void> accept(String id, {double? price}) async {
     try {
-      final res = jMap(await api.post('/api/orders/$id/accept'));
+      final res = jMap(await api.post('/api/orders/$id/accept', {'price': price}));
       if (res['success'] == false) throw ApiException(402, jS(res['error'], 'payment_required'), 'رصيد الكوينز غير كافٍ', res);
     } finally {
       dismissIncoming(id);
@@ -139,6 +139,12 @@ class ProviderStore extends ChangeNotifier {
     await refresh();
     unawaited(loadStats());
     await session.refresh().catchError((_) {});
+  }
+
+  /// Sets / changes the service price of an accepted order (null = to be negotiated with the customer).
+  Future<void> setPrice(String id, double? price) async {
+    await api.post('/api/orders/$id/price', {'price': price});
+    await refresh();
   }
 
   Future<void> reject(String id) async {

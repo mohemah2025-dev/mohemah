@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:mohemah_core/mohemah_core.dart';
 
 import '../docs.dart';
@@ -82,7 +82,7 @@ class _ApplicationPageState extends State<ApplicationPage> {
 
     return Scaffold(
       appBar: PageHeader.bar('حسابي',
-          trailing: IconButton(tooltip: 'تسجيل خروج', onPressed: () => signOutFlow(context), icon: const Icon(Icons.logout_outlined))),
+          trailing: IconButton(tooltip: tr('تسجيل خروج'), onPressed: () => signOutFlow(context), icon: const Icon(Icons.logout_outlined))),
       body: RefreshIndicator(
         onRefresh: () async {
           await s.refresh().catchError((_) {});

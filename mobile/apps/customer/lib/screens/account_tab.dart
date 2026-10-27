@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/services.dart';
 import 'package:mohemah_core/mohemah_core.dart';
 
@@ -87,6 +87,7 @@ class AccountTab extends StatelessWidget {
         MenuGroup(children: [
           MenuTile(icon: Icons.policy_outlined, title: 'السياسات والشروط', onTap: () => push(const PoliciesPage(audience: 'customers', placement: 'account'))),
           MenuTile(icon: Icons.help_outline, title: 'كيف تعمل مهمة؟', subtitle: 'خطوات الطلب بشكل مختصر', onTap: () => push(const HowItWorksPage())),
+          MenuTile(icon: Icons.translate_rounded, title: 'اللغة', subtitle: currentLanguageName, onTap: () => pickLanguage(context)),
           MenuTile(icon: Icons.info_outlined, title: 'عن مهمة', onTap: () => push(const _AboutPage())),
           if (settings.supportPhone != null || settings.supportEmail != null)
             MenuTile(

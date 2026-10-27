@@ -137,7 +137,7 @@ check(any(n["title"] == "تم قبول طلبك" for n in notes), "acceptance no
 call("POST", f"/api/orders/{o1['id']}/messages", {"body": "السلام عليكم، متى تصل؟"}, token=CUST, expect=201)
 call("POST", f"/api/orders/{o1['id']}/messages", {"body": "خلال 20 دقيقة"}, token=PROV, expect=201)
 _, msgs = call("GET", f"/api/orders/{o1['id']}/messages", token=CUST, expect=200)
-check(len(msgs) == 2, "chat both ways")
+check(len([m for m in msgs if m.get("kind", "text") == "text"]) == 2 and any(m.get("kind") == "price_negotiable" for m in msgs), "chat both ways (+ price notice)")
 
 # 10. job progress → completed; ratings both ways
 for want in ["arrived", "in_progress", "completed"]:

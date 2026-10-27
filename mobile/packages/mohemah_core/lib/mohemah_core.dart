@@ -19,3 +19,5 @@ export 'src/attachments.dart';
 export 'src/nav_bar.dart';
 export 'src/branding.dart';
 export 'src/ads.dart';
+export 'src/i18n.dart';
+export 'src/chat.dart';

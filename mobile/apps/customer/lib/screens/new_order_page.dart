@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:mohemah_core/mohemah_core.dart';
 
 import '../orders_store.dart';
@@ -158,13 +158,13 @@ class _NewOrderPageState extends State<NewOrderPage> {
       initialDate: _date ?? now,
       firstDate: DateTime(now.year, now.month, now.day),
       lastDate: now.add(const Duration(days: 59)),
-      helpText: 'تاريخ التنفيذ',
+      helpText: tr('تاريخ التنفيذ'),
     );
     if (date != null) setState(() => _date = date);
   }
 
   Future<void> _pickTimeOnly() async {
-    final t = await showTimePicker(context: context, initialTime: _time ?? TimeOfDay.fromDateTime(DateTime.now().add(const Duration(hours: 1))), helpText: 'وقت التنفيذ');
+    final t = await showTimePicker(context: context, initialTime: _time ?? TimeOfDay.fromDateTime(DateTime.now().add(const Duration(hours: 1))), helpText: tr('وقت التنفيذ'));
     if (t != null) setState(() => _time = t);
   }
 
@@ -314,7 +314,7 @@ class _NewOrderPageState extends State<NewOrderPage> {
               TextField(
                 controller: _extra,
                 maxLength: 120,
-                decoration: const InputDecoration(hintText: 'تفاصيل إضافية: رقم المبنى، الدور، علامة مميزة… (اختياري)', prefixIcon: Icon(Icons.apartment_outlined, color: Brand.mutedFg)),
+                decoration: InputDecoration(hintText: tr('تفاصيل إضافية: رقم المبنى، الدور، علامة مميزة… (اختياري)'), prefixIcon: const Icon(Icons.apartment_outlined, color: Brand.mutedFg)),
               ),
             ],
           ],
@@ -388,7 +388,7 @@ class _PickBox extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(14),
         child: InputDecorator(
-          decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon, color: Brand.mutedFg)),
+          decoration: InputDecoration(labelText: tr(label), prefixIcon: Icon(icon, color: Brand.mutedFg)),
           child: Text(value ?? 'اختر', style: TextStyle(color: value == null ? Brand.mutedFg : Brand.foreground, fontWeight: FontWeight.w600)),
         ),
       );

@@ -106,6 +106,17 @@ class Ad {
   String? get imageUrl => jStr(raw['image_url']);
   String? get link => jStr(raw['link']);
   String? get placement => jStr(raw['placement']);
+
+  /// Popup only: all | new_users (welcome for members registered within [newDays]).
+  String get audience => jS(raw['audience'], 'all');
+  int get newDays => raw['new_days'] == null ? 7 : jInt(raw['new_days']);
+
+  /// all | customer | provider
+  String get app => jS(raw['app'], 'all');
+
+  /// none | coins | subscription (gift for providers)
+  String get giftKind => jS(raw['gift_kind'], 'none');
+  int get giftValue => jInt(raw['gift_value']);
 }
 
 class Policy {
@@ -168,6 +179,15 @@ class ChatMessage {
   String get body => jS(raw['body']);
   DateTime? get createdAt => jDate(raw['created_at']);
   DateTime? get readAt => jDate(raw['read_at']);
+
+  /// text | voice | price | price_negotiable | price_agreed
+  String get kind => jS(raw['kind'], 'text');
+
+  /// The message in the reader's language (server translation), when it was written in another language.
+  String? get translated => jStr(raw['translated']);
+  String? get originalLang => jStr(raw['original_lang']);
+  String? get audioUrl => jStr(raw['audio_url']);
+  bool get isVoice => kind == 'voice' || audioUrl != null;
 }
 
 /// Order as seen by the customer (`GET /api/orders/mine`).
@@ -211,6 +231,10 @@ class CustomerOrder {
   String? get providerLine => providerName == null ? null : [providerName!, if ((providerNationality ?? '').isNotEmpty) providerNationality!].join(' • ');
   bool get isActive => const ['accepted', 'arrived', 'in_progress'].contains(status);
   bool get isOpen => status == 'pending' || isActive;
+
+  /// Service price set by the provider (null = negotiable) and its state: none | offered | negotiable | agreed.
+  double? get priceAmount => raw['price_amount'] == null ? null : jDouble(raw['price_amount']);
+  String get priceStatus => jS(raw['price_status'], 'none');
 }
 
 /// Order offered to a provider (`available` in the feed).
@@ -259,6 +283,10 @@ class ActiveJob {
   String get customerName => jS(jMap(raw['customer'])['name'], 'عميل');
   String? get customerPhone => jStr(jMap(raw['customer'])['phone']);
   double get customerRating => jDouble(jMap(raw['customer'])['rating']);
+  double? get priceAmount => raw['price_amount'] == null ? null : jDouble(raw['price_amount']);
+
+  /// none | offered | negotiable | agreed
+  String get priceStatus => jS(raw['price_status'], 'none');
 }
 
 class ProviderFeed {

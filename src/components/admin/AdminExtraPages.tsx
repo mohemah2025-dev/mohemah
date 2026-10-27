@@ -369,6 +369,7 @@ export function AdminAdsPage() {
               <div className="flex items-center justify-between mb-2">
                 <p className="font-bold">{a.title}</p>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-mohemah-light text-muted-foreground">{a.placement ?? "بانر علوي"}</span>
+                {a.audience === "new_users" && <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">ترحيب بالجدد{a.giftKind === "coins" ? ` + ${a.giftValue} كوين` : a.giftKind === "subscription" ? ` + اشتراك ${a.giftValue} يوم` : ""}</span>}
               </div>
               <p className="text-xs text-muted-foreground">{a.sponsor}</p>
               <div className="text-[11px] text-muted-foreground mt-3 flex justify-between border-t border-border pt-3">
@@ -410,6 +411,11 @@ function AdDialog({ initial, onClose, onSave }: { initial?: AdminAd; onClose: ()
   const [endDate, setEnd] = useState(initial?.endDate ?? new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10));
   const [active, setActive] = useState(initial?.active ?? true);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [audience, setAudience] = useState<NonNullable<AdminAd["audience"]>>(initial?.audience ?? "all");
+  const [newDays, setNewDays] = useState(initial?.newDays ?? 7);
+  const [adApp, setAdApp] = useState<NonNullable<AdminAd["app"]>>(initial?.app ?? "all");
+  const [giftKind, setGiftKind] = useState<NonNullable<AdminAd["giftKind"]>>(initial?.giftKind ?? "none");
+  const [giftValue, setGiftValue] = useState(initial?.giftValue ?? 0);
 
   const duration = Math.max(1, Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / 86400000));
   const recommended = placement === "بانر علوي" ? "1200×400 (3:1)" : placement === "بانر سفلي" ? "1200×300 (4:1)" : "800×600 (4:3)";
@@ -449,6 +455,45 @@ function AdDialog({ initial, onClose, onSave }: { initial?: AdminAd; onClose: ()
             </select>
           </Field>
 
+          {placement === "بطاقة منبثقة" && (
+            <div className="border border-mohemah-blue/30 bg-mohemah-blue/5 rounded-xl p-3 space-y-3">
+              <p className="text-xs font-bold text-mohemah-blue">لمن تظهر البطاقة المنبثقة؟</p>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="الجمهور">
+                  <select value={audience} onChange={(e) => setAudience(e.target.value as "all" | "new_users")} className="admin-input">
+                    <option value="all">جميع المستخدمين</option>
+                    <option value="new_users">المسجلون الجدد (ترحيب)</option>
+                  </select>
+                </Field>
+                <Field label="التطبيق">
+                  <select value={adApp} onChange={(e) => setAdApp(e.target.value as "all" | "customer" | "provider")} className="admin-input">
+                    <option value="all">التطبيقان</option>
+                    <option value="customer">طالب الخدمة</option>
+                    <option value="provider">مقدم الخدمة</option>
+                  </select>
+                </Field>
+              </div>
+              {audience === "new_users" && (
+                <>
+                  <Field label="يُعد المستخدم جديداً خلال (يوم من التسجيل)"><input type="number" min={1} max={365} value={newDays} onChange={(e) => setNewDays(Number(e.target.value) || 7)} className="admin-input" /></Field>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="هدية الترحيب" hint="الهدية لمقدمي الخدمة؛ طالب الخدمة يرى رسالة الترحيب فقط">
+                      <select value={giftKind} onChange={(e) => setGiftKind(e.target.value as "none" | "coins" | "subscription")} className="admin-input">
+                        <option value="none">بدون هدية (ترحيب فقط)</option>
+                        <option value="coins">كوينز</option>
+                        <option value="subscription">اشتراك مجاني</option>
+                      </select>
+                    </Field>
+                    {giftKind !== "none" && (
+                      <Field label={giftKind === "coins" ? "عدد الكوينز" : "مدة الاشتراك (يوم)"}><input type="number" min={1} value={giftValue} onChange={(e) => setGiftValue(Number(e.target.value) || 0)} className="admin-input" /></Field>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">تظهر مرة واحدة لكل مستخدم جديد بعد دخوله، وبضغطة «استلم الهدية» تُضاف لحسابه مرة واحدة فقط.</p>
+                </>
+              )}
+            </div>
+          )}
+
           <Field label="صورة الإعلان" hint="استخدم صورة عرضية باللون المناسب لهوية الجهة">
             <div className="flex items-center gap-2">
               <button type="button" onClick={() => fileRef.current?.click()} className="px-3 py-2 rounded-xl bg-mohemah-blue/10 text-mohemah-blue text-xs font-bold flex items-center gap-2">
@@ -474,7 +519,7 @@ function AdDialog({ initial, onClose, onSave }: { initial?: AdminAd; onClose: ()
 
         <div className="flex gap-2 mt-5">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-mohemah-light text-sm font-bold">إلغاء</button>
-          <button onClick={() => sponsor && title && onSave({ sponsor, title, imageUrl, link, startDate, endDate, durationDays: duration, active, placement })} className="flex-1 py-2.5 rounded-xl mohemah-btn-coral text-sm font-bold">حفظ</button>
+          <button onClick={() => sponsor && title && onSave({ sponsor, title, imageUrl, link, startDate, endDate, durationDays: duration, active, placement, audience: placement === "بطاقة منبثقة" ? audience : "all", newDays, app: adApp, giftKind: audience === "new_users" ? giftKind : "none", giftValue: audience === "new_users" && giftKind !== "none" ? giftValue : 0 })} className="flex-1 py-2.5 rounded-xl mohemah-btn-coral text-sm font-bold">حفظ</button>
         </div>
       </div>
     </div>

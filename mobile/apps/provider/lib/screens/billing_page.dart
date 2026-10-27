@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:mohemah_core/mohemah_core.dart';
 
 import '../provider_store.dart';
@@ -151,7 +151,7 @@ class _BillingPageState extends State<BillingPage> {
       appBar: PageHeader.bar(
         'الرصيد والاشتراك',
         trailing: IconButton(
-          tooltip: 'سجل العمليات',
+          tooltip: tr('سجل العمليات'),
           onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TransactionsPage())),
           icon: const Icon(Icons.receipt_long_outlined),
         ),

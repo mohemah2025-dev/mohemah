@@ -18,6 +18,8 @@ export interface Env {
   EMAIL_API_KEY?: string;
   /** WhatsApp Cloud API permanent access token (Meta). */
   WHATSAPP_TOKEN?: string;
+  /** Workers AI (translation of conversations and content, voice transcription). Optional. */
+  AI?: { run(model: string, input: unknown): Promise<unknown> };
 }
 
 export type App = "customer" | "provider" | "admin";

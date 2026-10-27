@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:mohemah_core/mohemah_core.dart';
 
 import '../provider_store.dart';
@@ -163,8 +163,10 @@ class OfferCard extends StatelessWidget {
               icon: Icons.check_outlined,
               label: 'قبول الطلب',
               onPressed: () async {
+                final price = await askServicePrice(context);
+                if (price == null || !context.mounted) return;
                 try {
-                  await store.accept(o.id);
+                  await store.accept(o.id, price: price.$1);
                   if (context.mounted) showSnack(context, 'تم قبول الطلب');
                   ProviderShell.ordersSection.value = 1;
                 } on ApiException catch (e) {
@@ -312,7 +314,7 @@ class JobDetailPage extends StatelessWidget {
                 Expanded(
                   child: FilledButton.icon(
                     onPressed: () async {
-                      await Navigator.push(context, MaterialPageRoute(builder: (_) => OrderChatPage(orderId: j.id, title: 'محادثة مع ${j.customerName}')));
+                      await Navigator.push(context, MaterialPageRoute(builder: (_) => OrderChatPage(orderId: j.id, title: 'محادثة مع ${j.customerName}', header: JobPriceCard(jobId: j.id, compact: true))));
                       await store.refresh();
                     },
                     icon: Badge(isLabelVisible: j.unread > 0, label: Text('${j.unread}'), child: const Icon(Icons.chat_outlined)),
@@ -322,6 +324,8 @@ class JobDetailPage extends StatelessWidget {
               ]),
             ]),
           ),
+          const SizedBox(height: 10),
+          JobPriceCard(jobId: j.id),
           const SectionTitle('تفاصيل الطلب'),
           AppCard(
             child: Column(children: [
@@ -470,5 +474,94 @@ class _HistoryListState extends State<_HistoryList> {
         );
       },
     );
+  }
+}
+
+/// Before accepting: the service price in riyals, or empty to negotiate it with the customer in the chat.
+/// Returns null when cancelled, otherwise a record with the price (null = negotiable).
+Future<(double?,)?> askServicePrice(BuildContext context, {double? initial, bool editing = false}) async {
+  final ctrl = TextEditingController(text: initial == null ? '' : fmtNum(initial).replaceAll(',', ''));
+  return showDialog<(double?,)>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(editing ? 'تعديل مبلغ الخدمة' : 'مبلغ الخدمة'),
+      content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        const Text('اكتب مبلغ تنفيذ الخدمة بالريال، أو اتركه فارغاً ليتم التفاوض عليه مع العميل في المحادثة.', style: TextStyle(fontSize: 13, color: Brand.mutedFg, height: 1.5)),
+        const SizedBox(height: 12),
+        TextField(
+          controller: ctrl,
+          autofocus: true,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          textDirection: TextDirection.ltr,
+          decoration: InputDecoration(hintText: tr('اتركه فارغاً للتفاوض'), suffixText: tr('ريال'), prefixIcon: const Icon(Icons.payments_outlined)),
+        ),
+      ]),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+        FilledButton(
+          onPressed: () {
+            final t = ctrl.text.trim().replaceAll(',', '.');
+            if (t.isEmpty) {
+              Navigator.pop(ctx, (null,));
+              return;
+            }
+            final v = double.tryParse(t);
+            if (v == null || v < 0) {
+              showSnack(ctx, 'اكتب مبلغاً صحيحاً', error: true);
+              return;
+            }
+            Navigator.pop(ctx, (v,));
+          },
+          child: Text(editing ? 'حفظ المبلغ' : 'قبول الطلب'),
+        ),
+      ],
+    ),
+  );
+}
+
+/// Price of an active job: amount / negotiable / agreed, with «edit the price».
+class JobPriceCard extends StatelessWidget {
+  const JobPriceCard({super.key, required this.jobId, this.compact = false});
+  final String jobId;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = ProviderScope.of(context);
+    ActiveJob? j;
+    for (final x in store.feed?.active ?? const <ActiveJob>[]) {
+      if (x.id == jobId) j = x;
+    }
+    if (j == null || j.priceStatus == 'none') return const SizedBox.shrink();
+    final job = j;
+    final agreed = job.priceStatus == 'agreed';
+    final amount = job.priceAmount == null ? '' : fmtNum(job.priceAmount!);
+    final text = agreed
+        ? 'وافق العميل على مبلغ $amount ريال'
+        : job.priceStatus == 'offered'
+            ? 'المبلغ المعروض: $amount ريال — بانتظار موافقة العميل'
+            : 'المبلغ بالتفاوض مع العميل في المحادثة';
+    final row = Row(children: [
+      Icon(agreed ? Icons.verified_outlined : Icons.payments_outlined, color: agreed ? Brand.success : const Color(0xFFB7791F)),
+      const SizedBox(width: 8),
+      Expanded(child: Text(text, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5))),
+      if (!agreed)
+        TextButton(
+          onPressed: () async {
+            final p = await askServicePrice(context, initial: job.priceAmount, editing: true);
+            if (p == null || !context.mounted) return;
+            try {
+              await store.setPrice(job.id, p.$1);
+              if (context.mounted) showSnack(context, 'تم إرسال المبلغ للعميل');
+            } catch (e) {
+              if (context.mounted) showError(context, e);
+            }
+          },
+          child: Text(job.priceAmount == null ? 'تحديد المبلغ' : 'تعديل المبلغ'),
+        ),
+    ]);
+    return compact
+        ? Container(width: double.infinity, color: const Color(0xFFFFFBF2), padding: const EdgeInsets.fromLTRB(14, 4, 8, 4), child: row)
+        : AppCard(color: agreed ? const Color(0xFFEAF7EF) : const Color(0xFFFFF7E8), child: row);
   }
 }

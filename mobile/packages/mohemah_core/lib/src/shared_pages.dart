@@ -1,6 +1,9 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
+
+import 'i18n.dart';
+import 'chat.dart';
 
 import 'api.dart';
 import 'auth_ui.dart';
@@ -136,17 +139,14 @@ class _SupportMessagesPageState extends State<SupportMessagesPage> {
     }
   }
 
-  Future<void> _send() async {
-    final text = _ctrl.text.trim();
-    if (text.isEmpty) return;
-    final api = SessionScope.read(context).api;
-    try {
-      await api.post('/api/me/support', {'body': text});
-      _ctrl.clear();
-      await _load();
-    } catch (e) {
-      if (mounted) showError(context, e);
-    }
+  Future<void> _send(String text) async {
+    await SessionScope.read(context).api.post('/api/me/support', {'body': text});
+    await _load();
+  }
+
+  Future<void> _voice(UploadFile f) async {
+    await SessionScope.read(context).api.multipart('/api/me/support/voice', const {}, [f]);
+    await _load();
   }
 
   Future<void> _close() async {
@@ -193,6 +193,7 @@ class _SupportMessagesPageState extends State<SupportMessagesPage> {
                 )
               : null),
       body: Column(children: [
+        const ChatPrivacyNote(reason: 'المحادثة مع فريق الإدارة المختص، وقد يطّلع عليها المشرفون لمتابعة طلبك وضمان جودة الخدمة. تُترجم الرسائل تلقائياً إلى لغة الطرف الآخر.'),
         if (t != null)
           Container(
             width: double.infinity,
@@ -219,7 +220,7 @@ class _SupportMessagesPageState extends State<SupportMessagesPage> {
                       icon: Icon(i <= _stars ? Icons.star_rounded : Icons.star_outline_rounded, color: const Color(0xFFF2B01E), size: 34),
                     ),
                 ]),
-                TextField(controller: _note, maxLength: 300, decoration: const InputDecoration(hintText: 'ملاحظة (اختياري)')),
+                TextField(controller: _note, maxLength: 300, decoration: InputDecoration(hintText: tr('ملاحظة (اختياري)'))),
                 FilledButton(onPressed: _rate, child: const Text('إرسال التقييم')),
               ]),
             ),
@@ -237,11 +238,11 @@ class _SupportMessagesPageState extends State<SupportMessagesPage> {
                           itemCount: items.length,
                           itemBuilder: (_, i) {
                             final m = items[i];
-                            return _Bubble(mine: m.senderId == me, text: m.body, at: m.createdAt, name: m.senderId == me ? null : (m.senderName ?? 'الإدارة'));
+                            return ChatBubble(message: m, mine: m.senderId == me, name: m.senderId == me ? null : (m.senderName ?? tr('الإدارة')));
                           },
                         ),
         ),
-        _Composer(controller: _ctrl, onSend: _send),
+        ChatComposer(onSend: _send, onVoice: _voice),
       ]),
     );
   }
@@ -250,10 +251,13 @@ class _SupportMessagesPageState extends State<SupportMessagesPage> {
 /* ======================= Order chat (customer ↔ provider) ======================= */
 
 class OrderChatPage extends StatefulWidget {
-  const OrderChatPage({super.key, required this.orderId, required this.title, this.canSend = true});
+  const OrderChatPage({super.key, required this.orderId, required this.title, this.canSend = true, this.header});
   final String orderId;
   final String title;
   final bool canSend;
+
+  /// Shown under the privacy note (e.g. the price card with «accept the price»).
+  final Widget? header;
 
   @override
   State<OrderChatPage> createState() => _OrderChatPageState();
@@ -294,18 +298,14 @@ class _OrderChatPageState extends State<OrderChatPage> {
     }
   }
 
-  Future<void> _send() async {
-    final text = _ctrl.text.trim();
-    if (text.isEmpty) return;
-    final api = SessionScope.read(context).api;
-    try {
-      _ctrl.clear();
-      await api.post('/api/orders/${widget.orderId}/messages', {'body': text});
-      await _load();
-    } catch (e) {
-      _ctrl.text = text;
-      if (mounted) showError(context, e);
-    }
+  Future<void> _send(String text) async {
+    await SessionScope.read(context).api.post('/api/orders/${widget.orderId}/messages', {'body': text});
+    await _load();
+  }
+
+  Future<void> _voice(UploadFile f) async {
+    await SessionScope.read(context).api.multipart('/api/orders/${widget.orderId}/messages/voice', const {}, [f]);
+    await _load();
   }
 
   @override
@@ -315,6 +315,8 @@ class _OrderChatPageState extends State<OrderChatPage> {
     return Scaffold(
       appBar: AppBar(title: Text(widget.title)),
       body: Column(children: [
+        const ChatPrivacyNote(reason: 'لضمان حقوق الطرفين، قد تطّلع الإدارة على محتوى هذه المحادثة عند وجود بلاغ أو إلغاء للطلب أو خلاف على المبلغ. تُترجم الرسائل تلقائياً إلى لغة الطرف الآخر.'),
+        if (widget.header != null) widget.header!,
         Expanded(
           child: _error != null && items == null
               ? ErrorRetry(message: _error!, onRetry: _load)
@@ -326,82 +328,14 @@ class _OrderChatPageState extends State<OrderChatPage> {
                           reverse: true,
                           padding: const EdgeInsets.all(16),
                           itemCount: items.length,
-                          itemBuilder: (_, i) => _Bubble(mine: items[i].senderId == me, text: items[i].body, at: items[i].createdAt),
+                          itemBuilder: (_, i) => ChatBubble(message: items[i], mine: items[i].senderId == me),
                         ),
         ),
         if (widget.canSend)
-          _Composer(controller: _ctrl, onSend: _send)
+          ChatComposer(onSend: _send, onVoice: _voice)
         else
           const SafeArea(top: false, child: Padding(padding: EdgeInsets.all(14), child: Text('المحادثة مغلقة لهذا الطلب', style: TextStyle(color: Brand.mutedFg)))),
       ]),
-    );
-  }
-}
-
-class _Bubble extends StatelessWidget {
-  const _Bubble({required this.mine, required this.text, this.at, this.name});
-  final bool mine;
-  final String text;
-  final DateTime? at;
-  final String? name;
-
-  @override
-  Widget build(BuildContext context) {
-    final primary = Theme.of(context).colorScheme.primary;
-    return Align(
-      alignment: mine ? AlignmentDirectional.centerStart : AlignmentDirectional.centerEnd,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.75),
-        padding: const EdgeInsets.fromLTRB(14, 9, 14, 7),
-        decoration: BoxDecoration(
-          color: mine ? primary : Colors.white,
-          border: mine ? null : Border.all(color: Brand.border),
-          borderRadius: BorderRadiusDirectional.only(
-            topStart: const Radius.circular(18),
-            topEnd: const Radius.circular(18),
-            bottomStart: Radius.circular(mine ? 4 : 18),
-            bottomEnd: Radius.circular(mine ? 18 : 4),
-          ),
-        ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          if (name != null) Text(name!, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: primary)),
-          Text(text, style: TextStyle(color: mine ? Colors.white : Brand.foreground, height: 1.45)),
-          if (at != null)
-            Text(fmtTime(at!), style: TextStyle(fontSize: 10.5, color: mine ? Colors.white70 : Brand.mutedFg)),
-        ]),
-      ),
-    );
-  }
-}
-
-class _Composer extends StatelessWidget {
-  const _Composer({required this.controller, required this.onSend});
-  final TextEditingController controller;
-  final Future<void> Function() onSend;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Brand.border))),
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-      child: SafeArea(
-        top: false,
-        child: Row(children: [
-          Expanded(
-            child: TextField(
-              controller: controller,
-              minLines: 1,
-              maxLines: 4,
-              maxLength: 1000,
-              textInputAction: TextInputAction.newline,
-              decoration: const InputDecoration(hintText: 'اكتب رسالتك…', counterText: '', fillColor: Brand.muted, enabledBorder: InputBorder.none),
-            ),
-          ),
-          const SizedBox(width: 8),
-          IconButton.filled(onPressed: onSend, icon: const Icon(Icons.send_outlined, textDirection: TextDirection.rtl)),
-        ]),
-      ),
     );
   }
 }
@@ -634,7 +568,7 @@ class _RatingSheetState extends State<_RatingSheet> {
               maxLines: 3,
               minLines: 2,
               maxLength: 500,
-              decoration: InputDecoration(hintText: low ? 'اكتب سبب التقييم المنخفض (مطلوب)' : 'ملاحظة (اختياري)'),
+              decoration: InputDecoration(hintText: tr(low ? 'اكتب سبب التقييم المنخفض (مطلوب)' : 'ملاحظة (اختياري)')),
             ),
           ],
           const SizedBox(height: 8),

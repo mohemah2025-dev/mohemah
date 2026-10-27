@@ -103,7 +103,10 @@ function OrderCard({ order: o, open, onToggle, onChat, onChanged }: { order: Cus
 
   const cancel = async () => {
     setBusy(true);
-    try { await api(`/api/orders/${o.id}/cancel`, { body: {} }); toast.success("تم إلغاء الطلب"); onChanged(); }
+    // After a provider accepted, a reason is required (it is reviewed by the administration).
+    const reason = o.status === "accepted" ? window.prompt("سبب الإلغاء (مثال: عدم الموافقة على المبلغ)")?.trim() : "";
+    if (o.status === "accepted" && !reason) { setBusy(false); return toast.error("اكتب سبب الإلغاء"); }
+    try { await api(`/api/orders/${o.id}/cancel`, { body: reason ? { reason } : {} }); toast.success("تم إلغاء الطلب"); onChanged(); }
     catch (e) { toast.error(errMsg(e)); }
     setBusy(false); setConfirmCancel(false);
   };

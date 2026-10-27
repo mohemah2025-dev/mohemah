@@ -1,4 +1,6 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
+
+import 'i18n.dart';
 
 /// Service icon keys stored by the dashboard (lucide names) mapped to Material icons.
 const Map<String, IconData> serviceIconMap = {

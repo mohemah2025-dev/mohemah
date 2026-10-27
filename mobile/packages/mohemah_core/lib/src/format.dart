@@ -1,5 +1,8 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 
+import 'i18n.dart';
+
+import 'lang_state.dart';
 import 'theme.dart';
 
 // Formatting uses Latin digits with Arabic labels (same rule as the web apps).
@@ -9,12 +12,21 @@ String two(int n) => n.toString().padLeft(2, '0');
 const _months = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 const weekdays = ['الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت', 'الأحد'];
 
+const _monthsEn = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const _monthsUr = ['جنوری', 'فروری', 'مارچ', 'اپریل', 'مئی', 'جون', 'جولائی', 'اگست', 'ستمبر', 'اکتوبر', 'نومبر', 'دسمبر'];
+
 String fmtTime(DateTime d) {
   final h = d.hour % 12 == 0 ? 12 : d.hour % 12;
-  return '$h:${two(d.minute)} ${d.hour < 12 ? 'ص' : 'م'}';
+  final am = d.hour < 12;
+  final suffix = switch (LangState.code) { 'en' => am ? 'AM' : 'PM', 'ur' => am ? 'صبح' : 'شام', _ => am ? 'ص' : 'م' };
+  return '$h:${two(d.minute)} $suffix';
 }
 
-String fmtDate(DateTime? d) => d == null ? '—' : '${d.day} ${_months[d.month - 1]} ${d.year}';
+String fmtDate(DateTime? d) {
+  if (d == null) return '—';
+  final months = switch (LangState.code) { 'en' => _monthsEn, 'ur' => _monthsUr, _ => _months };
+  return '${d.day} ${months[d.month - 1]} ${d.year}';
+}
 String fmtDateTime(DateTime? d) => d == null ? '—' : '${fmtDate(d)} • ${fmtTime(d)}';
 String fmtShortDate(DateTime d) => '${d.year}/${two(d.month)}/${two(d.day)}';
 

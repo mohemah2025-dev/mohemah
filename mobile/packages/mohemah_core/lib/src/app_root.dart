@@ -1,10 +1,11 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'config.dart';
+import 'i18n.dart';
 import 'public_data.dart';
 import 'push.dart';
 import 'session.dart';
@@ -74,12 +75,23 @@ class _MohemahAppState extends State<MohemahApp> with WidgetsBindingObserver {
         rootMessenger.currentState?.showSnackBar(SnackBar(content: Text(body.isEmpty ? title : '$title\n$body')));
       }
     };
-    _init = Future.wait([session.restore(), data.load()]).timeout(const Duration(seconds: 8), onTimeout: () => const []);
+    // The saved language is read first so the first data load (translated content) uses it.
+    _init = AppLang.instance.restore().then((_) => Future.wait([session.restore(), data.load()])).timeout(const Duration(seconds: 8), onTimeout: () => const []);
+    AppLang.instance.addListener(_langChanged);
     unawaited(_init.then((_) => Push.init(session)));
+  }
+
+  /// Language changed: the app switches locale/direction (every [Text] depends on it) and translated content reloads.
+  void _langChanged() {
+    if (!mounted) return;
+    setState(() {});
+    unawaited(data.load());
+    unawaited(session.refresh().catchError((_) {}));
   }
 
   @override
   void dispose() {
+    AppLang.instance.removeListener(_langChanged);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -103,9 +115,10 @@ class _MohemahAppState extends State<MohemahApp> with WidgetsBindingObserver {
           scaffoldMessengerKey: rootMessenger,
           title: widget.title,
           debugShowCheckedModeBanner: false,
+          onGenerateTitle: (_) => tr(widget.title),
           theme: mohemahTheme(seed: widget.seed),
-          locale: const Locale('ar'),
-          supportedLocales: const [Locale('ar')],
+          locale: AppLang.instance.locale,
+          supportedLocales: const [Locale('ar'), Locale('en'), Locale('ur')],
           localizationsDelegates: const [
             GlobalMaterialLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,

@@ -238,3 +238,28 @@ Future<void> pickLanguage(BuildContext context) async {
 
 /// Name of the current language (for menu subtitles).
 String get currentLanguageName => kLanguages.firstWhere((l) => l.$1 == LangState.code, orElse: () => kLanguages.first).$2;
+
+/// Language buttons (العربية / English / اردو) shown on the sign-in screens of both apps.
+class LanguageSwitcher extends StatelessWidget {
+  const LanguageSwitcher({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    Localizations.maybeLocaleOf(context);
+    final primary = Theme.of(context).colorScheme.primary;
+    return Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+      Icon(Icons.translate_rounded, size: 18, color: primary),
+      const SizedBox(width: 6),
+      for (final l in kLanguages)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 3),
+          child: ChoiceChip(
+            label: Text(l.$2, translate: false),
+            selected: LangState.code == l.$1,
+            visualDensity: VisualDensity.compact,
+            onSelected: (_) => AppLang.instance.set(l.$1),
+          ),
+        ),
+    ]);
+  }
+}

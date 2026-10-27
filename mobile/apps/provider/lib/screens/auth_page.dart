@@ -94,8 +94,9 @@ class _ProviderRegisterFormState extends State<ProviderRegisterForm> {
   }
 
   Future<void> _submit() async {
-    if (_idDoc == null || _certDoc == null) {
-      showSnack(context, _idDoc == null ? 'أرفق صورة الهوية / الإقامة' : 'أرفق الشهادة', error: true);
+    // The certificate is optional; only the ID / Iqama is required.
+    if (_idDoc == null) {
+      showSnack(context, 'أرفق صورة الهوية / الإقامة', error: true);
       return;
     }
     if (!_agree) {
@@ -117,7 +118,7 @@ class _ProviderRegisterFormState extends State<ProviderRegisterForm> {
         'password': _pw.text,
       },
     };
-    final files = [_idDoc!.upload('id_file'), _certDoc!.upload('cert_file'), if (_avatar != null) _avatar!.upload('avatar_file')];
+    final files = [_idDoc!.upload('id_file'), if (_certDoc != null) _certDoc!.upload('cert_file'), if (_avatar != null) _avatar!.upload('avatar_file')];
     try {
       if (widget.applyExisting) {
         s.applyMe(await s.api.multipart('/api/provider/apply', fields, files));
@@ -296,7 +297,7 @@ class _ProviderRegisterFormState extends State<ProviderRegisterForm> {
         },
       ),
       DocSlot(
-        label: 'الشهادة أو ما يثبت الخبرة',
+        label: 'الشهادة أو ما يثبت الخبرة (اختياري)',
         doc: _certDoc,
         onPick: () async {
           final d = await pickDocument(context, 'الشهادة');

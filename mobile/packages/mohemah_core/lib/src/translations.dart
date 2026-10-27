@@ -364,6 +364,7 @@ const Map<String, List<String>> kTranslations = {
   'اختر الخدمات التي تقدمها، وستصلك طلباتها فقط': ['Choose the services you offer; you will only receive their orders', 'وہ خدمات منتخب کریں جو آپ فراہم کرتے ہیں؛ آپ کو صرف انہی کے آرڈرز ملیں گے'],
   'أرفق المستندات للتحقق من حسابك. تبقى مستنداتك خاصة ولا يطّلع عليها إلا فريق المراجعة.': ['Attach the documents to verify your account. Your documents stay private and only the review team sees them.', 'اپنے اکاؤنٹ کی تصدیق کے لیے دستاویزات منسلک کریں۔ آپ کی دستاویزات نجی رہتی ہیں اور صرف جائزہ ٹیم انہیں دیکھتی ہے۔'],
   'الشهادة أو ما يثبت الخبرة': ['Certificate or proof of experience', 'سرٹیفکیٹ یا تجربے کا ثبوت'],
+  'الشهادة أو ما يثبت الخبرة (اختياري)': ['Certificate or proof of experience (optional)', 'سرٹیفکیٹ یا تجربے کا ثبوت (اختیاری)'],
   '{0} كوين/طلب': ['{0} coins/order', '{0} کوائنز/آرڈر'],
   'لا توجد وسيلة دفع مفعّلة حالياً': ['No payment method is enabled at the moment', 'اس وقت کوئی ادائیگی کا طریقہ فعال نہیں'],
   'وسيلة الدفع': ['Payment method', 'ادائیگی کا طریقہ'],

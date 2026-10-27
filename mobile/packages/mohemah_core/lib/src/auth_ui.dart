@@ -326,6 +326,8 @@ class _LoginFormState extends State<LoginForm> {
           ),
           const SizedBox(height: 6),
           BusyButton(label: 'تسجيل الدخول', icon: Icons.login_outlined, onPressed: _submit),
+          const SizedBox(height: 10),
+          const LanguageSwitcher(),
           TextButton.icon(
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ForgotPasswordPage())),
             icon: const Icon(Icons.lock_reset_outlined, size: 19),

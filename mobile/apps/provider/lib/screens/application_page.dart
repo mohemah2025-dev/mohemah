@@ -82,7 +82,10 @@ class _ApplicationPageState extends State<ApplicationPage> {
 
     return Scaffold(
       appBar: PageHeader.bar('حسابي',
-          trailing: IconButton(tooltip: tr('تسجيل خروج'), onPressed: () => signOutFlow(context), icon: const Icon(Icons.logout_outlined))),
+          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+            IconButton(tooltip: tr('اللغة'), onPressed: () => pickLanguage(context), icon: const Icon(Icons.translate_rounded)),
+            IconButton(tooltip: tr('تسجيل خروج'), onPressed: () => signOutFlow(context), icon: const Icon(Icons.logout_outlined)),
+          ])),
       body: RefreshIndicator(
         onRefresh: () async {
           await s.refresh().catchError((_) {});

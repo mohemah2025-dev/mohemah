@@ -206,7 +206,7 @@ function ProviderSignup({ onDone }: { onDone: () => void }) {
     if (f.password.length < 8) return toast.error("كلمة المرور 8 أحرف على الأقل");
     if (f.password !== f.confirm) return toast.error("كلمتا المرور غير متطابقتين");
     if (!picked.length) return toast.error("اختر خدمة واحدة على الأقل");
-    const docError = validateDoc(idFile, "صورة الهوية") ?? validateDoc(certFile, "الشهادة");
+    const docError = validateDoc(idFile, "صورة الهوية") ?? (certFile ? validateDoc(certFile, "الشهادة") : null);
     if (docError) return toast.error(docError);
     if (!agree) return toast.error("وافق على الشروط وسياسة الخصوصية");
     const form = new FormData();
@@ -215,7 +215,7 @@ function ProviderSignup({ onDone }: { onDone: () => void }) {
     if (needsCompany(f.nationality)) form.set("company_name", f.company.trim());
     form.set("email", f.email.trim()); form.set("password", f.password); form.set("services", JSON.stringify(picked));
     setBusy(true);
-    form.set("id_file", await compressImage(idFile!)); form.set("cert_file", await compressImage(certFile!));
+    form.set("id_file", await compressImage(idFile!)); if (certFile) form.set("cert_file", await compressImage(certFile));
     try {
       const p = await api<MePayload>("/api/auth/register/provider", { app: "provider", form });
       acceptSession(p);
@@ -250,7 +250,7 @@ function ProviderSignup({ onDone }: { onDone: () => void }) {
       <ServicePicker picked={picked} toggle={toggle} />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <FilePick label="إرفاق صورة الهوية / الإقامة" file={idFile} onPick={setIdFile} />
-        <FilePick label="إرفاق الشهادة" file={certFile} onPick={setCertFile} />
+        <FilePick label="إرفاق الشهادة (اختياري)" file={certFile} onPick={setCertFile} />
       </div>
       <p className="text-[11px] text-muted-foreground">صورة أو PDF بحد أقصى 5MB. يُراجع الطلب من الإدارة قبل التفعيل.</p>
       <label className="flex items-start gap-2 text-xs text-muted-foreground"><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} className="mt-0.5" />أوافق على شروط الاستخدام وسياسة الخصوصية لمقدمي الخدمة</label>
@@ -273,13 +273,13 @@ export function ProviderApplyForm() {
     if (!f.region) return toast.error("اختر المدينة التي تعمل بها");
     if (needsCompany(f.nationality) && !f.company.trim()) return toast.error("اكتب اسم المؤسسة أو الشركة التي تتبع لها");
     if (!picked.length) return toast.error("اختر خدمة واحدة على الأقل");
-    const docError = validateDoc(idFile, "صورة الهوية") ?? validateDoc(certFile, "الشهادة");
+    const docError = validateDoc(idFile, "صورة الهوية") ?? (certFile ? validateDoc(certFile, "الشهادة") : null);
     if (docError) return toast.error(docError);
     const form = new FormData();
     form.set("national_id", f.nationalId); form.set("nationality", f.nationality); form.set("gender", f.gender); form.set("region", f.region);
     if (needsCompany(f.nationality)) form.set("company_name", f.company.trim());
     setBusy(true);
-    form.set("services", JSON.stringify(picked)); form.set("id_file", await compressImage(idFile!)); form.set("cert_file", await compressImage(certFile!));
+    form.set("services", JSON.stringify(picked)); form.set("id_file", await compressImage(idFile!)); if (certFile) form.set("cert_file", await compressImage(certFile));
     try {
       acceptSession(await api<MePayload>("/api/provider/apply", { form }));
       toast.success("تم إرسال طلب التسجيل للمراجعة");
@@ -299,7 +299,7 @@ export function ProviderApplyForm() {
       <ServicePicker picked={picked} toggle={(id) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]))} />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <FilePick label="إرفاق صورة الهوية / الإقامة" file={idFile} onPick={setIdFile} />
-        <FilePick label="إرفاق الشهادة" file={certFile} onPick={setCertFile} />
+        <FilePick label="إرفاق الشهادة (اختياري)" file={certFile} onPick={setCertFile} />
       </div>
       <button onClick={submit} disabled={busy} className="w-full mohemah-btn-primary py-3 text-sm disabled:opacity-50">{busy ? "جارٍ الإرسال..." : "إرسال الطلب"}</button>
     </div>

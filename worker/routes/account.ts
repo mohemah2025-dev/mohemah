@@ -276,9 +276,8 @@ export function registerAccountRoutes(r: Router) {
     const idFile = formFile(form, "id_file");
     const certFile = formFile(form, "cert_file");
     if (!idFile) fail(400, "missing_id_file", "أرفق صورة الهوية / الإقامة");
-    if (!certFile) fail(400, "missing_cert_file", "أرفق الشهادة");
     validateDoc(idFile!);
-    validateDoc(certFile!);
+    if (certFile) validateDoc(certFile);
     const avatarFile = formFile(form, "avatar_file");
     if (avatarFile) validateAvatar(avatarFile);
     if (await first(c.env.DB, "SELECT 1 FROM users WHERE email = ?", email)) fail(409, "email_taken", "هذا البريد مسجّل مسبقاً، سجّل الدخول من تطبيق مقدم الخدمة لإكمال طلبك");
@@ -289,7 +288,8 @@ export function registerAccountRoutes(r: Router) {
        VALUES (?,?,?,?,?,?,?,?,?,?,'pending',?,?)`,
       id, email, phone, full_name, region, gender, national_id, nationality, company_name, await hashPassword(c.env, password), JSON.stringify(services), referralCodeFor(full_name));
     await saveProviderDoc(c, id, "id", idFile!);
-    await saveProviderDoc(c, id, "certificate", certFile!);
+    // The certificate is optional at registration.
+    if (certFile) await saveProviderDoc(c, id, "certificate", certFile);
     if (avatarFile) await run(c.env.DB, "UPDATE users SET avatar_url = ? WHERE id = ?", await savePublicImage(c, avatarFile), id);
     const token = await createSession(c.env, id, "provider", c.req.headers.get("user-agent"));
     return json({ token, ...(await mePayload(c, id, "provider")) }, 201);
@@ -314,15 +314,14 @@ export function registerAccountRoutes(r: Router) {
     const idFile = formFile(form, "id_file");
     const certFile = formFile(form, "cert_file");
     if (!idFile) fail(400, "missing_id_file", "أرفق صورة الهوية / الإقامة");
-    if (!certFile) fail(400, "missing_cert_file", "أرفق الشهادة");
     validateDoc(idFile!);
-    validateDoc(certFile!);
+    if (certFile) validateDoc(certFile);
     const avatarFile = formFile(form, "avatar_file");
     if (avatarFile) validateAvatar(avatarFile);
     const nationality = formStr(form, "nationality").slice(0, 60) || null;
     const company_name = companyFor(form, nationality);
     await saveProviderDoc(c, u.id, "id", idFile!);
-    await saveProviderDoc(c, u.id, "certificate", certFile!);
+    if (certFile) await saveProviderDoc(c, u.id, "certificate", certFile);
     if (avatarFile) await run(c.env.DB, "UPDATE users SET avatar_url = ? WHERE id = ?", await savePublicImage(c, avatarFile), u.id);
     await run(c.env.DB,
       "UPDATE users SET national_id = ?, nationality = ?, company_name = ?, gender = ?, region = ?, requested_services = ?, verification_status = 'pending', review_note = NULL, updated_at = ? WHERE id = ?",

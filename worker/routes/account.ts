@@ -9,6 +9,7 @@ import {
 } from "../lib/auth";
 import { deleteFiles, getFile, putFile } from "../lib/storage";
 import { userWrites } from "./support";
+import { sendDirect } from "../lib/messaging";
 import { activeSubscriptionEnd, getSettings, publicSettings, referralCodeFor, serializeProfile, type UserRow } from "../lib/domain";
 
 export const DOC_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "application/pdf": "pdf" };
@@ -75,7 +76,73 @@ function formStr(f: FormData, k: string) {
   return typeof v === "string" ? v.trim() : "";
 }
 
+/** Saudi, Kuwaiti, Emirati, Qatari and Bahraini providers do not need to name an establishment. */
+const COMPANY_EXEMPT = /(سعود|كويت|[إاأ]مارات|قطر|بحرين)/;
+export function companyFor(form: FormData, nationality: string | null) {
+  const company = formStr(form, "company_name").slice(0, 150) || null;
+  if (nationality && !COMPANY_EXEMPT.test(nationality) && !company) fail(400, "company_required", "اكتب اسم المؤسسة أو الشركة التي تتبع لها");
+  if (!nationality) fail(400, "nationality_required", "اختر الجنسية");
+  return nationality && COMPANY_EXEMPT.test(nationality) ? null : company;
+}
+
+const maskPhone = (p: string) => `${p.slice(0, 3)}*****${p.slice(-2)}`;
+const maskEmail = (e: string) => { const [a, d] = e.split("@"); return `${a.slice(0, 2)}***@${d}`; };
+async function codeHash(userId: string, code: string) {
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${userId}:${code}`));
+  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 export function registerAccountRoutes(r: Router) {
+  /* ---------- Account / password recovery by SMS or e-mail ---------- */
+  r.post("/api/auth/forgot", async (c) => {
+    await rateLimit(c.env, `forgot:${c.ip}`, 10, 60);
+    const b = await readJson(c.req);
+    const identifier = (str(b, "identifier", { required: true, max: 255, label: "الجوال أو البريد" }) ?? "").trim().toLowerCase();
+    const channel = oneOf(b, "channel", ["sms", "email"] as const) ?? (identifier.includes("@") ? "email" : "sms");
+    const phone = normalizePhone(identifier);
+    const u = await first<{ id: string; phone: string | null; email: string | null; full_name: string | null; member_no: number | null }>(c.env.DB,
+      "SELECT id, phone, email, full_name, member_no FROM users WHERE email = ?1 OR (phone = ?2 AND ?2 <> '') ORDER BY created_at LIMIT 1", identifier, validSaudiPhone(phone) ? phone : "");
+    if (!u) fail(404, "not_found", "لا يوجد حساب بهذا الجوال أو البريد");
+    const to = channel === "sms" ? u!.phone : u!.email;
+    if (!to) fail(400, "no_destination", channel === "sms" ? "لا يوجد رقم جوال في الحساب، اختر البريد" : "لا يوجد بريد في الحساب، اختر الجوال");
+    await rateLimit(c.env, `forgot-user:${u!.id}`, 5, 60);
+    const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, "0");
+    const lines = [`رمز استعادة حسابك: ${code} (صالح 15 دقيقة).`, "بيانات الدخول:"];
+    if (u!.email) lines.push(`البريد: ${u!.email}`);
+    if (u!.phone) lines.push(`الجوال: ${u!.phone}`);
+    if (u!.member_no) lines.push(`رقم العضوية: #${u!.member_no}`);
+    const sent = await sendDirect(c.env, channel, to!, "استعادة الحساب", lines.join("\n"));
+    if (!sent.ok) fail(503, "send_failed", sent.error.startsWith("الإرسال") ? sent.error : "تعذر إرسال الرمز الآن، حاول لاحقاً أو تواصل مع الدعم");
+    await run(c.env.DB, "INSERT INTO password_resets (id, user_id, code_hash, channel, expires_at) VALUES (?,?,?,?,?)",
+      uid(), u!.id, await codeHash(u!.id, code), channel, new Date(Date.now() + 15 * 60000).toISOString());
+    return json({ ok: true, sent_to: channel === "sms" ? maskPhone(to!) : maskEmail(to!) });
+  });
+
+  r.post("/api/auth/reset", async (c) => {
+    await rateLimit(c.env, `reset:${c.ip}`, 20, 60);
+    const b = await readJson(c.req);
+    const identifier = (str(b, "identifier", { required: true, max: 255, label: "الجوال أو البريد" }) ?? "").trim().toLowerCase();
+    const code = (str(b, "code", { required: true, max: 10, label: "الرمز" }) ?? "").trim();
+    const password = str(b, "password", { required: true, label: "كلمة المرور" });
+    validatePassword(password);
+    const phone = normalizePhone(identifier);
+    const u = await first<{ id: string }>(c.env.DB, "SELECT id FROM users WHERE email = ?1 OR (phone = ?2 AND ?2 <> '') ORDER BY created_at LIMIT 1", identifier, validSaudiPhone(phone) ? phone : "");
+    const req = u ? await first<{ id: string; code_hash: string; attempts: number }>(c.env.DB,
+      "SELECT id, code_hash, attempts FROM password_resets WHERE user_id = ? AND used_at IS NULL AND expires_at > ? ORDER BY created_at DESC LIMIT 1", u.id, now()) : null;
+    if (!u || !req) fail(400, "invalid_code", "الرمز غير صحيح أو منتهي، اطلب رمزاً جديداً");
+    if (req!.attempts >= 5) fail(429, "too_many_attempts", "محاولات كثيرة، اطلب رمزاً جديداً");
+    if ((await codeHash(u!.id, code)) !== req!.code_hash) {
+      await run(c.env.DB, "UPDATE password_resets SET attempts = attempts + 1 WHERE id = ?", req!.id);
+      fail(400, "invalid_code", "الرمز غير صحيح");
+    }
+    await c.env.DB.batch([
+      stmt(c.env.DB, "UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?", await hashPassword(c.env, password!), now(), u!.id),
+      stmt(c.env.DB, "UPDATE password_resets SET used_at = ? WHERE user_id = ? AND used_at IS NULL", now(), u!.id),
+      stmt(c.env.DB, "DELETE FROM sessions WHERE user_id = ?", u!.id),
+    ]);
+    return json({ ok: true });
+  });
+
   /* ---------- Public data ---------- */
   r.get("/api/public/bootstrap", async (c) => {
     const today = now().slice(0, 10);
@@ -149,6 +216,7 @@ export function registerAccountRoutes(r: Router) {
     const phone = normalizePhone(formStr(form, "phone"));
     if (!validSaudiPhone(phone)) fail(400, "invalid_phone", "رقم الجوال غير صحيح (05XXXXXXXX)");
     const nationality = formStr(form, "nationality").slice(0, 60) || null;
+    const company_name = companyFor(form, nationality);
     const gender = formStr(form, "gender");
     if (!["male", "female"].includes(gender)) fail(400, "invalid_gender", "اختر الجنس");
     const region = formStr(form, "region");
@@ -176,9 +244,9 @@ export function registerAccountRoutes(r: Router) {
 
     const id = uid();
     await run(c.env.DB,
-      `INSERT INTO users (id, email, phone, full_name, region, gender, national_id, nationality, password_hash, verification_status, requested_services, referral_code)
-       VALUES (?,?,?,?,?,?,?,?,?,'pending',?,?)`,
-      id, email, phone, full_name, region, gender, national_id, nationality, await hashPassword(c.env, password), JSON.stringify(services), referralCodeFor(full_name));
+      `INSERT INTO users (id, email, phone, full_name, region, gender, national_id, nationality, company_name, password_hash, verification_status, requested_services, referral_code)
+       VALUES (?,?,?,?,?,?,?,?,?,?,'pending',?,?)`,
+      id, email, phone, full_name, region, gender, national_id, nationality, company_name, await hashPassword(c.env, password), JSON.stringify(services), referralCodeFor(full_name));
     await saveProviderDoc(c, id, "id", idFile!);
     await saveProviderDoc(c, id, "certificate", certFile!);
     if (avatarFile) await run(c.env.DB, "UPDATE users SET avatar_url = ? WHERE id = ?", await savePublicImage(c, avatarFile), id);
@@ -210,12 +278,14 @@ export function registerAccountRoutes(r: Router) {
     validateDoc(certFile!);
     const avatarFile = formFile(form, "avatar_file");
     if (avatarFile) validateAvatar(avatarFile);
+    const nationality = formStr(form, "nationality").slice(0, 60) || null;
+    const company_name = companyFor(form, nationality);
     await saveProviderDoc(c, u.id, "id", idFile!);
     await saveProviderDoc(c, u.id, "certificate", certFile!);
     if (avatarFile) await run(c.env.DB, "UPDATE users SET avatar_url = ? WHERE id = ?", await savePublicImage(c, avatarFile), u.id);
     await run(c.env.DB,
-      "UPDATE users SET national_id = ?, nationality = ?, gender = ?, region = ?, requested_services = ?, verification_status = 'pending', review_note = NULL, updated_at = ? WHERE id = ?",
-      national_id, formStr(form, "nationality").slice(0, 60) || null, gender, region, JSON.stringify(services), now(), u.id);
+      "UPDATE users SET national_id = ?, nationality = ?, company_name = ?, gender = ?, region = ?, requested_services = ?, verification_status = 'pending', review_note = NULL, updated_at = ? WHERE id = ?",
+      national_id, nationality, company_name, gender, region, JSON.stringify(services), now(), u.id);
     return json(await mePayload(c, u.id, "provider"));
   });
 

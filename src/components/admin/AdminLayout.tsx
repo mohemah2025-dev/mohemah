@@ -204,9 +204,10 @@ function OwnerSetup({ onDone }: { onDone: (p: MePayload) => void }) {
 function AdminShell({ children }: { children?: ReactNode }) {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const { user, profile, signOut, isOwner, can } = useAuth();
-  const visibleNav = nav.filter((n) => can(n.section, "view"));
+  // Every admin account sees the messages page (conversations belong to whoever answers first).
+  const visibleNav = nav.filter((n) => n.section === "messages" || can(n.section, "view"));
   const section = sectionOf(path);
-  const allowed = !section || can(section, "view");
+  const allowed = !section || section === "messages" || can(section, "view");
   const navigate = useNavigate();
   const displayName = profile?.full_name || profile?.username || user?.email || "المالك";
   const [menuOpen, setMenuOpen] = useState(false);
@@ -261,7 +262,7 @@ function AdminShell({ children }: { children?: ReactNode }) {
             </div>
           </div>
         </header>
-        <div className="admin-content p-4 sm:p-6 flex-1">{allowed && section && !can(section, "edit") && (
+        <div className="admin-content p-4 sm:p-6 flex-1">{allowed && section && section !== "messages" && !can(section, "edit") && (
           <p className="mb-4 text-xs rounded-lg bg-amber-50 text-amber-800 border border-amber-200 px-3 py-2">صلاحيتك على هذه الصفحة: عرض فقط، ولن تُحفظ أي تعديلات.</p>
         )}{allowed ? (children ?? <Outlet />) : (
           <div className="max-w-md mx-auto mt-16 text-center bg-card border border-border rounded-2xl p-8">

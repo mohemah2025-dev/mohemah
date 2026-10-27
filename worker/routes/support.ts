@@ -5,10 +5,35 @@
  * 48 hours after the last administration reply without an answer. The user then rates the conversation.
  */
 import { all, fail, first, json, now, readJson, run, stmt, str, uid, type Ctx, type Router } from "../lib/core";
-import { requirePerm, requireUser } from "../lib/auth";
+import { accessOf, requireAdmin, requireUser, type AuthUser } from "../lib/auth";
 import { notifyStmts } from "../lib/domain";
 
 const AUTO_CLOSE_HOURS = 48;
+
+/**
+ * Every admin account sees the conversations. A conversation belongs to whoever replied first; after that only
+ * that person (or the owner) can reply, close it or transfer it to another staff member.
+ * Per-page actions (staff → permissions) can still restrict reply / transfer / close / start.
+ */
+async function supportActor(c: Ctx, action: "reply" | "assign" | "close" | "start") {
+  const u = await requireAdmin(c);
+  if (!u.roles.includes("admin")) {
+    const { features } = await accessOf(c, u);
+    const list = features?.messages;
+    if (list && !list.includes(action)) fail(403, "forbidden", "لا تملك صلاحية هذا الإجراء في الرسائل");
+  }
+  return u;
+}
+
+async function guardOwner(c: Ctx, u: AuthUser, threadId: string) {
+  const t = await first<{ user_id: string; status: string; assigned_to: string | null; assigned_name: string | null }>(c.env.DB,
+    "SELECT t.user_id, t.status, t.assigned_to, a.full_name AS assigned_name FROM support_threads t LEFT JOIN users a ON a.id = t.assigned_to WHERE t.id = ?", threadId);
+  if (!t) fail(404, "not_found", "المحادثة غير موجودة");
+  if (t!.assigned_to && t!.assigned_to !== u.id && !u.roles.includes("admin")) fail(403, "assigned_to_other", `المحادثة مسندة إلى ${t!.assigned_name ?? "موظف آخر"}، ويمكنه تحويلها إليك`);
+  return t!;
+}
+
+const SUPPORT_LINK = "/support";
 
 async function autoClose(c: Ctx) {
   const limit = new Date(Date.now() - AUTO_CLOSE_HOURS * 3600000).toISOString();
@@ -83,7 +108,7 @@ export function registerSupportRoutes(r: Router) {
 
   /* ---------- Administration ---------- */
   r.get("/api/admin/support", async (c) => {
-    await requirePerm(c, "messages", "view");
+    await requireAdmin(c);
     await autoClose(c);
     const status = c.url.searchParams.get("status") ?? "unanswered";
     const where = status === "closed" ? "t.status = 'closed'" : status === "ongoing" ? "t.status = 'open' AND t.last_from = 'admin'" : "t.status = 'open' AND t.last_from = 'user'";
@@ -105,7 +130,7 @@ export function registerSupportRoutes(r: Router) {
   });
 
   r.get("/api/admin/support/:id", async (c) => {
-    await requirePerm(c, "messages", "view");
+    await requireAdmin(c);
     const t = await first(c.env.DB,
       `SELECT t.*, u.full_name AS user_name, u.phone AS user_phone, u.member_no, a.full_name AS assigned_name
          FROM support_threads t JOIN users u ON u.id = t.user_id LEFT JOIN users a ON a.id = t.assigned_to WHERE t.id = ?`, c.params.id);
@@ -118,48 +143,51 @@ export function registerSupportRoutes(r: Router) {
   });
 
   r.post("/api/admin/support/:id/reply", async (c) => {
-    const admin = await requirePerm(c, "messages", "edit");
+    const admin = await supportActor(c, "reply");
     const body = str(await readJson(c.req), "body", { required: true, max: 2000, label: "الرد" })!;
-    const t = await first<{ user_id: string; status: string; assigned_to: string | null }>(c.env.DB, "SELECT user_id, status, assigned_to FROM support_threads WHERE id = ?", c.params.id);
-    if (!t) fail(404, "not_found", "المحادثة غير موجودة");
+    const t = await guardOwner(c, admin, c.params.id);
     const ts = now();
     await c.env.DB.batch([
-      stmt(c.env.DB, "INSERT INTO messages (id, sender_id, recipient_id, body, thread_id) VALUES (?,?,?,?,?)", uid(), admin.id, t!.user_id, body, c.params.id),
+      stmt(c.env.DB, "INSERT INTO messages (id, sender_id, recipient_id, body, thread_id) VALUES (?,?,?,?,?)", uid(), admin.id, t.user_id, body, c.params.id),
       // Replying re-opens a closed conversation and assigns it to the replier when nobody owns it.
       stmt(c.env.DB, "UPDATE support_threads SET status = 'open', closed_at = NULL, closed_by = NULL, last_from = 'admin', last_message_at = ?, assigned_to = COALESCE(assigned_to, ?) WHERE id = ?", ts, admin.id, c.params.id),
-      ...notifyStmts(c, [t!.user_id], { title: "رد من الإدارة", body: body.slice(0, 150), category: "general", icon: "megaphone", created_by: admin.id }),
+      ...notifyStmts(c, [t.user_id], { title: "رد جديد من الإدارة على رسالتك", body: body.slice(0, 150), link: SUPPORT_LINK, category: "general", icon: "megaphone", created_by: admin.id }),
     ]);
     return json({ ok: true });
   });
 
+  /** Transfer: only the person in charge (or the owner) hands the conversation to another staff member. */
   r.post("/api/admin/support/:id/assign", async (c) => {
-    await requirePerm(c, "messages", "edit");
-    const to = str(await readJson(c.req), "admin_id", { max: 64 });
-    if (to && !(await first(c.env.DB, "SELECT 1 FROM user_roles WHERE user_id = ? AND role IN ('admin','staff')", to))) fail(400, "not_staff", "اختر موظفاً من الإدارة");
+    const admin = await supportActor(c, "assign");
+    const t = await guardOwner(c, admin, c.params.id);
+    const to = str(await readJson(c.req), "admin_id", { required: true, max: 64, label: "الموظف" })!;
+    if (!(await first(c.env.DB, "SELECT 1 FROM user_roles WHERE user_id = ? AND role IN ('admin','staff')", to))) fail(400, "not_staff", "اختر موظفاً من الإدارة");
+    if (!t.assigned_to && to !== admin.id && !admin.roles.includes("admin")) fail(409, "reply_first", "رد على المحادثة أولاً لتُسند إليك، ثم يمكنك تحويلها");
     await run(c.env.DB, "UPDATE support_threads SET assigned_to = ? WHERE id = ?", to, c.params.id);
     return json({ ok: true });
   });
 
   r.post("/api/admin/support/:id/close", async (c) => {
-    const admin = await requirePerm(c, "messages", "edit");
-    const t = await first<{ user_id: string }>(c.env.DB, "SELECT user_id FROM support_threads WHERE id = ? AND status = 'open'", c.params.id);
-    if (!t) fail(409, "not_open", "المحادثة منتهية مسبقاً");
+    const admin = await supportActor(c, "close");
+    const t = await guardOwner(c, admin, c.params.id);
+    if (t.status !== "open") fail(409, "not_open", "المحادثة منتهية مسبقاً");
     await c.env.DB.batch([
       stmt(c.env.DB, "UPDATE support_threads SET status = 'closed', closed_by = ?, closed_at = ? WHERE id = ?", "admin", now(), c.params.id),
-      ...notifyStmts(c, [t!.user_id], { title: "تم إنهاء المحادثة", body: "شكراً لتواصلك، نرجو تقييم المحادثة من صفحة مراسلة الإدارة.", category: "general", icon: "check", created_by: admin.id }),
+      ...notifyStmts(c, [t.user_id], { title: "تم إنهاء المحادثة", body: "شكراً لتواصلك، نرجو تقييم المحادثة من صفحة مراسلة الإدارة.", link: SUPPORT_LINK, category: "general", icon: "check", created_by: admin.id }),
     ]);
     return json({ ok: true });
   });
 
   /** The administration starts (or continues) a conversation with a user. */
   r.post("/api/admin/support/start", async (c) => {
-    const admin = await requirePerm(c, "messages", "edit");
+    const admin = await supportActor(c, "start");
     const b = await readJson(c.req);
     const userId = str(b, "user_id", { required: true, max: 64, label: "المستخدم" })!;
     const body = str(b, "body", { required: true, max: 2000, label: "الرسالة" })!;
     const subject = str(b, "subject", { max: 200 });
     if (!(await first(c.env.DB, "SELECT 1 FROM users WHERE id = ?", userId))) fail(404, "not_found", "المستخدم غير موجود");
     let thread = await openThreadOf(c, userId);
+    if (thread) await guardOwner(c, admin, thread.id);
     const ts = now();
     const batch = [];
     if (!thread) {
@@ -169,7 +197,7 @@ export function registerSupportRoutes(r: Router) {
       batch.push(stmt(c.env.DB, "UPDATE support_threads SET last_from = 'admin', last_message_at = ?, assigned_to = COALESCE(assigned_to, ?) WHERE id = ?", ts, admin.id, thread.id));
     }
     batch.push(stmt(c.env.DB, "INSERT INTO messages (id, sender_id, recipient_id, subject, body, thread_id) VALUES (?,?,?,?,?,?)", uid(), admin.id, userId, subject, body, thread.id));
-    batch.push(...notifyStmts(c, [userId], { title: subject ?? "رسالة جديدة من الإدارة", body: body.slice(0, 150), category: "general", icon: "megaphone", created_by: admin.id }));
+    batch.push(...notifyStmts(c, [userId], { title: subject ?? "رسالة جديدة من الإدارة", body: body.slice(0, 150), link: SUPPORT_LINK, category: "general", icon: "megaphone", created_by: admin.id }));
     await c.env.DB.batch(batch);
     return json({ id: thread.id }, 201);
   });

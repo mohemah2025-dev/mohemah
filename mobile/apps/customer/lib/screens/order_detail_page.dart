@@ -177,6 +177,12 @@ class _ProviderCard extends StatelessWidget {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(name, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+              if ((order.providerNationality ?? '').isNotEmpty)
+                Row(children: [
+                  const Icon(Icons.flag_outlined, size: 13, color: Brand.mutedFg),
+                  const SizedBox(width: 3),
+                  Text('الجنسية: ${order.providerNationality}', style: const TextStyle(fontSize: 12, color: Brand.mutedFg, fontWeight: FontWeight.w600)),
+                ]),
               Row(children: [
                 Stars(value: order.providerRating, size: 14),
                 const SizedBox(width: 4),

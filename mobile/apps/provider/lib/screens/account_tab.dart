@@ -72,6 +72,7 @@ class ProviderAccountTab extends StatelessWidget {
         const SizedBox(height: 16),
         MenuGroup(children: [
           MenuTile(icon: Icons.notifications_outlined, title: 'الإشعارات', onTap: () => push(const NotificationsPage())),
+          MenuTile(icon: Icons.support_agent_outlined, title: 'الرسائل مع الإدارة', subtitle: 'راسل الإدارة وتابع الرد والتقييم', onTap: () => push(const SupportMessagesPage())),
           MenuTile(icon: Icons.policy_outlined, title: 'شروط مقدمي الخدمة', onTap: () => push(const PoliciesPage(audience: 'providers', placement: 'account'))),
         ]),
         const SizedBox(height: 16),

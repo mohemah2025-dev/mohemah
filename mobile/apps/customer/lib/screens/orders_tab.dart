@@ -114,7 +114,7 @@ class OrderCard extends StatelessWidget {
           Row(children: [
             const Icon(Icons.engineering_outlined, size: 18, color: Brand.mutedFg),
             const SizedBox(width: 6),
-            Expanded(child: Text(order.providerName ?? 'بانتظار مقدم خدمة', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
+            Expanded(child: Text(order.providerLine ?? 'بانتظار مقدم خدمة', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
             if (order.rating != null) Stars(value: order.rating!.toDouble(), size: 14),
             if (order.unread > 0) Pill('${order.unread} رسالة جديدة', icon: Icons.chat_outlined, color: Brand.primary, background: const Color(0xFFE5EDFB)),
           ]),

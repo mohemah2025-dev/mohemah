@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'branding.dart';
 import 'package:flutter/services.dart';
 
+import 'models.dart';
 import 'public_data.dart';
 import 'session.dart';
 import 'theme.dart';
@@ -318,6 +319,11 @@ class _LoginFormState extends State<LoginForm> {
           ),
           const SizedBox(height: 6),
           BusyButton(label: 'تسجيل الدخول', icon: Icons.login_outlined, onPressed: _submit),
+          TextButton.icon(
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ForgotPasswordPage())),
+            icon: const Icon(Icons.lock_reset_outlined, size: 19),
+            label: const Text('نسيت كلمة المرور أو بيانات الدخول؟'),
+          ),
           if (widget.footer != null) ...[const SizedBox(height: 12), widget.footer!],
         ]),
       ),
@@ -356,6 +362,113 @@ class AuthTabs extends StatelessWidget {
               ),
             ),
           ),
+      ]),
+    );
+  }
+}
+
+
+/// Account / password recovery: a 6-digit code (with the sign-in details) is sent by SMS or e-mail, then a new password is set.
+class ForgotPasswordPage extends StatefulWidget {
+  const ForgotPasswordPage({super.key});
+  @override
+  State<ForgotPasswordPage> createState() => _ForgotPasswordPageState();
+}
+
+class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
+  final _id = TextEditingController();
+  final _code = TextEditingController();
+  final _pw = TextEditingController();
+  final _pw2 = TextEditingController();
+  String _channel = 'sms';
+  String? _sentTo;
+
+  @override
+  void dispose() {
+    for (final c in [_id, _code, _pw, _pw2]) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _send() async {
+    if (_id.text.trim().isEmpty) {
+      showSnack(context, 'اكتب رقم الجوال أو البريد المسجّل', error: true);
+      return;
+    }
+    try {
+      final r = jMap(await SessionScope.read(context).api.post('/api/auth/forgot', {'identifier': _id.text.trim(), 'channel': _channel}));
+      if (!mounted) return;
+      setState(() => _sentTo = jS(r['sent_to']));
+      showSnack(context, 'أرسلنا رمز الاستعادة وبيانات دخولك إلى ${_sentTo ?? ''}');
+    } catch (e) {
+      if (mounted) showError(context, e);
+    }
+  }
+
+  Future<void> _reset() async {
+    if (_code.text.trim().length < 6) {
+      showSnack(context, 'اكتب الرمز المكوّن من 6 أرقام', error: true);
+      return;
+    }
+    if (_pw.text.length < 8 || _pw.text != _pw2.text) {
+      showSnack(context, _pw.text.length < 8 ? 'كلمة المرور 8 أحرف على الأقل' : 'كلمتا المرور غير متطابقتين', error: true);
+      return;
+    }
+    try {
+      await SessionScope.read(context).api.post('/api/auth/reset', {'identifier': _id.text.trim(), 'code': _code.text.trim(), 'password': _pw.text});
+      if (!mounted) return;
+      showSnack(context, 'تم تغيير كلمة المرور، سجّل الدخول الآن');
+      Navigator.pop(context);
+    } catch (e) {
+      if (mounted) showError(context, e);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = PublicScope.of(context).settings;
+    final channels = <(String, IconData, String)>[
+      if (s.recoverySms || !s.recoveryEmail) ('sms', Icons.sms_outlined, 'رسالة للجوال'),
+      if (s.recoveryEmail) ('email', Icons.alternate_email, 'البريد الإلكتروني'),
+    ];
+    if (!channels.any((c) => c.$1 == _channel)) _channel = channels.first.$1;
+    return Scaffold(
+      appBar: AppBar(title: const Text('استعادة الحساب')),
+      body: ListView(padding: const EdgeInsets.all(20), children: [
+        const Icon(Icons.lock_reset_outlined, size: 64, color: Brand.primary),
+        const SizedBox(height: 10),
+        const Text('نرسل لك رمز استعادة مع بيانات دخولك (البريد والجوال ورقم العضوية)، ثم تعيّن كلمة مرور جديدة.',
+            textAlign: TextAlign.center, style: TextStyle(height: 1.7, color: Brand.mutedFg)),
+        const SizedBox(height: 18),
+        Field(controller: _id, label: 'رقم الجوال أو البريد المسجّل', hint: '05XXXXXXXX / name@example.com', icon: Icons.person_outline, ltr: true, keyboard: TextInputType.emailAddress),
+        const Text('طريقة الإرسال', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 6),
+        Row(children: [
+          for (final c in channels)
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 3),
+                child: ChoiceChip(
+                  selected: _channel == c.$1,
+                  onSelected: (_) => setState(() => _channel = c.$1),
+                  avatar: Icon(c.$2, size: 18),
+                  label: Text(c.$3),
+                ),
+              ),
+            ),
+        ]),
+        const SizedBox(height: 12),
+        BusyButton(label: _sentTo == null ? 'إرسال الرمز' : 'إعادة إرسال الرمز', icon: Icons.send_outlined, onPressed: _send),
+        if (_sentTo != null) ...[
+          const SizedBox(height: 20),
+          Text('أُرسل الرمز إلى $_sentTo', textAlign: TextAlign.center, textDirection: TextDirection.rtl, style: const TextStyle(fontWeight: FontWeight.w700, color: Brand.success)),
+          const SizedBox(height: 12),
+          Field(controller: _code, label: 'رمز الاستعادة', hint: '6 أرقام', icon: Icons.pin_outlined, ltr: true, keyboard: TextInputType.number, maxLength: 6),
+          Field(controller: _pw, label: 'كلمة المرور الجديدة', icon: Icons.lock_outlined, password: true, ltr: true),
+          Field(controller: _pw2, label: 'تأكيد كلمة المرور', icon: Icons.lock_outlined, password: true, ltr: true),
+          BusyButton(label: 'تعيين كلمة المرور', icon: Icons.check_circle_outline, onPressed: _reset),
+        ],
       ]),
     );
   }

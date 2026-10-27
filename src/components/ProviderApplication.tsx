@@ -54,7 +54,7 @@ export function ProviderApplicationStatus() {
 }
 
 type Applicant = {
-  id: string; full_name: string | null; phone: string | null; email: string | null; national_id: string | null; nationality: string | null;
+  id: string; full_name: string | null; phone: string | null; email: string | null; national_id: string | null; nationality: string | null; company_name?: string | null;
   gender: string | null; region: string | null; verification_status: string; review_note: string | null; requested_services: string[]; requested_service_names?: string[]; created_at: string;
 };
 
@@ -137,6 +137,7 @@ export function AdminProviderApplications({ onChanged }: { onChanged?: () => voi
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
                   <div><span className="text-muted-foreground block">الهوية/الإقامة</span><span dir="ltr">{r.national_id || "-"}</span></div>
                   <div><span className="text-muted-foreground block">الجنسية</span>{r.nationality || "-"}</div>
+                  {r.company_name && <div><span className="text-muted-foreground block">المؤسسة / الشركة</span>{r.company_name}</div>}
                   <div><span className="text-muted-foreground block">الجنس</span>{r.gender === "female" ? "أنثى" : r.gender === "male" ? "ذكر" : "-"}</div>
                   <div><span className="text-muted-foreground block">المدينة</span>{r.region || "-"}</div>
                   <div className="min-w-0 col-span-2 sm:col-span-1"><span className="text-muted-foreground block">الخدمات</span>{(r.requested_service_names?.length ? r.requested_service_names : r.requested_services.map((s) => serviceNames[s]).filter(Boolean)).join("، ") || "لم يحدد خدمات"}</div>

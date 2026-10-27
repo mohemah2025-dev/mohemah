@@ -27,6 +27,7 @@ export function publicSettings(s: Settings) {
     vat_percent: s.vat_percent, test_payments_enabled: !!s.test_payments_enabled, coin_price: s.coin_price ?? 1,
     customer_ios_url: s.customer_ios_url, customer_android_url: s.customer_android_url, customer_other_url: s.customer_other_url,
     provider_ios_url: s.provider_ios_url, provider_android_url: s.provider_android_url, provider_other_url: s.provider_other_url,
+    recovery_sms: !!s.sms_enabled, recovery_email: !!s.email_enabled,
   };
 }
 

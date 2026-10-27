@@ -275,7 +275,7 @@ export function registerAdminRoutes(r: Router) {
     const status = c.url.searchParams.get("status") ?? "pending";
     if (!["pending", "approved", "rejected"].includes(status)) fail(400, "invalid_status");
     const rows = await all<Record<string, unknown> & { requested_services: string }>(c.env.DB,
-      `SELECT id, full_name, phone, email, national_id, nationality, gender, region, verification_status, review_note, requested_services, created_at, reviewed_at
+      `SELECT id, full_name, phone, email, national_id, nationality, company_name, gender, region, verification_status, review_note, requested_services, created_at, reviewed_at
          FROM users WHERE verification_status = ? ORDER BY created_at DESC LIMIT 200`, status);
     // Names come from all services (also inactive ones) so the admin always sees what was requested.
     const names = Object.fromEntries((await all<{ id: string; name: string }>(c.env.DB, "SELECT id, name FROM services")).map((s) => [s.id, s.name]));

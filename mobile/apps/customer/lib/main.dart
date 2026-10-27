@@ -27,6 +27,8 @@ void main() {
         rootNavigator.currentState?.push(MaterialPageRoute(builder: (_) => OrderDetailPage(orderId: id)));
       } else if ((data['link'] ?? '').toString().startsWith('/orders')) {
         CustomerShell.goTo(2);
+      } else if ((data['link'] ?? '').toString().startsWith('/support')) {
+        rootNavigator.currentState?.push(MaterialPageRoute(builder: (_) => const SupportMessagesPage()));
       } else {
         rootNavigator.currentState?.push(MaterialPageRoute(builder: (_) => const NotificationsPage()));
       }

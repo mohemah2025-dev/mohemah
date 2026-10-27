@@ -31,8 +31,10 @@ const closedBy = (v: string | null) => (v === "user" ? "أنهاها المست�
 
 /** Support center: conversations with customers and providers, by status, with reply, assignment, closing and rating. */
 export function AdminSupportPage() {
-  const { can, user } = useAuth();
-  const canEdit = can("messages", "edit");
+  const { user, isOwner, features } = useAuth();
+  // Every admin account sees and answers messages; per-page actions can still restrict some of them.
+  const allow = (a: string) => isOwner || !features?.messages || features.messages.includes(a);
+  const canEdit = allow("start");
   const [tab, setTab] = useState<Status>("unanswered");
   const [data, setData] = useState<{ threads: Thread[]; counts: Record<Status, number>; staff: { id: string; full_name: string | null }[]; auto_close_hours: number } | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -88,13 +90,14 @@ export function AdminSupportPage() {
         {!list.length && <p className="p-6 text-center text-sm text-muted-foreground">لا توجد محادثات هنا.</p>}
       </div>
 
-      {openId && <ThreadDialog id={openId} meId={user?.id ?? ""} canEdit={canEdit} staff={data?.staff ?? []} onClose={() => { setOpenId(null); load(); }} />}
+      {openId && <ThreadDialog id={openId} meId={user?.id ?? ""} isOwner={isOwner} allow={allow} staff={data?.staff ?? []} onClose={() => { setOpenId(null); load(); }} />}
       {newOpen && <NewThreadDialog onClose={() => setNewOpen(false)} onStarted={(id) => { setNewOpen(false); setTab("ongoing"); setOpenId(id); }} />}
     </div>
   );
 }
 
-function ThreadDialog({ id, meId, canEdit, staff, onClose }: { id: string; meId: string; canEdit: boolean; staff: { id: string; full_name: string | null }[]; onClose: () => void }) {
+function ThreadDialog({ id, meId, isOwner, allow, staff, onClose }: { id: string; meId: string; isOwner: boolean; allow: (a: string) => boolean; staff: { id: string; full_name: string | null }[]; onClose: () => void }) {
+  const [transferTo, setTransferTo] = useState("");
   const [d, setD] = useState<{ thread: Thread; messages: Msg[] } | null>(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -113,9 +116,13 @@ function ThreadDialog({ id, meId, canEdit, staff, onClose }: { id: string; meId:
     try { await adm(`/api/admin/support/${id}/close`, { body: {} }); toast.success("تم إنهاء المحادثة وطُلب من المستخدم تقييمها"); await load(); } catch (e) { toast.error(errMsg(e)); }
   };
   const assign = async (adminId: string) => {
-    try { await adm(`/api/admin/support/${id}/assign`, { body: { admin_id: adminId || null } }); await load(); } catch (e) { toast.error(errMsg(e)); }
+    if (!adminId) return;
+    try { await adm(`/api/admin/support/${id}/assign`, { body: { admin_id: adminId } }); toast.success("تم تحويل المحادثة"); setTransferTo(""); await load(); } catch (e) { toast.error(errMsg(e)); }
   };
   const t = d?.thread;
+  // The first person to reply owns the conversation; only they (or the owner) reply, close or transfer it.
+  const mine = !!t && (!t.assigned_to || t.assigned_to === meId || isOwner);
+  const canTransfer = !!t && !!t.assigned_to && (t.assigned_to === meId || isOwner) && allow("assign");
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-3" onClick={onClose}>
@@ -131,14 +138,18 @@ function ThreadDialog({ id, meId, canEdit, staff, onClose }: { id: string; meId:
           {t && (
             <div className="flex flex-wrap items-center gap-2 text-xs">
               <span className={`px-2 py-0.5 rounded-full ${t.status === "closed" ? "bg-muted" : t.last_from === "user" ? "bg-red-100 text-red-700" : "bg-sky-100 text-sky-700"}`}>{t.status === "closed" ? closedBy(t.closed_by) : t.last_from === "user" ? "بانتظار الرد" : "جارية"}</span>
-              {canEdit ? (
-                <select value={t.assigned_to ?? ""} onChange={(e) => assign(e.target.value)} className="admin-input w-auto py-1 text-xs">
-                  <option value="">غير مسندة</option>
-                  {staff.map((s) => <option key={s.id} value={s.id}>{s.id === meId ? `أنا (${s.full_name ?? ""})` : s.full_name}</option>)}
-                </select>
-              ) : t.assigned_name && <span>المسؤول: {t.assigned_name}</span>}
+              <span className="px-2 py-0.5 rounded-full bg-violet-50 text-violet-700">{t.assigned_to ? `المسؤول: ${t.assigned_to === meId ? "أنت" : t.assigned_name ?? "—"}` : "غير مسندة — تُسند لأول من يرد"}</span>
+              {canTransfer && (
+                <span className="flex items-center gap-1">
+                  <select value={transferTo} onChange={(e) => setTransferTo(e.target.value)} className="admin-input w-auto py-1 text-xs">
+                    <option value="">تحويل إلى موظف…</option>
+                    {staff.filter((s) => s.id !== t.assigned_to).map((s) => <option key={s.id} value={s.id}>{s.full_name}</option>)}
+                  </select>
+                  <button onClick={() => assign(transferTo)} disabled={!transferTo} className="px-2 py-1 rounded-lg border border-border disabled:opacity-40">تحويل</button>
+                </span>
+              )}
               {t.rating && <span className="text-amber-600 flex items-center gap-1"><Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />{t.rating}/5 {t.rating_note ? `— ${t.rating_note}` : ""}</span>}
-              {canEdit && t.status === "open" && <button onClick={close} className="mr-auto px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-bold flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" />إنهاء المحادثة</button>}
+              {mine && allow("close") && t.status === "open" && <button onClick={close} className="mr-auto px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-bold flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" />إنهاء المحادثة</button>}
             </div>
           )}
         </div>
@@ -155,7 +166,10 @@ function ThreadDialog({ id, meId, canEdit, staff, onClose }: { id: string; meId:
           ))}
           <div ref={end} />
         </div>
-        {canEdit && (
+        {t && !mine && (
+          <p className="p-3 border-t border-border text-xs text-center text-muted-foreground bg-muted/40">المحادثة مسندة إلى {t.assigned_name ?? "موظف آخر"}، ولا يمكن الرد عليها إلا إذا حوّلها إليك.</p>
+        )}
+        {mine && allow("reply") && (
           <div className="p-3 border-t border-border flex gap-2">
             <textarea value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); reply(); } }}
               rows={2} placeholder={t?.status === "closed" ? "الرد يعيد فتح المحادثة…" : "اكتب ردك… (Enter للإرسال)"} className="admin-input flex-1 resize-none" />

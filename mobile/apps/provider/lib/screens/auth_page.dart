@@ -52,7 +52,13 @@ class _ProviderRegisterFormState extends State<ProviderRegisterForm> {
   final _name = TextEditingController();
   final _nid = TextEditingController();
   final _phone = TextEditingController();
-  final _nationality = TextEditingController(text: 'سعودي');
+  String _nationality = 'سعودي';
+  final _company = TextEditingController();
+
+  static const _nationalities = ['سعودي', 'كويتي', 'إماراتي', 'قطري', 'بحريني', 'عُماني', 'مصري', 'يمني', 'سوداني', 'أردني', 'سوري', 'فلسطيني', 'لبناني', 'باكستاني', 'هندي', 'بنغلاديشي', 'فلبيني', 'أخرى'];
+
+  /// Providers who are not Saudi, Kuwaiti, Emirati, Qatari or Bahraini name the establishment / company they belong to.
+  bool get _needsCompany => !const ['سعودي', 'كويتي', 'إماراتي', 'قطري', 'بحريني'].contains(_nationality);
   final _email = TextEditingController();
   final _pw = TextEditingController();
   String? _gender;
@@ -67,7 +73,7 @@ class _ProviderRegisterFormState extends State<ProviderRegisterForm> {
 
   @override
   void dispose() {
-    for (final c in [_name, _nid, _phone, _nationality, _email, _pw]) {
+    for (final c in [_name, _nid, _phone, _company, _email, _pw]) {
       c.dispose();
     }
     super.dispose();
@@ -99,7 +105,8 @@ class _ProviderRegisterFormState extends State<ProviderRegisterForm> {
     final s = SessionScope.read(context);
     final fields = <String, String>{
       'national_id': _nid.text.trim(),
-      'nationality': _nationality.text.trim(),
+      'nationality': _nationality,
+      if (_needsCompany) 'company_name': _company.text.trim(),
       'gender': _gender ?? '',
       'region': _region ?? '',
       'services': jsonEncode(_services.toList()),
@@ -212,7 +219,24 @@ class _ProviderRegisterFormState extends State<ProviderRegisterForm> {
           formatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(10)],
           validator: (v) => RegExp(r'^[12]\d{9}$').hasMatch(v) ? null : 'رقم الهوية/الإقامة 10 أرقام يبدأ بـ 1 أو 2',
         ),
-        Field(controller: _nationality, label: 'الجنسية', icon: Icons.flag_outlined, maxLength: 60),
+        PickerField(
+          label: 'الجنسية',
+          value: _nationality,
+          options: _nationalities,
+          labels: _nationalities,
+          hint: 'اختر',
+          icon: Icons.flag_outlined,
+          validator: (v) => v == null ? 'اختر الجنسية' : null,
+          onChanged: (v) => setState(() => _nationality = v ?? 'سعودي'),
+        ),
+        if (_needsCompany)
+          Field(
+            controller: _company,
+            label: 'اسم المؤسسة / الشركة التابع لها',
+            icon: Icons.business_outlined,
+            maxLength: 150,
+            validator: (v) => v.trim().length < 2 ? 'اكتب اسم المؤسسة أو الشركة' : null,
+          ),
         PickerField(
           label: 'الجنس',
           value: _gender,

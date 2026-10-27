@@ -139,7 +139,7 @@ class _CustomerShellState extends State<CustomerShell> {
               Text('«${o.title}»', textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
               const SizedBox(height: 6),
               Text(
-                o.providerName != null ? 'قبل ${o.providerName} طلبك، ويمكنك متابعته ومراسلته من صفحة الطلب.' : 'قبل مقدم الخدمة طلبك، ويمكنك متابعته ومراسلته من صفحة الطلب.',
+                o.providerName != null ? 'قبل ${o.providerLine} طلبك، ويمكنك متابعته ومراسلته من صفحة الطلب.' : 'قبل مقدم الخدمة طلبك، ويمكنك متابعته ومراسلته من صفحة الطلب.',
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: Brand.mutedFg, height: 1.6),
               ),

@@ -261,9 +261,11 @@ export function registerProviderRoutes(r: Router) {
     const from = new Date(Date.now() - days * DAY).toISOString();
     const stale = new Date(Date.now() - 30 * 60000).toISOString();
     const u = await first<Record<string, unknown> & { id: string; is_online: number; is_active: number }>(c.env.DB,
-      `SELECT id, member_no, full_name, phone, email, region, gender, nationality, avatar_url, rating, rating_count, coin_balance, is_active, is_online,
+      `SELECT id, member_no, full_name, phone, email, region, gender, nationality, company_name, avatar_url, rating, rating_count, coin_balance, is_active, is_online,
               verification_status, suspend_reason, created_at, reviewed_at, last_seen_at FROM users WHERE id = ?`, id);
     if (!u) fail(404, "not_found", "مقدم الخدمة غير موجود");
+    // Opening the profile counts as reviewing the provider's performance notes (clears the admin counter).
+    await run(c.env.DB, "UPDATE users SET perf_reviewed_at = ? WHERE id = ?", now(), id);
     const [approved, enabled, services, requests, perf, reasons, ratings, customers, actions, shifts] = await Promise.all([
       approvedIds(c, id),
       all<{ service_id: string }>(c.env.DB, "SELECT service_id FROM provider_services WHERE provider_id = ?", id),

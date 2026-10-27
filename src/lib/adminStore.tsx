@@ -285,6 +285,7 @@ interface AdminState {
   addStaff: (s: { name: string; login: string; password: string; role: "مالك" | "مشرف"; permissions?: AdminPermissions; features?: AdminFeatures | null }) => Promise<void>;
   setStaffPermissions: (id: string, permissions: AdminPermissions, features?: AdminFeatures | null) => Promise<void>;
   updateStaff: (id: string, patch: { name?: string; login?: string }) => Promise<void>;
+  changeStaffRole: (id: string, role: "مالك" | "مشرف") => Promise<void>;
   toggleStaff: (id: string) => void;
   removeStaff: (id: string) => void;
 
@@ -568,6 +569,16 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     await adm(`/api/admin/users/${id}/permissions`, { method: "PUT", body: { permissions, features: features === undefined ? undefined : features } });
     await loadUsers();
   };
+  const changeStaffRole = async (id: string, role: "مالك" | "مشرف") => {
+    if (role === "مشرف") {
+      await adm(`/api/admin/users/${id}/role`, { body: { role: "staff", enable: true } });
+      await adm(`/api/admin/users/${id}/role`, { body: { role: "admin", enable: false } });
+    } else {
+      await adm(`/api/admin/users/${id}/role`, { body: { role: "admin", enable: true } });
+      await adm(`/api/admin/users/${id}/role`, { body: { role: "staff", enable: false } });
+    }
+    await loadUsers();
+  };
   const updateStaff = async (id: string, patch: { name?: string; login?: string }) => {
     await adm(`/api/admin/users/${id}`, { method: "PATCH", body: { full_name: patch.name, login: patch.login } });
     await loadUsers();
@@ -644,7 +655,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     updateService, addService, removeService, moveSubService, addSubService, updateSubService, removeSubService, reorder, addSuggestedServices,
     addCustomer, updateCustomer, removeCustomer,
     addProvider, updateProvider, removeProvider,
-    addStaff, setStaffPermissions, updateStaff, toggleStaff, removeStaff,
+    addStaff, setStaffPermissions, updateStaff, changeStaffRole, toggleStaff, removeStaff,
     sendNotification, removeNotification,
     addAd, updateAd, removeAd,
     addPolicy, updatePolicy, removePolicy,

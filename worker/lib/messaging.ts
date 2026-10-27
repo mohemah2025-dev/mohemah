@@ -204,3 +204,15 @@ export async function testEmail(env: Env, to: string) {
   await log(env, "email", to, "بريد تجريبي", r);
   return r;
 }
+
+/** Sends one SMS or e-mail now (used for account recovery codes); fails when the channel is switched off. */
+export async function sendDirect(env: Env, channel: "sms" | "email", to: string, title: string, body: string): Promise<Result> {
+  const s = await getSettings(env);
+  if (channel === "sms" && !s.sms_enabled) return { ok: false, error: "الإرسال للجوال غير مفعّل حالياً، اختر البريد الإلكتروني" };
+  if (channel === "email" && !s.email_enabled) return { ok: false, error: "الإرسال للبريد غير مفعّل حالياً، اختر الجوال" };
+  const r = channel === "sms"
+    ? await sendSmsWith(env, s, to, `${s.app_name}: ${body}`)
+    : await sendEmailWith(env, s, to, title, emailLayout(s, title, body));
+  await log(env, channel, to, title, r);
+  return r;
+}

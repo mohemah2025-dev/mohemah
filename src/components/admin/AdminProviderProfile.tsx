@@ -11,7 +11,7 @@ import { AccountActionDialog, type AccountAction } from "./AccountActionDialog";
 const adm = <T,>(path: string, opts: { method?: string; body?: unknown } = {}) => api<T>(path, { ...opts, app: "admin" });
 
 interface Profile {
-  user: { id: string; member_no?: number | null; full_name: string | null; phone: string | null; email: string | null; region: string | null; gender: string | null; nationality: string | null; avatar_url: string | null;
+  user: { id: string; member_no?: number | null; full_name: string | null; phone: string | null; email: string | null; region: string | null; gender: string | null; nationality: string | null; company_name?: string | null; avatar_url: string | null;
     rating: number; rating_count: number; coin_balance: number; is_active: number; is_online: number; suspend_reason: string | null; created_at: string; reviewed_at: string | null; last_seen_at: string | null };
   days: number;
   services: { id: string; name: string; icon: string | null; color: string | null; enabled: boolean }[];
@@ -156,7 +156,7 @@ export function AdminProviderProfilePage() {
           <div>
             <h1 className="text-xl font-bold">{u.full_name} {u.member_no && <span className="text-sm text-muted-foreground font-normal" dir="ltr">#{u.member_no}</span>}</h1>
             <p className="text-xs text-muted-foreground" dir="ltr" style={{ textAlign: "right" }}>{u.phone} · {u.email}</p>
-            <p className="text-xs text-muted-foreground">{u.region ?? "—"} · {u.nationality ?? ""} · انضم {dt(u.reviewed_at ?? u.created_at)}</p>
+            <p className="text-xs text-muted-foreground">{u.region ?? "—"} · {u.nationality ?? ""}{u.company_name ? ` · ${u.company_name}` : ""} · انضم {dt(u.reviewed_at ?? u.created_at)}</p>
             <div className="flex flex-wrap gap-1.5 mt-1 text-[11px]">
               <span className={`px-2 py-0.5 rounded-full ${u.is_active ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>{u.is_active ? "نشط" : "معلّق"}</span>
               <span className={`px-2 py-0.5 rounded-full ${u.is_online ? "bg-sky-100 text-sky-700" : "bg-muted text-muted-foreground"}`}>{u.is_online ? "متصل الآن" : "غير متصل"}</span>

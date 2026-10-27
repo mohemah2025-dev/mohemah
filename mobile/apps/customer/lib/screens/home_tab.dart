@@ -238,7 +238,7 @@ class _ActiveOrderCard extends StatelessWidget {
             Text(order.title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
             const SizedBox(height: 2),
             Text(statusLabel(order.status, mode: order.mode), style: TextStyle(color: c, fontWeight: FontWeight.w700, fontSize: 12.5)),
-            if (order.providerName != null) Text(order.providerName!, style: const TextStyle(color: Brand.mutedFg, fontSize: 12)),
+            if (order.providerName != null) Text(order.providerLine!, style: const TextStyle(color: Brand.mutedFg, fontSize: 12)),
           ]),
         ),
         if (order.unread > 0) Badge(label: Text('${order.unread}'), child: const Icon(Icons.chat_outlined, color: Brand.primary)),

@@ -66,6 +66,9 @@ class AppSettings {
   String? get welcomeProvider => jStr(raw['welcome_provider']);
   bool get coinsEnabled => jBool(raw['billing_coins_enabled']);
   bool get subscriptionEnabled => jBool(raw['billing_subscription_enabled']);
+  /// Account recovery channels switched on in the admin panel (SMS / e-mail).
+  bool get recoverySms => jBool(raw['recovery_sms']);
+  bool get recoveryEmail => jBool(raw['recovery_email']);
 }
 
 class Service {
@@ -202,6 +205,10 @@ class CustomerOrder {
   double get providerRating => jDouble(provider?['rating']);
   int get providerRatingCount => jInt(provider?['rating_count']);
   String? get providerAvatar => jStr(provider?['avatar_url']);
+  String? get providerNationality => jStr(provider?['nationality']);
+
+  /// «الاسم • الجنسية» shown to the customer once a provider accepts.
+  String? get providerLine => providerName == null ? null : [providerName!, if ((providerNationality ?? '').isNotEmpty) providerNationality!].join(' • ');
   bool get isActive => const ['accepted', 'arrived', 'in_progress'].contains(status);
   bool get isOpen => status == 'pending' || isActive;
 }

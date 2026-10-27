@@ -583,21 +583,13 @@ function Modal({ title, sub, children, onClose, wide = false }: { title: string;
 }
 
 export function AdminStaffPage() {
-  const { staff, customers, providers, addStaff, toggleStaff, removeStaff, resetPassword, setStaffPermissions, updateStaff } = useAdmin();
+  const { staff, addStaff, toggleStaff, removeStaff, resetPassword, setStaffPermissions, updateStaff, changeStaffRole } = useAdmin();
   const { isOwner, user, can, canDo, permissions, features } = useAuth();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<StaffMember | null>(null);
   const [profileFor, setProfileFor] = useState<StaffMember | null>(null);
   const [passFor, setPassFor] = useState<StaffMember | null>(null);
   const [delFor, setDelFor] = useState<StaffMember | null>(null);
-  const [resetFor, setResetFor] = useState("");
-  const [newPass, setNewPass] = useState("");
-  const everyone = [...providers.map(p => ({ id: p.id, name: `${p.name} (مقدم خدمة)` })), ...customers.filter(c => !providers.some(p => p.id === c.id)).map(c => ({ id: c.id, name: `${c.name} (طالب خدمة)` }))];
-  const doReset = async () => {
-    if (!resetFor || newPass.length < 8) return toast.error("اختر المستخدم واكتب كلمة مرور 8 أحرف على الأقل");
-    try { await resetPassword(resetFor, newPass); toast.success("تم تعيين كلمة المرور الجديدة وتسجيل خروج المستخدم من أجهزته"); setNewPass(""); setResetFor(""); }
-    catch (e) { toast.error(errMsg(e)); }
-  };
   const act = "text-[11px] px-2 py-1 rounded-lg border border-border hover:bg-mohemah-light flex items-center gap-1";
   return (
     <div>
@@ -623,7 +615,7 @@ export function AdminStaffPage() {
                   <td className="p-3"><span className={`text-[11px] px-2 py-1 rounded-full ${s.active ? "bg-emerald-100 text-emerald-700" : "bg-muted text-muted-foreground"}`}>{s.active ? "نشط" : "موقوف"}</span></td>
                   <td className="p-3">
                     <div className="flex flex-wrap gap-1.5">
-                      {canDo("staff", "permissions") && !owner && !self && <button onClick={() => setEditing(s)} className={act}><Shield className="size-3.5" />الصلاحيات</button>}
+                      {canDo("staff", "permissions") && (isOwner || !owner) && <button onClick={() => setEditing(s)} disabled={self} title={self ? "لا يمكنك تعديل صلاحياتك بنفسك" : undefined} className={`${act} disabled:opacity-40 disabled:cursor-not-allowed`}><Shield className="size-3.5" />الصلاحيات</button>}
                       {canDo("staff", "edit") && manage && <button onClick={() => setProfileFor(s)} className={act}><Pencil className="size-3.5" />البيانات</button>}
                       {canDo("staff", "edit") && manage && <button onClick={() => setPassFor(s)} className={act}><KeyRound className="size-3.5" />كلمة المرور</button>}
                       {canDo("staff", "suspend") && manage && !self && <button onClick={() => toggleStaff(s.id)} className={act}>{s.active ? <><Ban className="size-3.5" />إيقاف</> : <><RotateCcw className="size-3.5" />تفعيل</>}</button>}
@@ -638,21 +630,16 @@ export function AdminStaffPage() {
         </table>
       </div>
       <p className="text-[11px] text-muted-foreground mt-2">«عرض» يفتح الصفحة للقراءة فقط، و«تعديل» يسمح بالإجراءات المحددة لها، و«بدون» يخفي الصفحة. الصلاحيات تُطبَّق في الخادم أيضاً.</p>
-      {(canDo("customers", "password") || canDo("providers", "password")) && (
-        <section className="mt-6 border-t border-border pt-5 space-y-3 max-w-xl">
-          <h2 className="font-bold text-sm">إعادة تعيين كلمة مرور طالب أو مقدم خدمة</h2>
-          <p className="text-xs text-muted-foreground">يُستخدم عندما ينسى طالب الخدمة أو مقدم الخدمة كلمة المرور ويتواصل مع الدعم.</p>
-          <div className="grid sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2">
-            <select value={resetFor} onChange={(e) => setResetFor(e.target.value)} className="admin-input"><option value="">اختر المستخدم</option>{everyone.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}</select>
-            <input type="text" dir="ltr" value={newPass} onChange={(e) => setNewPass(e.target.value)} placeholder="كلمة المرور الجديدة" className="admin-input" />
-            <Button onClick={doReset}>تعيين</Button>
-          </div>
-        </section>
-      )}
       {open && <NewStaffDialog canOwner={isOwner} max={isOwner ? null : permissions} maxFeatures={isOwner ? null : features} onClose={() => setOpen(false)}
         onSave={async (d) => { try { await addStaff(d); toast.success("تم إضافة المستخدم"); setOpen(false); } catch (e) { toast.error(errMsg(e)); } }} />}
-      {editing && <PermissionsDialog member={editing} max={isOwner ? null : permissions} maxFeatures={isOwner ? null : features} onClose={() => setEditing(null)}
-        onSave={async (p, f) => { try { await setStaffPermissions(editing.id, p, f); toast.success("تم حفظ الصلاحيات"); setEditing(null); } catch (e) { toast.error(errMsg(e)); } }} />}
+      {editing && <PermissionsDialog member={editing} canOwner={isOwner} max={isOwner ? null : permissions} maxFeatures={isOwner ? null : features} onClose={() => setEditing(null)}
+        onSave={async (role, p, f) => {
+          try {
+            if (role !== editing.role) await changeStaffRole(editing.id, role as "مالك" | "مشرف");
+            if (role === "مشرف") await setStaffPermissions(editing.id, p, f);
+            toast.success("تم حفظ الصلاحيات"); setEditing(null);
+          } catch (e) { toast.error(errMsg(e)); }
+        }} />}
       {profileFor && <StaffProfileDialog member={profileFor} onClose={() => setProfileFor(null)}
         onSave={async (d) => { try { await updateStaff(profileFor.id, d); toast.success("تم حفظ البيانات"); setProfileFor(null); } catch (e) { toast.error(errMsg(e)); } }} />}
       {passFor && <StaffPasswordDialog member={passFor} onClose={() => setPassFor(null)}
@@ -669,15 +656,26 @@ export function AdminStaffPage() {
   );
 }
 
-function PermissionsDialog({ member, max, maxFeatures, onClose, onSave }: { member: StaffMember; max: AdminPermissions | null; maxFeatures: AdminFeatures | null; onClose: () => void; onSave: (p: AdminPermissions, f: AdminFeatures) => void }) {
+function PermissionsDialog({ member, canOwner, max, maxFeatures, onClose, onSave }: { member: StaffMember; canOwner: boolean; max: AdminPermissions | null; maxFeatures: AdminFeatures | null; onClose: () => void; onSave: (role: StaffMember["role"], p: AdminPermissions, f: AdminFeatures) => void }) {
+  const [role, setRole] = useState<StaffMember["role"]>(member.role);
   const [value, setValue] = useState<AdminPermissions>(member.access ?? defaultAccess());
   const [feats, setFeats] = useState<AdminFeatures>(member.features ?? {});
   return (
     <Modal wide title={`صلاحيات ${member.name}`} sub="حدد لكل صفحة: بدون، عرض، أو تعديل — ثم الإجراءات المسموحة داخلها. يسري التغيير فوراً." onClose={onClose}>
-      <PermissionsMatrix value={value} onChange={setValue} features={feats} onFeatures={setFeats} max={max} maxFeatures={maxFeatures} />
+      {canOwner && (
+        <div className="flex items-center gap-2 mb-3 text-sm">
+          <span className="font-bold">الدور:</span>
+          {(["مشرف", "مالك"] as const).map((r) => (
+            <button key={r} type="button" onClick={() => setRole(r)} className={`px-3 py-1 rounded-lg border text-xs ${role === r ? "border-mohemah-blue bg-mohemah-blue text-white" : "border-border"}`}>{r === "مالك" ? "مالك (كل الصلاحيات)" : "مشرف (صلاحيات محددة)"}</button>
+          ))}
+        </div>
+      )}
+      {role === "مالك"
+        ? <p className="text-xs text-muted-foreground border border-border rounded-xl p-4">المالك يملك كل الصلاحيات على كل الصفحات وإجراءاتها.</p>
+        : <PermissionsMatrix value={value} onChange={setValue} features={feats} onFeatures={setFeats} max={max} maxFeatures={maxFeatures} />}
       <div className="flex gap-2 mt-5">
         <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-mohemah-light text-sm font-bold">إلغاء</button>
-        <button onClick={() => onSave(value, feats)} className="flex-1 py-2.5 rounded-xl mohemah-btn-coral text-sm font-bold">حفظ الصلاحيات</button>
+        <button onClick={() => onSave(role, value, feats)} className="flex-1 py-2.5 rounded-xl mohemah-btn-coral text-sm font-bold">حفظ الصلاحيات</button>
       </div>
     </Modal>
   );

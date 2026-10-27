@@ -55,8 +55,8 @@ export type AdminFeatures = Partial<Record<AdminSection, string[]>>;
 
 /** The actions of each page that can be granted one by one. */
 export const ADMIN_FEATURES: Partial<Record<AdminSection, { key: string; label: string }[]>> = {
-  customers: [{ key: "edit", label: "تعديل البيانات" }, { key: "suspend", label: "الإيقاف والحذف" }, { key: "password", label: "تغيير كلمة المرور" }],
-  providers: [{ key: "approve", label: "قبول ورفض الطلبات والخدمات" }, { key: "edit", label: "تعديل البيانات والخدمات" }, { key: "suspend", label: "الإيقاف والحذف" }, { key: "password", label: "تغيير كلمة المرور" }, { key: "balance", label: "تعديل الرصيد" }, { key: "remind", label: "إرسال التنبيهات" }],
+  customers: [{ key: "edit", label: "تعديل البيانات" }, { key: "suspend", label: "الإيقاف والحذف" }],
+  providers: [{ key: "approve", label: "قبول ورفض الطلبات والخدمات" }, { key: "edit", label: "تعديل البيانات والخدمات" }, { key: "suspend", label: "الإيقاف والحذف" }, { key: "balance", label: "تعديل الرصيد" }, { key: "remind", label: "إرسال التنبيهات" }],
   services: [{ key: "add", label: "إضافة" }, { key: "edit", label: "تعديل وترتيب" }, { key: "delete", label: "حذف" }],
   billing: [{ key: "grant", label: "منح اشتراك أو كوينز" }, { key: "promotions", label: "العروض والخصومات" }, { key: "prices", label: "أسعار الباقات" }],
   notifications: [{ key: "send", label: "إرسال" }, { key: "delete", label: "حذف" }],

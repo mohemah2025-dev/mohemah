@@ -8,7 +8,9 @@ import { DOC_ACCEPT, validateDoc } from "@/lib/providerDocs";
 import { compressImage } from "@/lib/imageCompress";
 
 export const inputCls = "w-full px-4 py-3 rounded-xl border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring";
-const NATIONALITIES = ["سعودي", "مصري", "يمني", "سوداني", "أردني", "سوري", "باكستاني", "هندي", "بنغلاديشي", "فلبيني", "أخرى"];
+const NATIONALITIES = ["سعودي", "كويتي", "إماراتي", "قطري", "بحريني", "عُماني", "مصري", "يمني", "سوداني", "أردني", "سوري", "فلسطيني", "لبناني", "باكستاني", "هندي", "بنغلاديشي", "فلبيني", "أخرى"];
+/** Providers of other nationalities name the establishment / company they belong to. */
+const needsCompany = (n: string) => !["سعودي", "كويتي", "إماراتي", "قطري", "بحريني"].includes(n);
 
 export const normalizePhone = (raw: string) => {
   let p = raw.replace(/[\s-]+/g, "").replace(/^00/, "+");
@@ -185,7 +187,7 @@ export function ProviderAuth({ onDone }: { onDone: () => void }) {
 
 function ProviderSignup({ onDone }: { onDone: () => void }) {
   const { acceptSession } = useAuth();
-  const [f, setF] = useState({ name: "", nationalId: "", phone: "", nationality: "سعودي", gender: "male", region: "", email: "", password: "", confirm: "" });
+  const [f, setF] = useState({ name: "", nationalId: "", phone: "", nationality: "سعودي", company: "", gender: "male", region: "", email: "", password: "", confirm: "" });
   const [picked, setPicked] = useState<string[]>([]);
   const [idFile, setIdFile] = useState<File | null>(null);
   const [certFile, setCertFile] = useState<File | null>(null);
@@ -199,6 +201,7 @@ function ProviderSignup({ onDone }: { onDone: () => void }) {
     if (!/^[12]\d{9}$/.test(f.nationalId)) return toast.error("رقم الهوية/الإقامة 10 أرقام يبدأ بـ 1 أو 2");
     if (!validPhone(f.phone)) return toast.error("رقم الجوال غير صحيح (05XXXXXXXX)");
     if (!f.region) return toast.error("اختر المدينة التي تعمل بها");
+    if (needsCompany(f.nationality) && !f.company.trim()) return toast.error("اكتب اسم المؤسسة أو الشركة التي تتبع لها");
     if (!validEmail(f.email)) return toast.error("البريد الإلكتروني غير صحيح");
     if (f.password.length < 8) return toast.error("كلمة المرور 8 أحرف على الأقل");
     if (f.password !== f.confirm) return toast.error("كلمتا المرور غير متطابقتين");
@@ -209,6 +212,7 @@ function ProviderSignup({ onDone }: { onDone: () => void }) {
     const form = new FormData();
     form.set("full_name", f.name.trim()); form.set("national_id", f.nationalId); form.set("phone", f.phone);
     form.set("nationality", f.nationality); form.set("gender", f.gender); form.set("region", f.region);
+    if (needsCompany(f.nationality)) form.set("company_name", f.company.trim());
     form.set("email", f.email.trim()); form.set("password", f.password); form.set("services", JSON.stringify(picked));
     setBusy(true);
     form.set("id_file", await compressImage(idFile!)); form.set("cert_file", await compressImage(certFile!));
@@ -232,6 +236,7 @@ function ProviderSignup({ onDone }: { onDone: () => void }) {
             {NATIONALITIES.map((n) => <option key={n}>{n}</option>)}
           </select>
         </Field>
+        {needsCompany(f.nationality) && <Field label="اسم المؤسسة / الشركة التابع لها"><input value={f.company} onChange={(e) => set("company")(e.target.value)} className={inputCls} maxLength={150} /></Field>}
         <Field label="الجنس">
           <select value={f.gender} onChange={(e) => set("gender")(e.target.value)} className={inputCls}>
             <option value="male">ذكر</option>
@@ -257,7 +262,7 @@ function ProviderSignup({ onDone }: { onDone: () => void }) {
 /** For an account that is signed in to the provider app without a provider application yet. */
 export function ProviderApplyForm() {
   const { acceptSession, profile } = useAuth();
-  const [f, setF] = useState({ nationalId: profile?.national_id ?? "", nationality: profile?.nationality ?? "سعودي", gender: profile?.gender ?? "male", region: profile?.region ?? "" });
+  const [f, setF] = useState({ nationalId: profile?.national_id ?? "", nationality: profile?.nationality ?? "سعودي", company: "", gender: profile?.gender ?? "male", region: profile?.region ?? "" });
   const [picked, setPicked] = useState<string[]>([]);
   const [idFile, setIdFile] = useState<File | null>(null);
   const [certFile, setCertFile] = useState<File | null>(null);
@@ -266,11 +271,13 @@ export function ProviderApplyForm() {
   const submit = async () => {
     if (!/^[12]\d{9}$/.test(f.nationalId)) return toast.error("رقم الهوية/الإقامة 10 أرقام يبدأ بـ 1 أو 2");
     if (!f.region) return toast.error("اختر المدينة التي تعمل بها");
+    if (needsCompany(f.nationality) && !f.company.trim()) return toast.error("اكتب اسم المؤسسة أو الشركة التي تتبع لها");
     if (!picked.length) return toast.error("اختر خدمة واحدة على الأقل");
     const docError = validateDoc(idFile, "صورة الهوية") ?? validateDoc(certFile, "الشهادة");
     if (docError) return toast.error(docError);
     const form = new FormData();
     form.set("national_id", f.nationalId); form.set("nationality", f.nationality); form.set("gender", f.gender); form.set("region", f.region);
+    if (needsCompany(f.nationality)) form.set("company_name", f.company.trim());
     setBusy(true);
     form.set("services", JSON.stringify(picked)); form.set("id_file", await compressImage(idFile!)); form.set("cert_file", await compressImage(certFile!));
     try {
@@ -285,6 +292,7 @@ export function ProviderApplyForm() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <Field label="رقم الهوية / الإقامة"><input inputMode="numeric" dir="ltr" maxLength={10} value={f.nationalId} onChange={(e) => set("nationalId")(e.target.value.replace(/\D/g, ""))} className={inputCls} /></Field>
         <Field label="الجنسية"><select value={f.nationality} onChange={(e) => set("nationality")(e.target.value)} className={inputCls}>{NATIONALITIES.map((n) => <option key={n}>{n}</option>)}</select></Field>
+        {needsCompany(f.nationality) && <Field label="اسم المؤسسة / الشركة التابع لها"><input value={f.company} onChange={(e) => set("company")(e.target.value)} className={inputCls} maxLength={150} /></Field>}
         <Field label="الجنس"><select value={f.gender} onChange={(e) => set("gender")(e.target.value)} className={inputCls}><option value="male">ذكر</option><option value="female">أنثى</option></select></Field>
         <Field label="المدينة"><RegionSelect value={f.region} onChange={set("region")} /></Field>
       </div>

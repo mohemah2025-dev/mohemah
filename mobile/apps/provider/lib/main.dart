@@ -23,6 +23,11 @@ void main() {
       return Push.orderIdOf(data) != null && data['chat'] == null && store?.session.isProvider == true;
     },
     onPushOpen: (data) async {
+      // Replies from the administration open the conversation (also before the account is approved).
+      if ((data['link'] ?? '').toString().startsWith('/support')) {
+        rootNavigator.currentState?.push(MaterialPageRoute(builder: (_) => const SupportMessagesPage()));
+        return;
+      }
       final store = ProviderStore.instance;
       if (store == null || !store.session.isProvider) return;
       await store.refresh(background: true);

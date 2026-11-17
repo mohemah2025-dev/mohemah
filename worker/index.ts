@@ -7,6 +7,7 @@ import { registerAnalyticsRoutes } from "./routes/analytics";
 import { registerProviderRoutes } from "./routes/providers";
 import { registerSupportRoutes } from "./routes/support";
 import { registerBadgeRoutes } from "./routes/badges";
+import { registerSiteRoutes } from "./routes/site";
 import { ensureSchema } from "./lib/migrate";
 import { flushPush, type PushJob } from "./lib/push";
 
@@ -19,6 +20,7 @@ registerAnalyticsRoutes(router);
 registerProviderRoutes(router);
 registerSupportRoutes(router);
 registerBadgeRoutes(router);
+registerSiteRoutes(router);
 
 function corsHeaders(req: Request, env: Env, url: URL): Record<string, string> {
   const origin = req.headers.get("origin");

@@ -629,7 +629,7 @@ export function registerAdminRoutes(r: Router) {
   });
 
   r.post("/api/admin/upload", async (c) => {
-    await requirePerm(c, ["services", "ads", "settings", "notifications"], "edit");
+    await requirePerm(c, ["services", "ads", "settings", "notifications", "website"], "edit");
     const form = await c.req.formData();
     const file = formFile(form, "file");
     if (!file) return fail(400, "no_file", "اختر صورة");

@@ -141,7 +141,7 @@ export async function verifyFileSignature(env: Env, key: string, e: string, s: s
 /* ---------- Admin permissions per section ---------- */
 export const ADMIN_SECTIONS = [
   "dashboard", "analytics", "customers", "providers", "services", "finance", "billing", "gateways",
-  "notifications", "messages", "ads", "policies", "integrations", "staff", "settings",
+  "notifications", "messages", "ads", "policies", "website", "integrations", "staff", "settings",
 ] as const;
 export type AdminSection = (typeof ADMIN_SECTIONS)[number];
 export type PermLevel = "none" | "view" | "edit";
@@ -155,6 +155,7 @@ export function defaultStaffPermissions(): AdminPermissions {
   p.settings = "view";
   p.integrations = "none";
   p.staff = "none";
+  p.website = "none";
   return p;
 }
 

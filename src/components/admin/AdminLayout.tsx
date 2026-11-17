@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { ReactNode, useEffect, useState } from "react";
 import { Link, Outlet, useRouterState, useNavigate } from "@tanstack/react-router";
-import { LayoutDashboard, Users, UserCog, Wrench, Wallet, Shield, Settings, Bell, Menu, X, MessageSquare, Search, Megaphone, FileText, LogOut, ShieldCheck, CreditCard, Mail, Lock, BarChart3, BadgePercent } from "lucide-react";
+import { LayoutDashboard, Users, UserCog, Wrench, Wallet, Shield, Settings, Bell, Menu, X, MessageSquare, Search, Megaphone, FileText, LogOut, ShieldCheck, CreditCard, Mail, Lock, BarChart3, BadgePercent, Globe } from "lucide-react";
 import { AdminProvider, useAdmin } from "@/lib/adminStore";
 import { useAuth, type AdminSection, type MePayload } from "@/lib/AuthContext";
 import { api, errMsg, fileUrl } from "@/lib/api";
@@ -23,11 +23,12 @@ const nav: { to: string; label: string; icon: typeof LayoutDashboard; section: A
   { to: "/admin/integrations", label: "الرسائل والبريد وواتساب", icon: Mail, section: "integrations", group: "التواصل" },
   { to: "/admin/ads", label: "المساحات الإعلانية", icon: Megaphone, section: "ads", group: "الخدمات والمحتوى" },
   { to: "/admin/policies", label: "السياسات والشروط", icon: FileText, section: "policies", group: "الخدمات والمحتوى" },
+  { to: "/admin/website", label: "إدارة الموقع", icon: Globe, section: "website", group: "الموقع الإلكتروني" },
   { to: "/admin/staff", label: "المستخدمون والصلاحيات", icon: Shield, section: "staff", group: "الإدارة والإعدادات" },
   { to: "/admin/settings", label: "الإعدادات", icon: Settings, section: "settings", group: "الإدارة والإعدادات" },
 ];
 
-const GROUP_ORDER = ["الرئيسية", "المستخدمون", "المالية", "الخدمات والمحتوى", "التواصل", "الإدارة والإعدادات"];
+const GROUP_ORDER = ["الرئيسية", "المستخدمون", "المالية", "الخدمات والمحتوى", "التواصل", "الموقع الإلكتروني", "الإدارة والإعدادات"];
 
 type Badges = { counts: Record<string, number>; items: { section: string; to: string; count: number; label: string }[]; total: number };
 

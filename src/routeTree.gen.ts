@@ -32,6 +32,7 @@ import { Route as AdminProvidersRouteImport } from './routes/admin/providers'
 import { Route as AdminServicesRouteImport } from './routes/admin/services'
 import { Route as AdminSettingsRouteImport } from './routes/admin/settings'
 import { Route as AdminStaffRouteImport } from './routes/admin/staff'
+import { Route as AdminWebsiteRouteImport } from './routes/admin/website'
 import { Route as ProviderIndexRouteImport } from './routes/provider/index'
 import { Route as ProviderAccountRouteImport } from './routes/provider/account'
 import { Route as ProviderActivityRouteImport } from './routes/provider/activity'
@@ -40,6 +41,8 @@ import { Route as ProviderBillingRouteImport } from './routes/provider/billing'
 import { Route as ProviderCoinsRouteImport } from './routes/provider/coins'
 import { Route as ProviderOrdersRouteImport } from './routes/provider/orders'
 import { Route as ProviderServicesRouteImport } from './routes/provider/services'
+import { Route as SiteIndexRouteImport } from './routes/site.index'
+import { Route as SiteSlugRouteImport } from './routes/site.$slug'
 import { Route as AdminProviderProfileIdRouteImport } from './routes/admin/provider-profile.$id'
 import { Route as AdminServicesIndexRouteImport } from './routes/admin/services.index'
 import { Route as AdminServicesIdRouteImport } from './routes/admin/services.$id'
@@ -160,6 +163,11 @@ const AdminStaffRoute = AdminStaffRouteImport.update({
   path: '/staff',
   getParentRoute: () => AdminRouteRoute,
 } as any)
+const AdminWebsiteRoute = AdminWebsiteRouteImport.update({
+  id: '/website',
+  path: '/website',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
 const ProviderIndexRoute = ProviderIndexRouteImport.update({
   id: '/provider/',
   path: '/provider/',
@@ -198,6 +206,16 @@ const ProviderOrdersRoute = ProviderOrdersRouteImport.update({
 const ProviderServicesRoute = ProviderServicesRouteImport.update({
   id: '/provider/services',
   path: '/provider/services',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SiteIndexRoute = SiteIndexRouteImport.update({
+  id: '/site/',
+  path: '/site/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SiteSlugRoute = SiteSlugRouteImport.update({
+  id: '/site/$slug',
+  path: '/site/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminProviderProfileIdRoute = AdminProviderProfileIdRouteImport.update({
@@ -244,6 +262,7 @@ export interface FileRoutesByFullPath {
   '/admin/services': typeof AdminServicesRouteWithChildren
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/staff': typeof AdminStaffRoute
+  '/admin/website': typeof AdminWebsiteRoute
   '/provider/account': typeof ProviderAccountRouteWithChildren
   '/provider/activity': typeof ProviderActivityRoute
   '/provider/auth': typeof ProviderAuthRoute
@@ -251,8 +270,10 @@ export interface FileRoutesByFullPath {
   '/provider/coins': typeof ProviderCoinsRoute
   '/provider/orders': typeof ProviderOrdersRoute
   '/provider/services': typeof ProviderServicesRoute
+  '/site/$slug': typeof SiteSlugRoute
   '/admin/': typeof AdminIndexRoute
   '/provider/': typeof ProviderIndexRoute
+  '/site/': typeof SiteIndexRoute
   '/admin/provider-profile/$id': typeof AdminProviderProfileIdRoute
   '/admin/services/$id': typeof AdminServicesIdRoute
   '/provider/account/$section': typeof ProviderAccountSectionRoute
@@ -279,6 +300,7 @@ export interface FileRoutesByTo {
   '/admin/providers': typeof AdminProvidersRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/staff': typeof AdminStaffRoute
+  '/admin/website': typeof AdminWebsiteRoute
   '/provider/account': typeof ProviderAccountRouteWithChildren
   '/provider/activity': typeof ProviderActivityRoute
   '/provider/auth': typeof ProviderAuthRoute
@@ -286,8 +308,10 @@ export interface FileRoutesByTo {
   '/provider/coins': typeof ProviderCoinsRoute
   '/provider/orders': typeof ProviderOrdersRoute
   '/provider/services': typeof ProviderServicesRoute
+  '/site/$slug': typeof SiteSlugRoute
   '/admin': typeof AdminIndexRoute
   '/provider': typeof ProviderIndexRoute
+  '/site': typeof SiteIndexRoute
   '/admin/provider-profile/$id': typeof AdminProviderProfileIdRoute
   '/admin/services/$id': typeof AdminServicesIdRoute
   '/provider/account/$section': typeof ProviderAccountSectionRoute
@@ -317,6 +341,7 @@ export interface FileRoutesById {
   '/admin/services': typeof AdminServicesRouteWithChildren
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/staff': typeof AdminStaffRoute
+  '/admin/website': typeof AdminWebsiteRoute
   '/provider/account': typeof ProviderAccountRouteWithChildren
   '/provider/activity': typeof ProviderActivityRoute
   '/provider/auth': typeof ProviderAuthRoute
@@ -324,8 +349,10 @@ export interface FileRoutesById {
   '/provider/coins': typeof ProviderCoinsRoute
   '/provider/orders': typeof ProviderOrdersRoute
   '/provider/services': typeof ProviderServicesRoute
+  '/site/$slug': typeof SiteSlugRoute
   '/admin/': typeof AdminIndexRoute
   '/provider/': typeof ProviderIndexRoute
+  '/site/': typeof SiteIndexRoute
   '/admin/provider-profile/$id': typeof AdminProviderProfileIdRoute
   '/admin/services/$id': typeof AdminServicesIdRoute
   '/provider/account/$section': typeof ProviderAccountSectionRoute
@@ -356,6 +383,7 @@ export interface FileRouteTypes {
     | '/admin/services'
     | '/admin/settings'
     | '/admin/staff'
+    | '/admin/website'
     | '/provider/account'
     | '/provider/activity'
     | '/provider/auth'
@@ -363,8 +391,10 @@ export interface FileRouteTypes {
     | '/provider/coins'
     | '/provider/orders'
     | '/provider/services'
+    | '/site/$slug'
     | '/admin/'
     | '/provider/'
+    | '/site/'
     | '/admin/provider-profile/$id'
     | '/admin/services/$id'
     | '/provider/account/$section'
@@ -391,6 +421,7 @@ export interface FileRouteTypes {
     | '/admin/providers'
     | '/admin/settings'
     | '/admin/staff'
+    | '/admin/website'
     | '/provider/account'
     | '/provider/activity'
     | '/provider/auth'
@@ -398,8 +429,10 @@ export interface FileRouteTypes {
     | '/provider/coins'
     | '/provider/orders'
     | '/provider/services'
+    | '/site/$slug'
     | '/admin'
     | '/provider'
+    | '/site'
     | '/admin/provider-profile/$id'
     | '/admin/services/$id'
     | '/provider/account/$section'
@@ -428,6 +461,7 @@ export interface FileRouteTypes {
     | '/admin/services'
     | '/admin/settings'
     | '/admin/staff'
+    | '/admin/website'
     | '/provider/account'
     | '/provider/activity'
     | '/provider/auth'
@@ -435,8 +469,10 @@ export interface FileRouteTypes {
     | '/provider/coins'
     | '/provider/orders'
     | '/provider/services'
+    | '/site/$slug'
     | '/admin/'
     | '/provider/'
+    | '/site/'
     | '/admin/provider-profile/$id'
     | '/admin/services/$id'
     | '/provider/account/$section'
@@ -458,7 +494,9 @@ export interface RootRouteChildren {
   ProviderCoinsRoute: typeof ProviderCoinsRoute
   ProviderOrdersRoute: typeof ProviderOrdersRoute
   ProviderServicesRoute: typeof ProviderServicesRoute
+  SiteSlugRoute: typeof SiteSlugRoute
   ProviderIndexRoute: typeof ProviderIndexRoute
+  SiteIndexRoute: typeof SiteIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -624,6 +662,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminStaffRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/admin/website': {
+      id: '/admin/website'
+      path: '/website'
+      fullPath: '/admin/website'
+      preLoaderRoute: typeof AdminWebsiteRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/provider/': {
       id: '/provider/'
       path: '/provider'
@@ -678,6 +723,20 @@ declare module '@tanstack/react-router' {
       path: '/provider/services'
       fullPath: '/provider/services'
       preLoaderRoute: typeof ProviderServicesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/site/': {
+      id: '/site/'
+      path: '/site'
+      fullPath: '/site/'
+      preLoaderRoute: typeof SiteIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/site/$slug': {
+      id: '/site/$slug'
+      path: '/site/$slug'
+      fullPath: '/site/$slug'
+      preLoaderRoute: typeof SiteSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/provider-profile/$id': {
@@ -741,6 +800,7 @@ interface AdminRouteRouteChildren {
   AdminServicesRoute: typeof AdminServicesRouteWithChildren
   AdminSettingsRoute: typeof AdminSettingsRoute
   AdminStaffRoute: typeof AdminStaffRoute
+  AdminWebsiteRoute: typeof AdminWebsiteRoute
   AdminIndexRoute: typeof AdminIndexRoute
   AdminProviderProfileIdRoute: typeof AdminProviderProfileIdRoute
 }
@@ -761,6 +821,7 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminServicesRoute: AdminServicesRouteWithChildren,
   AdminSettingsRoute: AdminSettingsRoute,
   AdminStaffRoute: AdminStaffRoute,
+  AdminWebsiteRoute: AdminWebsiteRoute,
   AdminIndexRoute: AdminIndexRoute,
   AdminProviderProfileIdRoute: AdminProviderProfileIdRoute,
 }
@@ -796,7 +857,9 @@ const rootRouteChildren: RootRouteChildren = {
   ProviderCoinsRoute: ProviderCoinsRoute,
   ProviderOrdersRoute: ProviderOrdersRoute,
   ProviderServicesRoute: ProviderServicesRoute,
+  SiteSlugRoute: SiteSlugRoute,
   ProviderIndexRoute: ProviderIndexRoute,
+  SiteIndexRoute: SiteIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

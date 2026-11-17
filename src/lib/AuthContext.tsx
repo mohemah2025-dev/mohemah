@@ -43,6 +43,7 @@ export const ADMIN_SECTIONS = [
   { key: "messages", label: "الرسائل" },
   { key: "ads", label: "المساحات الإعلانية" },
   { key: "policies", label: "السياسات والشروط" },
+  { key: "website", label: "إدارة الموقع" },
   { key: "integrations", label: "الرسائل النصية والبريد" },
   { key: "staff", label: "المستخدمون والصلاحيات" },
   { key: "settings", label: "الإعدادات" },

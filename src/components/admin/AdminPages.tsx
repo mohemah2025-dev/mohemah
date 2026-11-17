@@ -493,7 +493,7 @@ const LEVELS: { v: PermLevel; label: string }[] = [{ v: "none", label: "بدون
 /** Default page permissions for a new supervisor (everything except administration pages). */
 function defaultAccess(): AdminPermissions {
   const p = Object.fromEntries(ADMIN_SECTIONS.map((x) => [x.key, "edit"])) as AdminPermissions;
-  p.analytics = "view"; p.gateways = "view"; p.settings = "view"; p.integrations = "none"; p.staff = "none";
+  p.analytics = "view"; p.gateways = "view"; p.settings = "view"; p.integrations = "none"; p.staff = "none"; p.website = "none";
   return p;
 }
 
